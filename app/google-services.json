@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "596361666131",
+    "project_id": "hv1-platform",
+    "storage_bucket": "hv1-platform.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:596361666131:android:0e8527e9f14d18defaf0a6",
+        "android_client_info": {
+          "package_name": "com.aistudio.humanstrength.kfqjza"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC2nQ1f-1O48Ereiz2XwcAGZ9DQug_0NeU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
