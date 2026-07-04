@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "596361666131-fa5l4pvodlmq738mtq27ovr8hhr93fim.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aistudio.humanstrength.kfqjza",
+            "certificate_hash": "894c4472cf0bb379801e6bd45877e30b316a5062"
+          }
+        },
+        {
           "client_id": "596361666131-4bdc26e3rrupaag2cn3tqcmlqdcdjqs8.apps.googleusercontent.com",
           "client_type": 3
         }
