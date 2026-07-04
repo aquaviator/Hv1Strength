@@ -1,6 +1,7 @@
 *.iml
 .gradle
 .kotlin
+.idea/
 /local.properties
 /.idea/caches
 /.idea/libraries
@@ -16,3 +17,4 @@
 local.properties
 .env
 debug.keystore
+my-upload-key.jks
