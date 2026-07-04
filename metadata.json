@@ -1,0 +1,6 @@
+{
+  "name": "Human v1 - Strength",
+  "description": "Premium offline-first gym logger and strength tracking tool to record weights, body weight, and measurements.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
