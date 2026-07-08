@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
@@ -35,22 +36,114 @@ import com.example.ui.viewmodel.StrengthViewModelFactory
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    android.util.Log.i("MainActivity", "onCreate started")
+
+    // Check for previous crash logs
+    val crashLogFile = java.io.File(filesDir, "crash_log.txt")
+    var crashLogContent: String? = null
+    if (crashLogFile.exists()) {
+        crashLogContent = crashLogFile.readText()
+        crashLogFile.delete()
+    }
+
+    // Install a local UI-based crash handler for this activity's UI thread
+    val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+    Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+        val stackTrace = android.util.Log.getStackTraceString(throwable)
+        java.io.File(filesDir, "crash_log.txt").writeText("FATAL EXCEPTION in ${thread.name}:\n$stackTrace")
+        defaultHandler?.uncaughtException(thread, throwable)
+    }
+
     enableEdgeToEdge()
 
-    // Initialize database and repository reactively
-    val database = StrengthDatabase.getDatabase(applicationContext, lifecycleScope)
-    val repository = StrengthRepository(database.strengthDao(), applicationContext)
+    if (crashLogContent != null) {
+        setContent {
+            MyApplicationTheme {
+                androidx.compose.material3.Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.errorContainer
+                ) {
+                    androidx.compose.foundation.layout.Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp)
+                            // We don't have vertical scroll imported here easily, but just standard modifier
+                    ) {
+                        androidx.compose.material3.Text(
+                            "App Crashed Previously!",
+                            style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        androidx.compose.foundation.layout.Spacer(Modifier.height(16.dp))
+                        androidx.compose.material3.Text(
+                            crashLogContent!!,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        androidx.compose.foundation.layout.Spacer(Modifier.height(16.dp))
+                        androidx.compose.material3.Button(onClick = { startApp() }) {
+                            androidx.compose.material3.Text("Retry Normal Startup")
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        startApp()
+    }
+  }
 
-    // Schedule background synchronization
-    com.example.core.sync.SyncScheduler.schedulePeriodic(applicationContext)
+  private fun startApp() {
+    try {
+        android.util.Log.i("MainActivity", "Initializing database...")
+        val database = StrengthDatabase.getDatabase(applicationContext, lifecycleScope)
+        
+        android.util.Log.i("MainActivity", "Database initialized. Initializing repository...")
+        val repository = StrengthRepository(database.strengthDao(), applicationContext)
+        
+        android.util.Log.i("MainActivity", "Repository initialized. Scheduling background sync...")
+        com.example.core.sync.SyncScheduler.schedulePeriodic(applicationContext)
+        android.util.Log.i("MainActivity", "Background sync scheduled successfully.")
 
-    setContent {
-      MyApplicationTheme {
-        val viewModel: StrengthViewModel = viewModel(
-          factory = StrengthViewModelFactory(repository, applicationContext)
-        )
-        MainAppScreen(viewModel)
-      }
+        setContent {
+          MyApplicationTheme {
+            android.util.Log.i("MainActivity", "Setting content in Compose...")
+            val viewModel: StrengthViewModel = viewModel(
+              factory = StrengthViewModelFactory(repository, applicationContext)
+            )
+            MainAppScreen(viewModel)
+          }
+        }
+    } catch (e: Throwable) {
+        val stackTrace = android.util.Log.getStackTraceString(e)
+        android.util.Log.e("MainActivity", "FATAL: Error during MainActivity onCreate initialization", e)
+        
+        setContent {
+            MyApplicationTheme {
+                androidx.compose.material3.Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.errorContainer
+                ) {
+                    androidx.compose.foundation.layout.Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp)
+                    ) {
+                        androidx.compose.material3.Text(
+                            "Initialization Error",
+                            style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        androidx.compose.foundation.layout.Spacer(Modifier.height(16.dp))
+                        androidx.compose.material3.Text(
+                            stackTrace,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+        }
     }
   }
 }
@@ -82,21 +175,21 @@ fun MainAppScreen(viewModel: StrengthViewModel) {
                         thickness = 1.dp
                     )
                     NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        containerColor = MaterialTheme.colorScheme.surface,
                         tonalElevation = 0.dp
                     ) {
                         navigationItems.forEach { item ->
                             val isSelected = currentRoute == item.route
                             NavigationBarItem(
                                 icon = { Icon(item.icon, contentDescription = item.label) },
-                                label = { Text(item.label, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium) },
+                                label = { Text(item.label, style = MaterialTheme.typography.labelMedium, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium) },
                                 selected = isSelected,
                                 colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.onSecondary,
-                                    selectedTextColor = MaterialTheme.colorScheme.onSecondary,
-                                    indicatorColor = MaterialTheme.colorScheme.secondary,
-                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 ),
                                 onClick = {
                                     if (currentRoute != item.route) {

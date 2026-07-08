@@ -12,6 +12,9 @@ class PeriodicSyncWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
+        if (!com.example.StrengthApplication.isFirebaseConfigured) {
+            return Result.success()
+        }
         val db = StrengthDatabase.getDatabase(
             applicationContext,
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
@@ -24,7 +27,7 @@ class PeriodicSyncWorker(
             if (result.isSuccess) {
                 Result.success()
             } else {
-                Result.retry()
+                Result.failure()
             }
         } catch (e: Exception) {
             Result.failure()

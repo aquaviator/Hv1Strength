@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -73,9 +74,14 @@ fun ProgressScreen(viewModel: StrengthViewModel) {
         }
     }
 
+    val userProfile by viewModel.activeUserProfile.collectAsState()
+
     Scaffold(
         topBar = {
-            HighDensityHeader(title = "Progress")
+            HighDensityHeader(
+                title = "Progress",
+                userProfile = userProfile
+            )
         }
     ) { innerPadding ->
         Column(
@@ -1164,8 +1170,8 @@ fun StrengthLineChart(
 
         val minTime = dataPoints.minOf { it.first }
         val maxTime = dataPoints.maxOf { it.first }
-        val minValue = dataPoints.minOf { it.second } * 0.9f // add padding beneath min
-        val maxValue = dataPoints.maxOf { it.second } * 1.1f // add padding above max
+        val minValue = dataPoints.minOf { it.second } * 0.95f // subtle padding beneath min
+        val maxValue = dataPoints.maxOf { it.second } * 1.05f // subtle padding above max
 
         val timeRange = (maxTime - minTime).coerceAtLeast(1)
         val valueRange = (maxValue - minValue).coerceAtLeast(1f)
@@ -1173,9 +1179,9 @@ fun StrengthLineChart(
         val width = size.width
         val height = size.height
 
-        // Bottom and left margins for coordinates/labels
-        val marginX = 24f
-        val marginY = 32f
+        // Bottom and left margins for coordinates/labels (generous space for metrics and dates)
+        val marginX = 85f
+        val marginY = 48f
 
         val graphWidth = width - marginX
         val graphHeight = height - marginY
@@ -1191,7 +1197,7 @@ fun StrengthLineChart(
         for (i in 0..gridLinesCount) {
             val y = (graphHeight / gridLinesCount) * i
             drawLine(
-                color = textPaintColor.copy(alpha = 0.1f),
+                color = textPaintColor.copy(alpha = 0.08f),
                 start = Offset(marginX, y),
                 end = Offset(width, y),
                 strokeWidth = 2f
@@ -1211,7 +1217,7 @@ fun StrengthLineChart(
             path = fillPath,
             brush = Brush.verticalGradient(
                 colors = listOf(
-                    color.copy(alpha = 0.35f),
+                    color.copy(alpha = 0.25f),
                     color.copy(alpha = 0.0f)
                 ),
                 startY = 0f,
@@ -1231,7 +1237,7 @@ fun StrengthLineChart(
             path = strokePath,
             color = color,
             style = Stroke(
-                width = 8f,
+                width = 6f,
                 cap = StrokeCap.Round
             )
         )
@@ -1240,22 +1246,95 @@ fun StrengthLineChart(
         coordinates.forEach { offset ->
             drawCircle(
                 color = color,
-                radius = 8f,
+                radius = 6f,
                 center = offset
             )
             drawCircle(
                 color = surfaceColor,
-                radius = 4f,
+                radius = 3f,
                 center = offset
             )
         }
 
         // Draw baseline axis
         drawLine(
-            color = textPaintColor.copy(alpha = 0.3f),
+            color = textPaintColor.copy(alpha = 0.2f),
             start = Offset(marginX, graphHeight),
             end = Offset(width, graphHeight),
-            strokeWidth = 4f
+            strokeWidth = 3f
+        )
+
+        // DRAW METRIC AXIS LABELS (Using Android Native Paint for precise typographic sizing)
+        val paintColorVal = android.graphics.Color.argb(
+            (textPaintColor.alpha * 255).toInt(),
+            (textPaintColor.red * 255).toInt(),
+            (textPaintColor.green * 255).toInt(),
+            (textPaintColor.blue * 255).toInt()
+        )
+        val textPaint = android.graphics.Paint()
+        textPaint.color = paintColorVal
+        textPaint.textSize = 24f
+        textPaint.typeface = android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD)
+        textPaint.textAlign = android.graphics.Paint.Align.RIGHT
+        textPaint.isAntiAlias = true
+
+        // Render Max value label
+        drawContext.canvas.nativeCanvas.drawText(
+            String.format("%.1f", maxValue),
+            marginX - 16f,
+            30f,
+            textPaint
+        )
+
+        // Render Mid value label
+        drawContext.canvas.nativeCanvas.drawText(
+            String.format("%.1f", (maxValue + minValue) / 2f),
+            marginX - 16f,
+            (graphHeight / 2f) + 10f,
+            textPaint
+        )
+
+        // Render Min value label
+        drawContext.canvas.nativeCanvas.drawText(
+            String.format("%.1f", minValue),
+            marginX - 16f,
+            graphHeight - 6f,
+            textPaint
+        )
+
+        // DRAW DATE LABELS
+        val dateColorVal = android.graphics.Color.argb(
+            (textPaintColor.alpha * 0.7f * 255).toInt(),
+            (textPaintColor.red * 255).toInt(),
+            (textPaintColor.green * 255).toInt(),
+            (textPaintColor.blue * 255).toInt()
+        )
+        val datePaint = android.graphics.Paint()
+        datePaint.color = dateColorVal
+        datePaint.textSize = 22f
+        datePaint.typeface = android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.NORMAL)
+        datePaint.isAntiAlias = true
+
+        val sdf = java.text.SimpleDateFormat("MMM dd", java.util.Locale.getDefault())
+        val startDateStr = sdf.format(java.util.Date(minTime))
+        val endDateStr = sdf.format(java.util.Date(maxTime))
+
+        // Draw start date
+        datePaint.textAlign = android.graphics.Paint.Align.LEFT
+        drawContext.canvas.nativeCanvas.drawText(
+            startDateStr,
+            marginX,
+            height - 8f,
+            datePaint
+        )
+
+        // Draw end date
+        datePaint.textAlign = android.graphics.Paint.Align.RIGHT
+        drawContext.canvas.nativeCanvas.drawText(
+            endDateStr,
+            width - 8f,
+            height - 8f,
+            datePaint
         )
     }
 }

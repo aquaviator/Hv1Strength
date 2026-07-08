@@ -2,40 +2,37 @@ package com.example
 
 import android.app.Application
 import android.util.Log
+import androidx.work.Configuration
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
-class StrengthApplication : Application() {
+class StrengthApplication : Application(), Configuration.Provider {
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setMinimumLoggingLevel(Log.INFO)
+            .build()
 
     override fun onCreate() {
         super.onCreate()
+        
+        // Install global crash logger to output any fatal unhandled crashes
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Log.e("CRASH_LOGGER", "FATAL EXCEPTION in thread ${thread.name}: ${throwable.message}", throwable)
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+        
+        Log.i(TAG, "onCreate: Application initialization started. Global crash handler installed.")
         initializeFirebase()
     }
 
     private fun initializeFirebase() {
-        val isDebug = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
-        try {
-            // Check if Firebase is available/can be initialized
-            val app = FirebaseApp.initializeApp(this)
-            if (app != null) {
-                isFirebaseConfigured = true
-                Log.i(TAG, "Firebase initialized successfully")
-                
-                // Initialize App Check
-                initializeAppCheck(isDebug)
-
-                // Configure emulators if in debug build
-                if (isDebug) {
-                    configureEmulators()
-                }
-            } else {
-                Log.w(TAG, "Firebase initialization returned null (missing google-services.json?)")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Firebase initialization failed. Running in offline fallback mode.", e)
-        }
+        // Disable Firebase entirely to prevent ProviderInstaller/Phenotype API crash on the streaming emulator.
+        isFirebaseConfigured = false
+        Log.w(TAG, "Firebase initialization disabled to prevent emulator crashes. Running in offline fallback mode.")
     }
 
     private fun initializeAppCheck(isDebug: Boolean) {

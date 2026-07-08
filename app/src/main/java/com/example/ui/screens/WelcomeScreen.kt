@@ -1,27 +1,30 @@
 package com.example.ui.screens
 
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import android.widget.Toast
+import java.security.MessageDigest
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
+import coil.compose.AsyncImage
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -50,9 +53,19 @@ fun WelcomeScreen(
     val coroutineScope = rememberCoroutineScope()
     val authState by viewModel.authState.collectAsState()
     
+    val sharedPrefs = remember { context.getSharedPreferences("strength_settings", Context.MODE_PRIVATE) }
+    val defaultClientId = remember(context) {
+        val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+        if (resId != 0) context.getString(resId) else "596361666131-4bdc26e3rrupaag2cn3tqcmlqdcdjqs8.apps.googleusercontent.com"
+    }
+    var webClientId by remember { mutableStateOf(sharedPrefs.getString("google_web_client_id", defaultClientId) ?: defaultClientId) }
+
     var showSimulationDialog by remember { mutableStateOf(false) }
     var simEmail by remember { mutableStateOf("athlete.active@gmail.com") }
     var simName by remember { mutableStateOf("Alex Mercer") }
+    
+    var showSignInErrorDialog by remember { mutableStateOf(false) }
+    var signInErrorMessage by remember { mutableStateOf("") }
     
     // Check if we are already authenticated or in offline mode, and navigate if so
     LaunchedEffect(authState) {
@@ -61,74 +74,31 @@ fun WelcomeScreen(
         }
     }
 
-    val gradientColors = listOf(
-        MaterialTheme.colorScheme.surfaceVariant,
-        MaterialTheme.colorScheme.surface
-    )
-
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(gradientColors))
+            .background(Color.Black)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
+                .padding(horizontal = 28.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Spacer(modifier = Modifier.height(48.dp))
 
-            // App Brand Header
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                shape = RoundedCornerShape(24.dp),
+            // App Brand Header - Hero Element
+            Image(
+                painter = painterResource(id = com.example.R.drawable.human_banner),
+                contentDescription = "Human V1 Strength Banner",
                 modifier = Modifier
-                    .size(96.dp)
-                    .testTag("welcome_logo_card")
-            ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.FitnessCenter,
-                        contentDescription = "Human V1 Logo",
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.size(48.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = "HUMAN V1",
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 2.sp
-                ),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            Text(
-                text = "HIGH-DENSITY ATHLETIC METRICS",
-                style = MaterialTheme.typography.titleSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                ),
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "Take complete ownership of your fitness logs. High frequency weight records, tape measurements, set volumes, and custom routines stored securely on your device.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 16.dp)
+                    .fillMaxWidth()
+                    .aspectRatio(2.5f)
+                    .clip(RoundedCornerShape(16.dp))
+                    .testTag("welcome_logo_card"),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop
             )
 
             Spacer(modifier = Modifier.height(40.dp))
@@ -137,8 +107,8 @@ fun WelcomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 InfoBulletRow(
                     icon = Icons.Default.Security,
@@ -152,22 +122,22 @@ fun WelcomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(56.dp))
 
             if (authState is AuthState.Loading) {
                 CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Color(0xFF0066FF),
                     modifier = Modifier.testTag("welcome_loading_indicator")
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = "Authenticating...",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Color(0xFF0066FF),
                     fontWeight = FontWeight.SemiBold
                 )
             } else {
-                // Primary Action Button: Continue with Google
+                // Primary Action Button: Sign In with Google (Premium Pure White with Black Text)
                 Button(
                     onClick = {
                         coroutineScope.launch {
@@ -175,8 +145,7 @@ fun WelcomeScreen(
                                 val credentialManager = CredentialManager.create(context)
                                 val googleIdOption = GetGoogleIdOption.Builder()
                                     .setFilterByAuthorizedAccounts(false)
-                                    // Use a valid client ID structure
-                                    .setServerClientId("632230553757-googleapps.apps.googleusercontent.com")
+                                    .setServerClientId(webClientId)
                                     .setAutoSelectEnabled(true)
                                     .build()
 
@@ -187,8 +156,14 @@ fun WelcomeScreen(
                                 val response = credentialManager.getCredential(context, request)
                                 handleCredentialResponse(response, viewModel, coroutineScope)
                             } catch (e: Exception) {
-                                // Google Sign-In is unavailable or unconfigured, show simulated Sign-In dialog
-                                showSimulationDialog = true
+                                val errorMsg = e.localizedMessage ?: e.message ?: "Unknown error"
+                                Log.e("WelcomeScreen", "Google Sign-In failed", e)
+                                if (e.javaClass.simpleName.contains("Cancel") || errorMsg.contains("cancel", ignoreCase = true)) {
+                                    Toast.makeText(context, "Sign-In Cancelled", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    signInErrorMessage = errorMsg
+                                    showSignInErrorDialog = true
+                                }
                             }
                         }
                     },
@@ -196,16 +171,16 @@ fun WelcomeScreen(
                         .fillMaxWidth()
                         .height(56.dp)
                         .testTag("google_signin_button"),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(28.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
+                        containerColor = Color.White,
+                        contentColor = Color.Black
                     )
                 ) {
                     Icon(
                         imageVector = Icons.Default.AccountCircle,
                         contentDescription = "Google Logo",
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
@@ -215,9 +190,9 @@ fun WelcomeScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Secondary Action Button: Continue Offline
+                // Secondary Action Button: Continue Offline (Sleek Outline with White Text)
                 OutlinedButton(
                     onClick = {
                         coroutineScope.launch {
@@ -229,14 +204,16 @@ fun WelcomeScreen(
                         .fillMaxWidth()
                         .height(56.dp)
                         .testTag("continue_offline_button"),
-                    shape = RoundedCornerShape(16.dp),
-                    border = ButtonDefaults.outlinedButtonBorder.copy()
+                    shape = RoundedCornerShape(28.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color.White
+                    )
                 ) {
                     Text(
                         text = "Continue Offline",
                         fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        style = MaterialTheme.typography.titleMedium
                     )
                 }
             }
@@ -305,6 +282,258 @@ fun WelcomeScreen(
             }
         )
     }
+
+    if (showSignInErrorDialog) {
+        val isNoCredentials = signInErrorMessage.contains("no credentials", ignoreCase = true)
+        AlertDialog(
+            onDismissRequest = { showSignInErrorDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(
+                        imageVector = if (isNoCredentials) Icons.Default.Info else Icons.Default.Error,
+                        contentDescription = null,
+                        tint = if (isNoCredentials) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    )
+                    Text(if (isNoCredentials) "Google Account Needed" else "Google Sign-In Failed")
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (isNoCredentials) {
+                        Text(
+                            text = "A 'No credentials available' error occurred. This typically happens for one of two reasons:\n\n" +
+                                    "1. **Emulator / No Account**: If you are in a Cloud Android Emulator, there is no Google account signed into this device's Google Play Services.\n\n" +
+                                    "2. **Google Play App Signing**: If you installed this via Google Play (e.g. Internal Testing), Google re-signs the app. The running SHA-1 fingerprint shown below must be added to your Firebase / Google Cloud Console Project Settings.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "How to test on this Emulator:",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Click 'Use Sign-In Simulation' below. This will simulate a complete Google Sign-In and authenticate successfully with the Firebase SDK, allowing you to fully test the database syncing and live features without needing a physical device!",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Google Sign-In could not be initialized or completed. This occurs when the SHA-1 signing fingerprint or package name do not match your Firebase console setup.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "Error Details:",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = signInErrorMessage,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "Firebase Setup Reference:",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Bold
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            val packageName = "com.aistudio.humanstrength.kfqjza"
+                            val runningSha1 = getAppCertificateSha1(context)
+                            
+                            // Package Name Row with Copy Button
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "1. Registered Package Name:",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = packageName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                        val clip = android.content.ClipData.newPlainText("Package Name", packageName)
+                                        clipboard.setPrimaryClip(clip)
+                                        Toast.makeText(context, "Package name copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentCopy,
+                                        contentDescription = "Copy Package Name",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            // SHA-1 Row with Copy Button
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "2. Running SHA-1 Fingerprint:",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = runningSha1,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                        val clip = android.content.ClipData.newPlainText("SHA-1 Fingerprint", runningSha1)
+                                        clipboard.setPrimaryClip(clip)
+                                        Toast.makeText(context, "SHA-1 copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentCopy,
+                                        contentDescription = "Copy SHA-1 Fingerprint",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Your app build has these values configured correctly in google-services.json.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+
+                    Text(
+                        text = "Verify Web Client ID (or in Settings):",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    OutlinedTextField(
+                        value = webClientId,
+                        onValueChange = { 
+                            webClientId = it
+                            sharedPrefs.edit().putString("google_web_client_id", it).apply()
+                        },
+                        label = { Text("Google Web Client ID") },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            showSignInErrorDialog = false
+                            showSimulationDialog = true
+                        }
+                    ) {
+                        Text("Use Sign-In Simulation")
+                    }
+                    
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            showSignInErrorDialog = false
+                            coroutineScope.launch {
+                                try {
+                                    val credentialManager = CredentialManager.create(context)
+                                    val googleIdOption = GetGoogleIdOption.Builder()
+                                        .setFilterByAuthorizedAccounts(false)
+                                        .setServerClientId(webClientId)
+                                        .setAutoSelectEnabled(true)
+                                        .build()
+
+                                    val request = GetCredentialRequest.Builder()
+                                        .addCredentialOption(googleIdOption)
+                                        .build()
+
+                                    val response = credentialManager.getCredential(context, request)
+                                    handleCredentialResponse(response, viewModel, coroutineScope)
+                                } catch (e: Exception) {
+                                    val errorMsg = e.localizedMessage ?: e.message ?: "Unknown error"
+                                    Log.e("WelcomeScreen", "Google Sign-In retry failed", e)
+                                    if (e.javaClass.simpleName.contains("Cancel") || errorMsg.contains("cancel", ignoreCase = true)) {
+                                        Toast.makeText(context, "Sign-In Cancelled", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        signInErrorMessage = errorMsg
+                                        showSignInErrorDialog = true
+                                    }
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Retry Google Sign-In")
+                    }
+                    
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { showSignInErrorDialog = false }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        )
+    }
 }
 
 private fun handleCredentialResponse(
@@ -360,4 +589,44 @@ fun InfoBulletRow(
             )
         }
     }
+}
+
+private fun getAppCertificateSha1(context: Context): String {
+    try {
+        val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            context.packageManager.getPackageInfo(
+                context.packageName,
+                PackageManager.GET_SIGNING_CERTIFICATES
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(
+                context.packageName,
+                PackageManager.GET_SIGNATURES
+            )
+        }
+
+        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo.signingInfo?.apkContentsSigners
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo.signatures
+        }
+
+        if (signatures != null && signatures.isNotEmpty()) {
+            val md = MessageDigest.getInstance("SHA-1")
+            val publicKey = md.digest(signatures[0].toByteArray())
+            val hexString = StringBuilder()
+            for (i in publicKey.indices) {
+                val appendString = Integer.toHexString(0xFF and publicKey[i].toInt())
+                if (appendString.length == 1) hexString.append("0")
+                hexString.append(appendString)
+                if (i < publicKey.size - 1) hexString.append(":")
+            }
+            return hexString.toString().uppercase()
+        }
+    } catch (e: Exception) {
+        Log.e("WelcomeScreen", "Error getting signature", e)
+    }
+    return "Error retrieving signature"
 }

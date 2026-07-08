@@ -24,6 +24,7 @@ import androidx.compose.ui.window.Dialog
 import com.example.data.Exercise
 import com.example.data.LoggedSet
 import com.example.data.WorkoutSession
+import com.example.data.UserProfile
 import com.example.ui.viewmodel.StrengthViewModel
 import java.util.*
 
@@ -43,10 +44,13 @@ fun ExerciseScreen(viewModel: StrengthViewModel) {
 
     var selectedExerciseForHistory by remember { mutableStateOf<Exercise?>(null) }
 
+    val userProfile by viewModel.activeUserProfile.collectAsState()
+
     Scaffold(
         topBar = {
             HighDensityHeader(
                 title = "Exercises",
+                userProfile = userProfile,
                 actions = {
                     IconButton(
                         onClick = {

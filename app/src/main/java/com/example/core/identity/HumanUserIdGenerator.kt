@@ -14,6 +14,7 @@ object HumanUserIdGenerator {
         val targetContext = context?.applicationContext ?: appContext
         if (targetContext == null) {
             // Fallback during migrations/tests where context is not immediately available
+            android.util.Log.w("HumanUserIdGenerator", "getOrGenerateOfflineHumanId: context was null! Returning fallback 'human_offlineusr'")
             return "human_offlineusr"
         }
         val prefs = targetContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -23,6 +24,9 @@ object HumanUserIdGenerator {
             val randomPart = UUID.randomUUID().toString().replace("-", "").lowercase().take(12)
             id = "human_$randomPart"
             prefs.edit().putString(KEY_OFFLINE_HUMAN_ID, id).apply()
+            android.util.Log.i("HumanUserIdGenerator", "Generated new offline human ID: $id")
+        } else {
+            android.util.Log.d("HumanUserIdGenerator", "Loaded existing offline human ID: $id")
         }
         return id
     }

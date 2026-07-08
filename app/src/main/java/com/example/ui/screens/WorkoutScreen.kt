@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -24,6 +25,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,6 +34,10 @@ import com.example.ui.viewmodel.StrengthViewModel.TemplateExerciseState
 import com.example.ui.viewmodel.StrengthViewModel.TemplateSetState
 import com.example.data.Exercise
 import com.example.data.WorkoutTemplate
+import com.example.data.UserProfile
+import com.example.data.initials
+import coil.compose.AsyncImage
+import androidx.compose.ui.res.painterResource
 import com.example.ui.viewmodel.StrengthViewModel
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -50,6 +56,11 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.ImeAction
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,18 +82,24 @@ fun WorkoutScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            HighDensityHeader(title = "Strength")
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+    val userProfile by viewModel.activeUserProfile.collectAsState()
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                HighDensityHeader(
+                    title = "Strength",
+                    userProfile = userProfile
+                )
+            }
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             // Active Session Alert if running
             if (activeWorkout != null) {
                 item {
@@ -304,7 +321,13 @@ fun WorkoutScreen(
         }
     }
 
-    if (showTemplateEditor) {
+    // Full screen premium editor overlay with spring transitions
+    AnimatedVisibility(
+        visible = showTemplateEditor,
+        enter = fadeIn() + expandVertically(animationSpec = spring()),
+        exit = fadeOut() + shrinkVertically(animationSpec = spring()),
+        modifier = Modifier.fillMaxSize()
+    ) {
         TemplateEditorDialog(
             template = templateToEdit,
             exercises = exercises,
@@ -312,6 +335,7 @@ fun WorkoutScreen(
             onDismiss = { showTemplateEditor = false }
         )
     }
+}
 }
 
 @Composable
@@ -414,6 +438,44 @@ fun RoutineCard(
     }
 }
 
+data class ExerciseIntention(
+    val goal: String = "Hypertrophy",
+    val progression: String = "Straight Sets",
+    val targetRepsMin: Int = 8,
+    val targetRepsMax: Int = 12,
+    val startingWeight: Float? = null,
+    val userNotes: String = ""
+) {
+    fun toSerializedString(): String {
+        val parts = mutableListOf<String>()
+        parts.add("Goal: $goal")
+        parts.add("Progression: $progression")
+        parts.add("Reps: $targetRepsMin-$targetRepsMax")
+        if (startingWeight != null) parts.add("Start: $startingWeight")
+        if (userNotes.isNotEmpty()) parts.add("Notes: $userNotes")
+        return parts.joinToString(" | ")
+    }
+
+    companion object {
+        fun fromSerializedString(str: String?): ExerciseIntention {
+            if (str.isNullOrBlank()) return ExerciseIntention()
+            val parts = str.split(" | ").associate {
+                val subParts = it.split(": ")
+                if (subParts.size == 2) subParts[0].trim() to subParts[1].trim() else "" to ""
+            }
+            val repsParts = parts["Reps"]?.split("-") ?: emptyList()
+            return ExerciseIntention(
+                goal = parts["Goal"] ?: "Hypertrophy",
+                progression = parts["Progression"] ?: "Straight Sets",
+                targetRepsMin = repsParts.getOrNull(0)?.toIntOrNull() ?: 8,
+                targetRepsMax = repsParts.getOrNull(1)?.toIntOrNull() ?: 12,
+                startingWeight = parts["Start"]?.toFloatOrNull(),
+                userNotes = parts["Notes"] ?: ""
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TemplateEditorDialog(
@@ -426,6 +488,7 @@ fun TemplateEditorDialog(
     val selectedExercises = remember { mutableStateListOf<TemplateExerciseState>() }
     var selectedType by remember { mutableStateOf("") }
     var currentStep by remember { mutableStateOf(if (template == null) 1 else 3) }
+    var activeFocusedExerciseIndex by remember { mutableStateOf<Int?>(null) }
     
     // Search and filters for Step 2 Exercise Browser
     var searchQuery by remember { mutableStateOf("") }
@@ -437,6 +500,15 @@ fun TemplateEditorDialog(
     val favoriteExercises by viewModel.favoriteExercises.collectAsState()
     val allLoggedSets by viewModel.allLoggedSets.collectAsState()
     val haptic = LocalHapticFeedback.current
+
+    // Register BackHandler to intercept back gestures when editing/creating a routine
+    BackHandler {
+        if (currentStep > 1) {
+            currentStep -= 1
+        } else {
+            onDismiss()
+        }
+    }
 
     // Load initial template details if editing
     LaunchedEffect(template) {
@@ -501,23 +573,20 @@ fun TemplateEditorDialog(
         WorkoutTypeOption("custom", "Custom", "Custom Workout Structure", "Flexible", Icons.Default.Edit)
     )
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding(),
+        color = MaterialTheme.colorScheme.background
     ) {
-        Surface(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding(),
-            color = MaterialTheme.colorScheme.background
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
                 // Wizard Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -910,318 +979,597 @@ fun TemplateEditorDialog(
 
                     3 -> {
                         // STEP 3: CONFIGURE WORKOUT (WORKOUT EDITOR & LIVE INSIGHTS)
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            // Routine Name field
-                            OutlinedTextField(
-                                value = routineName,
-                                onValueChange = { routineName = it },
-                                label = { Text("Routine Name (e.g. Push Day)") },
-                                modifier = Modifier.fillMaxWidth().testTag("routine_name_editor_input"),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
+                        val isKeyboardVisible = WindowInsets.isImeVisible
+                        val listState = rememberLazyListState()
 
-                            // LIVE WORKOUT INSIGHTS CARD
-                            Card(
-                                modifier = Modifier.fillMaxWidth().animateContentSize(),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
-                                ),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                        // Automatically scroll focused exercise card into view
+                        LaunchedEffect(activeFocusedExerciseIndex) {
+                            if (isKeyboardVisible && activeFocusedExerciseIndex != null) {
+                                activeFocusedExerciseIndex?.let { index ->
+                                    if (index in 0 until selectedExercises.size) {
+                                        listState.animateScrollToItem(index)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Automatically reset focus state when keyboard is closed
+                        LaunchedEffect(isKeyboardVisible) {
+                            if (!isKeyboardVisible) {
+                                activeFocusedExerciseIndex = null
+                            }
+                        }
+
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // 1. COMPACT STATUS BANNER (Focus Mode Header - Visible when Keyboard is Active)
+                            AnimatedVisibility(
+                                visible = isKeyboardVisible,
+                                enter = expandVertically() + fadeIn(),
+                                exit = shrinkVertically() + fadeOut()
                             ) {
-                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+                                    ),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                                ) {
                                     Row(
-                                        modifier = Modifier.fillMaxWidth(),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 10.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("Live Workout Insights", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                        Box(modifier = Modifier.background(MaterialTheme.colorScheme.secondaryContainer, shape = CircleShape).padding(horizontal = 8.dp, vertical = 2.dp)) {
-                                            Text(trainingFocus, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Icon(
+                                                imageVector = Icons.Default.FitnessCenter,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Text(
+                                                text = "${routineName.ifBlank { "Routine" }} • ${selectedExercises.size} Ex • ${totalSets} Sets",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
                                         }
+                                        Text(
+                                            text = "${totalVolume.toInt()}kg Est.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
                                     }
+                                }
+                            }
 
-                                    // Metric highlights row
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                            // 2. DETAILED INSIGHTS & ROUTINE NAME (Context Mode Header - Visible when Keyboard is Inactive)
+                            AnimatedVisibility(
+                                visible = !isKeyboardVisible,
+                                enter = expandVertically() + fadeIn(),
+                                exit = shrinkVertically() + fadeOut()
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    // Routine Name field
+                                    OutlinedTextField(
+                                        value = routineName,
+                                        onValueChange = { routineName = it },
+                                        label = { Text("Routine Name (e.g. Push Day)") },
+                                        modifier = Modifier.fillMaxWidth().testTag("routine_name_editor_input"),
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+
+                                    // LIVE WORKOUT INSIGHTS CARD
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth().animateContentSize(),
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+                                        ),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
                                     ) {
-                                        Text("Exercises: ${selectedExercises.size}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-                                        Text("Sets: $totalSets", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-                                        Text("Est: ${estDurationMin}m", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-                                        Text("Volume: ${totalVolume.toInt()}kg", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-                                    }
-
-                                    // Dynamic Warnings / Recommendations
-                                    val backSets = musclesCount["Back"] ?: 0
-                                    val chestSets = musclesCount["Chest"] ?: 0
-                                    val legSets = musclesCount["Legs"] ?: 0
-                                    
-                                    val warnings = remember(selectedExercises, musclesCount) {
-                                        mutableListOf<String>().apply {
-                                            if (selectedExercises.isNotEmpty()) {
-                                                if (backSets == 0 && (chestSets > 0 || legSets > 0)) {
-                                                    add("⚠️ Insight: Suggest adding a Back pulling exercise to balance the routine.")
-                                                }
-                                                if (legSets == 0 && (chestSets > 0 || backSets > 0)) {
-                                                    add("⚠️ Insight: No Lower Body (Legs) exercises included.")
-                                                }
-                                                if (chestSets > 8) {
-                                                    add("⚠️ Warning: High Chest volume. Recovery might be slow.")
-                                                }
-                                                if (totalSets > 25) {
-                                                    add("⚠️ Note: High total sets volume (>25). Keep intensity high.")
+                                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text("Live Workout Insights", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                Box(modifier = Modifier.background(MaterialTheme.colorScheme.secondaryContainer, shape = CircleShape).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                                                    Text(trainingFocus, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
                                                 }
                                             }
-                                        }
-                                    }
 
-                                    if (warnings.isNotEmpty()) {
-                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                            warnings.take(2).forEach { msg ->
-                                                Text(msg, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp), color = MaterialTheme.colorScheme.error)
+                                            // Metric highlights row
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("Exercises: ${selectedExercises.size}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                                                Text("Sets: $totalSets", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                                                Text("Est: ${estDurationMin}m", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                                                Text("Volume: ${totalVolume.toInt()}kg", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                                            }
+
+                                            // Dynamic Warnings / Recommendations
+                                            val backSets = musclesCount["Back"] ?: 0
+                                            val chestSets = musclesCount["Chest"] ?: 0
+                                            val legSets = musclesCount["Legs"] ?: 0
+                                            
+                                            val warnings = remember(selectedExercises, musclesCount) {
+                                                mutableListOf<String>().apply {
+                                                    if (selectedExercises.isNotEmpty()) {
+                                                        if (backSets == 0 && (chestSets > 0 || legSets > 0)) {
+                                                            add("⚠️ Insight: Suggest adding a Back pulling exercise to balance the routine.")
+                                                        }
+                                                        if (legSets == 0 && (chestSets > 0 || backSets > 0)) {
+                                                            add("⚠️ Insight: No Lower Body (Legs) exercises included.")
+                                                        }
+                                                        if (chestSets > 8) {
+                                                            add("⚠️ Warning: High Chest volume. Recovery might be slow.")
+                                                        }
+                                                        if (totalSets > 25) {
+                                                            add("⚠️ Note: High total sets volume (>25). Keep intensity high.")
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            if (warnings.isNotEmpty()) {
+                                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                    warnings.take(2).forEach { msg ->
+                                                        Text(msg, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp), color = MaterialTheme.colorScheme.error)
+                                                    }
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
 
-                            // Selected Exercise editor list
+                            // 3. SCROLLABLE SELECTED EXERCISES LIST (Keyboard-aware focus collapse)
                             Box(modifier = Modifier.weight(1f)) {
-                                LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                LazyColumn(
+                                    state = listState,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
                                     itemsIndexed(selectedExercises) { exIndex, templateExercise ->
                                         val exerciseObj = exercises.find { it.id == templateExercise.exerciseId }
                                         if (exerciseObj != null) {
-                                            // Dedicated, clean, inline exercise editor card
-                                            Card(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                shape = RoundedCornerShape(16.dp),
-                                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                                            ) {
-                                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                    // Title Row
+                                            val isFocusedEx = activeFocusedExerciseIndex == exIndex
+                                            val shouldCollapseEx = isKeyboardVisible && !isFocusedEx
+
+                                            if (shouldCollapseEx) {
+                                                // Focus Mode: Inactive items collapse into compact rows
+                                                Card(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .alpha(0.45f)
+                                                        .clickable {
+                                                            activeFocusedExerciseIndex = exIndex
+                                                        },
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+                                                ) {
                                                     Row(
-                                                        modifier = Modifier.fillMaxWidth(),
+                                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                                                         horizontalArrangement = Arrangement.SpaceBetween,
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
-                                                        Column {
-                                                            Text(exerciseObj.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                                            Text(exerciseObj.category, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                        }
-
-                                                        // Up/Down/Delete Actions
-                                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                            IconButton(
-                                                                onClick = {
-                                                                    if (exIndex > 0) {
-                                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                        val temp = selectedExercises[exIndex]
-                                                                        selectedExercises[exIndex] = selectedExercises[exIndex - 1]
-                                                                        selectedExercises[exIndex - 1] = temp
-                                                                    }
-                                                                },
-                                                                enabled = exIndex > 0
-                                                            ) {
-                                                                Icon(Icons.Default.ArrowUpward, "Move Up", modifier = Modifier.size(20.dp))
-                                                            }
-                                                            IconButton(
-                                                                onClick = {
-                                                                    if (exIndex < selectedExercises.size - 1) {
-                                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                        val temp = selectedExercises[exIndex]
-                                                                        selectedExercises[exIndex] = selectedExercises[exIndex + 1]
-                                                                        selectedExercises[exIndex + 1] = temp
-                                                                    }
-                                                                },
-                                                                enabled = exIndex < selectedExercises.size - 1
-                                                            ) {
-                                                                Icon(Icons.Default.ArrowDownward, "Move Down", modifier = Modifier.size(20.dp))
-                                                            }
-                                                            IconButton(
-                                                                onClick = {
-                                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                    selectedExercises.removeAt(exIndex)
-                                                                }
-                                                            ) {
-                                                                Icon(Icons.Default.DeleteOutline, "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
-                                                            }
-                                                        }
-                                                    }
-
-                                                    // Rest and Notes
-                                                    Row(
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        // Rest seconds modifier
                                                         Column(modifier = Modifier.weight(1f)) {
-                                                            Text("Rest Timer", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                                IconButton(
-                                                                    onClick = {
-                                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                        val rest = (templateExercise.restSeconds - 30).coerceAtLeast(30)
-                                                                        selectedExercises[exIndex] = templateExercise.copy(restSeconds = rest)
-                                                                    }
-                                                                ) {
-                                                                    Icon(Icons.Default.Remove, null, modifier = Modifier.size(16.dp))
-                                                                }
-                                                                Text("${templateExercise.restSeconds}s", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                                                IconButton(
-                                                                    onClick = {
-                                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                        val rest = (templateExercise.restSeconds + 30).coerceIn(30, 600)
-                                                                        selectedExercises[exIndex] = templateExercise.copy(restSeconds = rest)
-                                                                    }
-                                                                ) {
-                                                                    Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                                                                }
-                                                            }
+                                                            Text(exerciseObj.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                                            Text(
+                                                                "${templateExercise.sets.size} Sets • Rest: ${templateExercise.restSeconds}s",
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            )
                                                         }
-
-                                                        // Notes
-                                                        OutlinedTextField(
-                                                            value = templateExercise.notes ?: "",
-                                                            onValueChange = {
-                                                                selectedExercises[exIndex] = templateExercise.copy(notes = it)
-                                                            },
-                                                            label = { Text("Exercise Notes", fontSize = 11.sp) },
-                                                            modifier = Modifier.weight(1.5f).height(48.dp),
-                                                            singleLine = true,
-                                                            shape = RoundedCornerShape(8.dp)
-                                                        )
+                                                        Icon(Icons.Default.ExpandMore, contentDescription = "Expand", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
                                                     }
+                                                }
+                                            } else {
+                                                // Focus Mode / Default Mode: Active Card (fully expanded)
+                                                Card(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                                    border = BorderStroke(
+                                                        width = if (isFocusedEx) 2.dp else 1.dp,
+                                                        color = if (isFocusedEx) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                                    )
+                                                ) {
+                                                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                        // Exercise Card Title Header
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Column {
+                                                                Text(exerciseObj.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                                                Text(exerciseObj.category, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                            }
 
-                                                    // Sets block
-                                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                        Text("Configure Sets", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                                        
-                                                        templateExercise.sets.forEachIndexed { setIndex, set ->
-                                                            Row(
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                                verticalAlignment = Alignment.CenterVertically
-                                                            ) {
-                                                                Text("${setIndex + 1}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                                                
-                                                                // Clicking the type cycles or toggles set type
-                                                                val isSelectedTypeColor = when (set.setType) {
-                                                                    "WARMUP" -> Color(0xFFFF9800)
-                                                                    "DROP" -> Color(0xFF9C27B0)
-                                                                    "FAILURE" -> Color(0xFFE91E63)
-                                                                    "AMRAP" -> Color(0xFF4CAF50)
-                                                                    "TIMED" -> Color(0xFF00BCD4)
-                                                                    "DISTANCE" -> Color(0xFF3F51B5)
-                                                                    else -> MaterialTheme.colorScheme.primary
-                                                                }
-                                                                Box(
-                                                                    modifier = Modifier
-                                                                        .background(isSelectedTypeColor.copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp))
-                                                                        .clickable {
+                                                            // Card reordering / deletion actions
+                                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                                IconButton(
+                                                                    onClick = {
+                                                                        if (exIndex > 0) {
                                                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                            val nextType = when (set.setType) {
-                                                                                "WORKING" -> "WARMUP"
-                                                                                "WARMUP" -> "DROP"
-                                                                                "DROP" -> "FAILURE"
-                                                                                "FAILURE" -> "AMRAP"
-                                                                                "AMRAP" -> "TIMED"
-                                                                                "TIMED" -> "DISTANCE"
-                                                                                else -> "WORKING"
-                                                                            }
-                                                                            val setsList = templateExercise.sets.toMutableList()
-                                                                            setsList[setIndex] = set.copy(setType = nextType)
-                                                                            selectedExercises[exIndex] = templateExercise.copy(sets = setsList)
+                                                                            val temp = selectedExercises[exIndex]
+                                                                            selectedExercises[exIndex] = selectedExercises[exIndex - 1]
+                                                                            selectedExercises[exIndex - 1] = temp
                                                                         }
-                                                                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                                                                    },
+                                                                    enabled = exIndex > 0
                                                                 ) {
-                                                                    Text(set.setType, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold), color = isSelectedTypeColor)
+                                                                    Icon(Icons.Default.ArrowUpward, "Move Up", modifier = Modifier.size(20.dp))
                                                                 }
-
-                                                                // Target weight
-                                                                OutlinedTextField(
-                                                                    value = if (set.targetWeight == null || set.targetWeight == 0f) "" else set.targetWeight.toString(),
-                                                                    onValueChange = {
-                                                                        val w = it.toFloatOrNull()
-                                                                        val setsList = templateExercise.sets.toMutableList()
-                                                                        setsList[setIndex] = set.copy(targetWeight = w)
-                                                                        selectedExercises[exIndex] = templateExercise.copy(sets = setsList)
+                                                                IconButton(
+                                                                    onClick = {
+                                                                        if (exIndex < selectedExercises.size - 1) {
+                                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                            val temp = selectedExercises[exIndex]
+                                                                            selectedExercises[exIndex] = selectedExercises[exIndex + 1]
+                                                                            selectedExercises[exIndex + 1] = temp
+                                                                        }
                                                                     },
-                                                                    placeholder = { Text("0") },
-                                                                    label = { Text("kg", fontSize = 10.sp) },
-                                                                    modifier = Modifier.weight(1f).height(48.dp),
-                                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                                    singleLine = true,
-                                                                    shape = RoundedCornerShape(8.dp)
-                                                                )
+                                                                    enabled = exIndex < selectedExercises.size - 1
+                                                                ) {
+                                                                    Icon(Icons.Default.ArrowDownward, "Move Down", modifier = Modifier.size(20.dp))
+                                                                }
+                                                                IconButton(
+                                                                    onClick = {
+                                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                        selectedExercises.removeAt(exIndex)
+                                                                    }
+                                                                ) {
+                                                                    Icon(Icons.Default.DeleteOutline, "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                                                                }
+                                                            }
+                                                        }
 
-                                                                // Target reps min
-                                                                OutlinedTextField(
-                                                                    value = if (set.targetRepsMin == null) "" else set.targetRepsMin.toString(),
-                                                                    onValueChange = {
-                                                                        val r = it.toIntOrNull()
-                                                                        val setsList = templateExercise.sets.toMutableList()
-                                                                        setsList[setIndex] = set.copy(targetRepsMin = r, targetRepsMax = r)
-                                                                        selectedExercises[exIndex] = templateExercise.copy(sets = setsList)
+                                                        val intention = remember(templateExercise.notes) { ExerciseIntention.fromSerializedString(templateExercise.notes) }
+
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            // Rest Timer controls
+                                                            Column(modifier = Modifier.weight(1.2f)) {
+                                                                Text("Rest Timer", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                Spacer(modifier = Modifier.height(4.dp))
+                                                                Row(
+                                                                    verticalAlignment = Alignment.CenterVertically, 
+                                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                    modifier = Modifier
+                                                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                                                ) {
+                                                                    IconButton(
+                                                                        onClick = {
+                                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                            val rest = (templateExercise.restSeconds - 30).coerceAtLeast(30)
+                                                                            selectedExercises[exIndex] = templateExercise.copy(restSeconds = rest)
+                                                                        },
+                                                                        modifier = Modifier.size(32.dp)
+                                                                    ) {
+                                                                        Icon(Icons.Default.Remove, null, modifier = Modifier.size(16.dp))
+                                                                    }
+                                                                    Text("${templateExercise.restSeconds}s", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                                                    IconButton(
+                                                                        onClick = {
+                                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                            val rest = (templateExercise.restSeconds + 30).coerceIn(30, 600)
+                                                                            selectedExercises[exIndex] = templateExercise.copy(restSeconds = rest)
+                                                                        },
+                                                                        modifier = Modifier.size(32.dp)
+                                                                    ) {
+                                                                        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            // Exercise Notes TextField
+                                                            OutlinedTextField(
+                                                                value = intention.userNotes,
+                                                                onValueChange = {
+                                                                    val updated = intention.copy(userNotes = it)
+                                                                    selectedExercises[exIndex] = templateExercise.copy(notes = updated.toSerializedString())
+                                                                },
+                                                                label = { Text("Exercise Notes", fontSize = 11.sp) },
+                                                                modifier = Modifier
+                                                                    .weight(1.5f)
+                                                                    .height(54.dp)
+                                                                    .onFocusChanged { state ->
+                                                                        if (state.isFocused) {
+                                                                            activeFocusedExerciseIndex = exIndex
+                                                                        }
                                                                     },
-                                                                    placeholder = { Text("8") },
-                                                                    label = { Text("Reps", fontSize = 10.sp) },
-                                                                    modifier = Modifier.weight(1f).height(48.dp),
-                                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                                    singleLine = true,
-                                                                    shape = RoundedCornerShape(8.dp)
-                                                                )
+                                                                singleLine = true,
+                                                                shape = RoundedCornerShape(8.dp)
+                                                            )
+                                                        }
 
-                                                                // Set actions
-                                                                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                                                        // Training Goal Segmented Chips
+                                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Text("TRAINING GOAL", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+                                                            Row(
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .horizontalScroll(rememberScrollState()),
+                                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                            ) {
+                                                                val goals = listOf(
+                                                                    Triple("Strength", "Strength", Icons.Default.FitnessCenter),
+                                                                    Triple("Hypertrophy", "Muscle", Icons.Default.TrendingUp),
+                                                                    Triple("Endurance", "Stamina", Icons.Default.Timer),
+                                                                    Triple("Technique", "Form", Icons.Default.Psychology),
+                                                                    Triple("Custom", "Custom", Icons.Default.Edit)
+                                                                )
+                                                                goals.forEach { (goalId, label, icon) ->
+                                                                    val isSelected = intention.goal == goalId
+                                                                    FilterChip(
+                                                                        selected = isSelected,
+                                                                        onClick = {
+                                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                            val updated = intention.copy(goal = goalId)
+                                                                            selectedExercises[exIndex] = templateExercise.copy(notes = updated.toSerializedString())
+                                                                        },
+                                                                        label = { Text(label, fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                                                                        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                                                        shape = RoundedCornerShape(12.dp),
+                                                                        colors = FilterChipDefaults.filterChipColors(
+                                                                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                                            selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                                                        )
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // Progression Style Segmented Chips
+                                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Text("PROGRESSION STYLE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+                                                            Row(
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .horizontalScroll(rememberScrollState()),
+                                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                            ) {
+                                                                val progressions = listOf("Straight Sets", "Ramp Up", "Reverse Pyramid", "Pyramid", "Custom")
+                                                                progressions.forEach { style ->
+                                                                    val isSelected = intention.progression == style
+                                                                    FilterChip(
+                                                                        selected = isSelected,
+                                                                        onClick = {
+                                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                            val updated = intention.copy(progression = style)
+                                                                            selectedExercises[exIndex] = templateExercise.copy(notes = updated.toSerializedString())
+                                                                        },
+                                                                        label = { Text(style, fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                                                                        shape = RoundedCornerShape(12.dp),
+                                                                        colors = FilterChipDefaults.filterChipColors(
+                                                                            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                                                            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                                                        )
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+
+                                                        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                                                        // Interactive Grid/Row of Guided Parameters: Sets, Reps, and Starting Weight
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            // 1. SETS CONFIGURATION
+                                                            Column(
+                                                                modifier = Modifier
+                                                                    .weight(1f)
+                                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                                                                    .padding(8.dp),
+                                                                horizontalAlignment = Alignment.CenterHorizontally
+                                                            ) {
+                                                                Text("SETS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                Spacer(modifier = Modifier.height(4.dp))
+                                                                Text("${templateExercise.sets.size}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                                                                Spacer(modifier = Modifier.height(6.dp))
+                                                                Row(
+                                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                ) {
                                                                     IconButton(
                                                                         onClick = {
                                                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                                             val setsList = templateExercise.sets.toMutableList()
-                                                                            setsList.add(setIndex + 1, set.copy(id = 0))
-                                                                            selectedExercises[exIndex] = templateExercise.copy(sets = setsList)
-                                                                        }
+                                                                            if (setsList.size > 1) {
+                                                                                setsList.removeAt(setsList.size - 1)
+                                                                                selectedExercises[exIndex] = templateExercise.copy(sets = setsList)
+                                                                            }
+                                                                        },
+                                                                        modifier = Modifier.size(28.dp).background(MaterialTheme.colorScheme.surface, CircleShape)
                                                                     ) {
-                                                                        Icon(Icons.Default.ContentCopy, "Duplicate Set", modifier = Modifier.size(16.dp))
+                                                                        Icon(Icons.Default.Remove, null, modifier = Modifier.size(14.dp))
                                                                     }
                                                                     IconButton(
                                                                         onClick = {
                                                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                                             val setsList = templateExercise.sets.toMutableList()
-                                                                            setsList.removeAt(setIndex)
+                                                                            val lastSet = setsList.lastOrNull()
+                                                                            val newSet = TemplateSetState(
+                                                                                setType = lastSet?.setType ?: "WORKING",
+                                                                                targetRepsMin = intention.targetRepsMin,
+                                                                                targetRepsMax = intention.targetRepsMax,
+                                                                                targetWeight = intention.startingWeight ?: lastSet?.targetWeight ?: 0f
+                                                                            )
+                                                                            setsList.add(newSet)
                                                                             selectedExercises[exIndex] = templateExercise.copy(sets = setsList)
-                                                                        }
+                                                                        },
+                                                                        modifier = Modifier.size(28.dp).background(MaterialTheme.colorScheme.surface, CircleShape)
                                                                     ) {
-                                                                        Icon(Icons.Default.DeleteOutline, "Delete Set", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                                                        Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp))
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            // 2. REPS RANGE CONFIGURATION
+                                                            Column(
+                                                                modifier = Modifier
+                                                                    .weight(1.3f)
+                                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                                                                    .padding(8.dp),
+                                                                horizontalAlignment = Alignment.CenterHorizontally
+                                                            ) {
+                                                                Text("REPS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                Spacer(modifier = Modifier.height(4.dp))
+                                                                Text("${intention.targetRepsMin} - ${intention.targetRepsMax}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
+                                                                Spacer(modifier = Modifier.height(6.dp))
+                                                                Row(
+                                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                ) {
+                                                                    // Min Reps Adj
+                                                                    IconButton(
+                                                                        onClick = {
+                                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                            val minReps = (intention.targetRepsMin - 1).coerceAtLeast(1)
+                                                                            val updated = intention.copy(targetRepsMin = minReps)
+                                                                            val setsList = templateExercise.sets.map { it.copy(targetRepsMin = minReps) }
+                                                                            selectedExercises[exIndex] = templateExercise.copy(
+                                                                                notes = updated.toSerializedString(),
+                                                                                sets = setsList
+                                                                            )
+                                                                        },
+                                                                        modifier = Modifier.size(24.dp).background(MaterialTheme.colorScheme.surface, CircleShape)
+                                                                    ) {
+                                                                        Icon(Icons.Default.Remove, null, modifier = Modifier.size(12.dp))
+                                                                    }
+                                                                    Text("Min", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                    IconButton(
+                                                                        onClick = {
+                                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                            val minReps = (intention.targetRepsMin + 1).coerceAtMost(intention.targetRepsMax)
+                                                                            val updated = intention.copy(targetRepsMin = minReps)
+                                                                            val setsList = templateExercise.sets.map { it.copy(targetRepsMin = minReps) }
+                                                                            selectedExercises[exIndex] = templateExercise.copy(
+                                                                                notes = updated.toSerializedString(),
+                                                                                sets = setsList
+                                                                            )
+                                                                        },
+                                                                        modifier = Modifier.size(24.dp).background(MaterialTheme.colorScheme.surface, CircleShape)
+                                                                    ) {
+                                                                        Icon(Icons.Default.Add, null, modifier = Modifier.size(12.dp))
+                                                                    }
+                                                                }
+                                                                Spacer(modifier = Modifier.height(4.dp))
+                                                                Row(
+                                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                ) {
+                                                                    // Max Reps Adj
+                                                                    IconButton(
+                                                                        onClick = {
+                                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                            val maxReps = (intention.targetRepsMax - 1).coerceAtLeast(intention.targetRepsMin)
+                                                                            val updated = intention.copy(targetRepsMax = maxReps)
+                                                                            val setsList = templateExercise.sets.map { it.copy(targetRepsMax = maxReps) }
+                                                                            selectedExercises[exIndex] = templateExercise.copy(
+                                                                                notes = updated.toSerializedString(),
+                                                                                sets = setsList
+                                                                            )
+                                                                        },
+                                                                        modifier = Modifier.size(24.dp).background(MaterialTheme.colorScheme.surface, CircleShape)
+                                                                    ) {
+                                                                        Icon(Icons.Default.Remove, null, modifier = Modifier.size(12.dp))
+                                                                    }
+                                                                    Text("Max", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                    IconButton(
+                                                                        onClick = {
+                                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                            val maxReps = (intention.targetRepsMax + 1).coerceIn(1, 100)
+                                                                            val updated = intention.copy(targetRepsMax = maxReps)
+                                                                            val setsList = templateExercise.sets.map { it.copy(targetRepsMax = maxReps) }
+                                                                            selectedExercises[exIndex] = templateExercise.copy(
+                                                                                notes = updated.toSerializedString(),
+                                                                                sets = setsList
+                                                                            )
+                                                                        },
+                                                                        modifier = Modifier.size(24.dp).background(MaterialTheme.colorScheme.surface, CircleShape)
+                                                                    ) {
+                                                                        Icon(Icons.Default.Add, null, modifier = Modifier.size(12.dp))
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            // 3. STARTING WEIGHT CONFIGURATION
+                                                            Column(
+                                                                modifier = Modifier
+                                                                    .weight(1.2f)
+                                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                                                                    .padding(8.dp),
+                                                                horizontalAlignment = Alignment.CenterHorizontally
+                                                            ) {
+                                                                Text("START WEIGHT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                Spacer(modifier = Modifier.height(4.dp))
+                                                                Text(
+                                                                    if (intention.startingWeight != null) "${intention.startingWeight.toString().removeSuffix(".0")} kg" else "--",
+                                                                    style = MaterialTheme.typography.titleMedium,
+                                                                    fontWeight = FontWeight.Black
+                                                                )
+                                                                Spacer(modifier = Modifier.height(6.dp))
+                                                                Row(
+                                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                ) {
+                                                                    IconButton(
+                                                                        onClick = {
+                                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                            val currentW = intention.startingWeight ?: 20f
+                                                                            val newW = (currentW - 2.5f).coerceAtLeast(0f)
+                                                                            val updated = intention.copy(startingWeight = newW)
+                                                                            val setsList = templateExercise.sets.map { it.copy(targetWeight = newW) }
+                                                                            selectedExercises[exIndex] = templateExercise.copy(
+                                                                                notes = updated.toSerializedString(),
+                                                                                sets = setsList
+                                                                            )
+                                                                        },
+                                                                        modifier = Modifier.size(28.dp).background(MaterialTheme.colorScheme.surface, CircleShape)
+                                                                    ) {
+                                                                        Icon(Icons.Default.Remove, null, modifier = Modifier.size(14.dp))
+                                                                    }
+                                                                    IconButton(
+                                                                        onClick = {
+                                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                            val currentW = intention.startingWeight ?: 20f
+                                                                            val newW = currentW + 2.5f
+                                                                            val updated = intention.copy(startingWeight = newW)
+                                                                            val setsList = templateExercise.sets.map { it.copy(targetWeight = newW) }
+                                                                            selectedExercises[exIndex] = templateExercise.copy(
+                                                                                notes = updated.toSerializedString(),
+                                                                                sets = setsList
+                                                                            )
+                                                                        },
+                                                                        modifier = Modifier.size(28.dp).background(MaterialTheme.colorScheme.surface, CircleShape)
+                                                                    ) {
+                                                                        Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp))
                                                                     }
                                                                 }
                                                             }
                                                         }
 
-                                                        // Add set button
-                                                        TextButton(
-                                                            onClick = {
-                                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                val setsList = templateExercise.sets.toMutableList()
-                                                                val lastSet = setsList.lastOrNull()
-                                                                val newSet = TemplateSetState(
-                                                                    setType = lastSet?.setType ?: "WORKING",
-                                                                    targetRepsMin = lastSet?.targetRepsMin ?: 8,
-                                                                    targetRepsMax = lastSet?.targetRepsMax ?: 10,
-                                                                    targetWeight = lastSet?.targetWeight ?: 0f
-                                                                )
-                                                                setsList.add(newSet)
-                                                                selectedExercises[exIndex] = templateExercise.copy(sets = setsList)
-                                                            },
-                                                            modifier = Modifier.align(Alignment.End)
-                                                        ) {
-                                                            Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                                                            Spacer(modifier = Modifier.width(4.dp))
-                                                            Text("Add Set", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                                        }
                                                     }
                                                 }
                                             }
@@ -1230,29 +1578,37 @@ fun TemplateEditorDialog(
                                 }
                             }
 
-                            // Footer Buttons
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            // 4. FLOATING MACRO BOTTOM NAVIGATION BUTTONS (Automatically fades out in Focus Mode)
+                            AnimatedVisibility(
+                                visible = !isKeyboardVisible,
+                                enter = fadeIn() + expandVertically(),
+                                exit = fadeOut() + shrinkVertically()
                             ) {
-                                OutlinedButton(
-                                    onClick = { currentStep = 2 },
-                                    modifier = Modifier.weight(1f).height(48.dp),
-                                    shape = RoundedCornerShape(12.dp)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    Text("Add Exercises")
-                                }
+                                    OutlinedButton(
+                                        onClick = { currentStep = 2 },
+                                        modifier = Modifier.weight(1f).height(48.dp),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text("Add Exercises")
+                                    }
 
-                                Button(
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        currentStep = 4
-                                    },
-                                    enabled = routineName.isNotBlank() && selectedExercises.isNotEmpty() && selectedExercises.all { it.sets.isNotEmpty() },
-                                    modifier = Modifier.weight(1.5f).height(48.dp).testTag("routine_editor_review_button"),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Text("Review Routine ➔", fontWeight = FontWeight.Black)
+                                    Button(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            currentStep = 4
+                                        },
+                                        enabled = routineName.isNotBlank() && selectedExercises.isNotEmpty() && selectedExercises.all { it.sets.isNotEmpty() },
+                                        modifier = Modifier.weight(1.5f).height(48.dp).testTag("routine_editor_review_button"),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text("Review Routine ➔", fontWeight = FontWeight.Black)
+                                    }
                                 }
                             }
                         }
@@ -1416,7 +1772,6 @@ fun TemplateEditorDialog(
             }
         }
     }
-}
 
 @Composable
 fun ExerciseEditorCard(
@@ -2397,8 +2752,15 @@ fun TemplateSetEditorDialog(
 @Composable
 fun HighDensityHeader(
     title: String,
+    userProfile: UserProfile?,
     actions: @Composable (RowScope.() -> Unit)? = null
 ) {
+    val isNull = userProfile == null
+    val displayName = userProfile?.displayName
+    val email = userProfile?.email
+    val initials = userProfile?.initials ?: "U"
+    android.util.Log.d("HighDensityHeader", "Rendered header: title=$title, isNull=$isNull, displayName=$displayName, email=$email, initials=$initials")
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -2408,15 +2770,25 @@ fun HighDensityHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "HUMAN V1",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                ),
-                color = MaterialTheme.colorScheme.primary
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Image(
+                    painter = painterResource(id = com.example.R.drawable.human_launcher),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = "HUMAN V1",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    ),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = title,
@@ -2435,29 +2807,50 @@ fun HighDensityHeader(
             if (actions != null) {
                 actions()
             }
-            // Avatar circle with JD
+            // Dynamic Avatar circle
             Box(
                 modifier = Modifier
                     .size(40.dp)
+                    .clip(CircleShape)
                     .background(
-                        color = Color(0xFFEADDFF),
-                        shape = CircleShape
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.secondaryContainer,
+                                MaterialTheme.colorScheme.primaryContainer
+                            )
+                        )
                     )
                     .border(
                         width = 1.dp,
-                        color = Color(0xFFD0BCFF),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
                         shape = CircleShape
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "JD",
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    ),
-                    color = Color(0xFF21005D)
-                )
+                var imageLoaded by remember { mutableStateOf(false) }
+
+                if (!userProfile?.photoUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = userProfile?.photoUrl,
+                        contentDescription = "Profile Photo",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape),
+                        onSuccess = { imageLoaded = true },
+                        onError = { imageLoaded = false }
+                    )
+                }
+
+                if (userProfile?.photoUrl.isNullOrBlank() || !imageLoaded) {
+                    Text(
+                        text = userProfile?.initials ?: "U",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
         }
     }

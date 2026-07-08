@@ -238,6 +238,12 @@ class StrengthViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, "offline")
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val activeUserProfile: StateFlow<UserProfile?> = activeUserId.flatMapLatest { userId ->
+        android.util.Log.d("StrengthViewModel", "activeUserProfile flatMapLatest trigger: userId=$userId")
+        repository.getUserProfileFlow(userId)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     // Settings StateFlows
     val isMetric = MutableStateFlow(prefs.getBoolean("is_metric", true))
     val theme = MutableStateFlow(prefs.getString("theme", "system") ?: "system")
@@ -1433,12 +1439,13 @@ data class TemplateSetState(
     }
 
     // Backup & Restore
-    fun exportData(): String = kotlinx.coroutines.runBlocking {
+    suspend fun exportData(): String {
         val root = org.json.JSONObject()
         root.put("version", 3)
+        val uid = activeUserId.value
 
         val exercisesArray = org.json.JSONArray()
-        exercises.value.forEach {
+        repository.allExercises.first().forEach {
             val obj = org.json.JSONObject()
             obj.put("id", it.id)
             obj.put("name", it.name)
@@ -1449,7 +1456,7 @@ data class TemplateSetState(
         root.put("exercises", exercisesArray)
 
         val templatesArray = org.json.JSONArray()
-        templates.value.forEach { t ->
+        repository.getTemplatesForUser(uid).first().forEach { t ->
             val obj = org.json.JSONObject()
             obj.put("id", t.id)
             obj.put("name", t.name)
@@ -1475,10 +1482,10 @@ data class TemplateSetState(
                     tsObj.put("setType", ts.setType)
                     tsObj.put("targetRepsMin", ts.targetRepsMin ?: org.json.JSONObject.NULL)
                     tsObj.put("targetRepsMax", ts.targetRepsMax ?: org.json.JSONObject.NULL)
-                    tsObj.put("targetWeight", ts.targetWeight?.toDouble() ?: org.json.JSONObject.NULL)
+                    tsObj.put("targetWeight", ts.targetWeight ?: org.json.JSONObject.NULL)
                     tsObj.put("targetRpe", ts.targetRpe ?: org.json.JSONObject.NULL)
                     tsObj.put("targetDurationSeconds", ts.targetDurationSeconds ?: org.json.JSONObject.NULL)
-                    tsObj.put("targetDistance", ts.targetDistance?.toDouble() ?: org.json.JSONObject.NULL)
+                    tsObj.put("targetDistance", ts.targetDistance ?: org.json.JSONObject.NULL)
                     tsObj.put("tempo", ts.tempo ?: org.json.JSONObject.NULL)
                     tsObj.put("notes", ts.notes ?: org.json.JSONObject.NULL)
                     nestedSetsArray.put(tsObj)
@@ -1492,7 +1499,7 @@ data class TemplateSetState(
         root.put("workout_templates", templatesArray)
 
         val sessionsArray = org.json.JSONArray()
-        sessions.value.forEach {
+        repository.getSessionsForUser(uid).first().forEach {
             val obj = org.json.JSONObject()
             obj.put("id", it.id)
             obj.put("templateId", it.templateId)
@@ -1504,7 +1511,7 @@ data class TemplateSetState(
         root.put("workout_sessions", sessionsArray)
 
         val loggedSetsArray = org.json.JSONArray()
-        allLoggedSets.value.forEach {
+        repository.getLoggedSetsForUser(uid).first().forEach {
             val obj = org.json.JSONObject()
             obj.put("id", it.id)
             obj.put("sessionId", it.sessionId)
@@ -1514,23 +1521,22 @@ data class TemplateSetState(
             obj.put("weight", it.weight)
             obj.put("isCompleted", it.isCompleted)
             obj.put("rpe", it.rpe ?: org.json.JSONObject.NULL)
-            
             obj.put("actualDuration", it.actualDuration ?: org.json.JSONObject.NULL)
-            obj.put("actualDistance", it.actualDistance?.toDouble() ?: org.json.JSONObject.NULL)
+            obj.put("actualDistance", it.actualDistance ?: org.json.JSONObject.NULL)
             obj.put("setType", it.setType)
             obj.put("targetRepsMin", it.targetRepsMin ?: org.json.JSONObject.NULL)
             obj.put("targetRepsMax", it.targetRepsMax ?: org.json.JSONObject.NULL)
-            obj.put("targetWeight", it.targetWeight?.toDouble() ?: org.json.JSONObject.NULL)
+            obj.put("targetWeight", it.targetWeight ?: org.json.JSONObject.NULL)
             obj.put("targetRpe", it.targetRpe ?: org.json.JSONObject.NULL)
             obj.put("targetDuration", it.targetDuration ?: org.json.JSONObject.NULL)
-            obj.put("targetDistance", it.targetDistance?.toDouble() ?: org.json.JSONObject.NULL)
+            obj.put("targetDistance", it.targetDistance ?: org.json.JSONObject.NULL)
             obj.put("notes", it.notes ?: org.json.JSONObject.NULL)
             loggedSetsArray.put(obj)
         }
         root.put("logged_sets", loggedSetsArray)
 
         val weightsArray = org.json.JSONArray()
-        bodyWeights.value.forEach {
+        repository.getBodyWeightsForUser(uid).first().forEach {
             val obj = org.json.JSONObject()
             obj.put("id", it.id)
             obj.put("weight", it.weight)
@@ -1544,7 +1550,7 @@ data class TemplateSetState(
         root.put("body_weights", weightsArray)
 
         val tapeArray = org.json.JSONArray()
-        tapeMeasurements.value.forEach {
+        repository.getTapeMeasurementsForUser(uid).first().forEach {
             val obj = org.json.JSONObject()
             obj.put("id", it.id)
             obj.put("date", it.date)
@@ -1572,18 +1578,24 @@ data class TemplateSetState(
         settingsObj.put("timer_preferences", timerPreferences.value)
         root.put("settings", settingsObj)
 
-        root.toString(2)
+        return root.toString(2)
     }
 
-    fun exportDataToCsv(): String {
+    suspend fun exportDataToCsv(): String {
+        val uid = activeUserId.value
         val sb = java.lang.StringBuilder()
         sb.append("Date,Workout,Exercise,Category,Set Number,Set Type,Weight (kg),Reps,Completed,RPE,Target Weight,Target Reps,Target RPE,Duration (s),Distance,Notes\n")
         
-        val sessionsMap = sessions.value.associateBy { it.id }
-        val exercisesMap = exercises.value.associateBy { it.id }
+        val sessionsList = repository.getSessionsForUser(uid).first()
+        val sessionsMap = sessionsList.associateBy { it.id }
+        
+        val exercisesList = repository.allExercises.first()
+        val exercisesMap = exercisesList.associateBy { it.id }
+        
         val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
 
-        allLoggedSets.value.forEach { set ->
+        val allLoggedSetsList = repository.getLoggedSetsForUser(uid).first()
+        allLoggedSetsList.forEach { set ->
             val session = sessionsMap[set.sessionId]
             val exercise = exercisesMap[set.exerciseId]
             val dateStr = if (session != null) sdf.format(java.util.Date(session.startTime)) else "N/A"
@@ -1599,9 +1611,9 @@ data class TemplateSetState(
             val targetRpe = set.targetRpe?.toString() ?: ""
             val duration = set.actualDuration?.toString() ?: ""
             val distance = set.actualDistance?.toString() ?: ""
-            val notes = set.notes ?: ""
-
-            sb.append("\"$dateStr\",\"$workoutName\",\"$exerciseName\",\"$category\",${set.setNumber},\"${set.setType}\",$weight,${reps},\"$completed\",\"$rpe\",\"$targetWeight\",\"$targetReps\",\"$targetRpe\",\"$duration\",\"$distance\",\"$notes\"\n")
+            val notes = set.notes?.replace(",", ";") ?: ""
+            
+            sb.append("$dateStr,$workoutName,$exerciseName,$category,${set.setNumber},${set.setType},$weight,$reps,$completed,$rpe,$targetWeight,$targetReps,$targetRpe,$duration,$distance,$notes\n")
         }
         return sb.toString()
     }

@@ -10,6 +10,9 @@ interface StrengthDao {
     @Query("SELECT * FROM user_profile WHERE id = :id AND deletedAt IS NULL LIMIT 1")
     suspend fun getUserProfile(id: String): UserProfile?
 
+    @Query("SELECT * FROM user_profile WHERE id = :id AND deletedAt IS NULL LIMIT 1")
+    fun getUserProfileFlow(id: String): Flow<UserProfile?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUserProfile(profile: UserProfile)
 

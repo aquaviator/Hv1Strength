@@ -4,6 +4,9 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,15 +17,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import com.example.ui.viewmodel.StrengthViewModel
 import com.example.BuildConfig
-
 import com.example.data.AuthState
+import com.example.data.UserProfile
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +38,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
 
     // Collect settings states from view model
     val isMetric by viewModel.isMetric.collectAsState()
@@ -54,9 +60,14 @@ fun SettingsScreen(
     var showCsvDialog by remember { mutableStateOf(false) }
     var exportedCsvText by remember { mutableStateOf("") }
 
+    val userProfile by viewModel.activeUserProfile.collectAsState()
+
     Scaffold(
         topBar = {
-            HighDensityHeader(title = "Settings")
+            HighDensityHeader(
+                title = "Settings",
+                userProfile = userProfile
+            )
         }
     ) { innerPadding ->
         Column(
@@ -330,8 +341,10 @@ fun SettingsScreen(
                     title = "Export JSON Backup",
                     subtitle = "Generate offline backup JSON for security and migration",
                     onClick = {
-                        exportedJsonText = viewModel.exportData()
-                        showExportDialog = true
+                        coroutineScope.launch {
+                            exportedJsonText = viewModel.exportData()
+                            showExportDialog = true
+                        }
                     }
                 )
 
@@ -341,8 +354,10 @@ fun SettingsScreen(
                     title = "Export Workout History to CSV",
                     subtitle = "Create spreadsheets of sets, weights, reps, and RPE",
                     onClick = {
-                        exportedCsvText = viewModel.exportDataToCsv()
-                        showCsvDialog = true
+                        coroutineScope.launch {
+                            exportedCsvText = viewModel.exportDataToCsv()
+                            showCsvDialog = true
+                        }
                     }
                 )
 
@@ -360,10 +375,39 @@ fun SettingsScreen(
 
             // About Application Info Card
             SettingsSectionCard(title = "ABOUT HUMAN V1") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Image(
+                        painter = painterResource(id = com.example.R.drawable.human_logo),
+                        contentDescription = "Human V1 Strength Logo",
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "HUMAN V1 STRENGTH",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        ),
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Train. Track. Transform.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), thickness = 1.dp)
+
                 SettingsInfoRow(
                     icon = Icons.Default.Info,
                     title = "Application Version",
-                    value = "v1.1 (High Density Theme)"
+                    value = "v0.0.0.2 (Human Brand Release)"
                 )
                 SettingsInfoRow(
                     icon = Icons.Default.Settings,
@@ -391,6 +435,60 @@ fun SettingsScreen(
                         subtitle = "Inspect offline identity, command queue, and sync metadata",
                         onClick = onNavigateToSyncDebug
                     )
+
+                    var showClientIdDialog by remember { mutableStateOf(false) }
+                    val sharedPrefs = context.getSharedPreferences("strength_settings", Context.MODE_PRIVATE)
+                    val defaultClientId = remember(context) {
+                        val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+                        if (resId != 0) context.getString(resId) else "596361666131-4bdc26e3rrupaag2cn3tqcmlqdcdjqs8.apps.googleusercontent.com"
+                    }
+                    var currentClientId by remember { mutableStateOf(sharedPrefs.getString("google_web_client_id", defaultClientId) ?: defaultClientId) }
+
+                    SettingsClickableRow(
+                        icon = Icons.Default.VpnKey,
+                        title = "Google Web Client ID",
+                        subtitle = "Configure OAuth Client ID for live Google Sign-In",
+                        onClick = { showClientIdDialog = true }
+                    )
+
+                    if (showClientIdDialog) {
+                        var tempClientId by remember { mutableStateOf(currentClientId) }
+                        AlertDialog(
+                            onDismissRequest = { showClientIdDialog = false },
+                            title = { Text("Google Web Client ID") },
+                            text = {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Enter your OAuth Web Client ID from the Google/Firebase Console to test live authentication:", style = MaterialTheme.typography.bodyMedium)
+                                    OutlinedTextField(
+                                        value = tempClientId,
+                                        onValueChange = { tempClientId = it },
+                                        label = { Text("Web Client ID") },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Text(
+                                        text = "Package: com.aistudio.humanstrength.kfqjza\nEnsure this package and your debug SHA-1 signing fingerprint are correctly configured in your Console.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            confirmButton = {
+                                Button(onClick = {
+                                    sharedPrefs.edit().putString("google_web_client_id", tempClientId).apply()
+                                    currentClientId = tempClientId
+                                    showClientIdDialog = false
+                                    Toast.makeText(context, "Google Web Client ID Saved", Toast.LENGTH_SHORT).show()
+                                }) {
+                                    Text("Save")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showClientIdDialog = false }) {
+                                    Text("Cancel")
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }

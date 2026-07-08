@@ -7,6 +7,9 @@ import java.util.concurrent.TimeUnit
 object SyncScheduler {
 
     fun scheduleImmediate(context: Context) {
+        if (!com.example.StrengthApplication.isFirebaseConfigured) {
+            return
+        }
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -23,6 +26,9 @@ object SyncScheduler {
     }
 
     fun schedulePeriodic(context: Context) {
+        if (!com.example.StrengthApplication.isFirebaseConfigured) {
+            return
+        }
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .setRequiresBatteryNotLow(true)

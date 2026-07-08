@@ -34,6 +34,27 @@ data class UserProfile(
     override val originDeviceId: String = ""
 ) : VersionedEntity
 
+val UserProfile.initials: String
+    get() {
+        val name = displayName?.trim()
+        if (!name.isNullOrBlank()) {
+            val parts = name.split("\\s+".toRegex()).filter { it.isNotBlank() }
+            return if (parts.size >= 2) {
+                val first = parts.first().firstOrNull()?.toString() ?: ""
+                val last = parts.last().firstOrNull()?.toString() ?: ""
+                (first + last).uppercase()
+            } else {
+                (parts.firstOrNull()?.firstOrNull()?.toString() ?: "").uppercase()
+            }
+        }
+        val mail = email?.trim()
+        if (!mail.isNullOrBlank()) {
+            val prefix = mail.substringBefore("@")
+            return if (prefix.length >= 2) prefix.take(2).uppercase() else prefix.uppercase()
+        }
+        return "U"
+    }
+
 @Entity(tableName = "body_weight")
 data class BodyWeight(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,

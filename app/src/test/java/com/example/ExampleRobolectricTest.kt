@@ -66,6 +66,20 @@ class ExampleRobolectricTest {
         assertEquals("Human v1 - Strength", appName)
     }
 
+    @Test
+    fun testMainActivityLaunchesWithoutCrashing() {
+        try {
+            androidx.test.core.app.ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    assertNotNull(activity)
+                }
+            }
+        } catch (e: Throwable) {
+            e.printStackTrace()
+            throw e
+        }
+    }
+
     // ==========================================
     // SYNC FOUNDATION TESTS
     // ==========================================

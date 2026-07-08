@@ -547,83 +547,102 @@ abstract class StrengthDatabase : RoomDatabase() {
 
         val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // 1. Add originDeviceId column to all tables
-                db.execSQL("ALTER TABLE `user_profile` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `body_weight` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `tape_measurement` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `exercise` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `workout_template` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `workout_template_exercise` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `workout_template_set` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `workout_session` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `logged_set` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `command_queue` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
+                android.util.Log.i("StrengthDatabase", "Executing MIGRATION_5_6...")
+                try {
+                    // 1. Add originDeviceId column to all tables
+                    db.execSQL("ALTER TABLE `user_profile` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `body_weight` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `tape_measurement` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `exercise` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `workout_template` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `workout_template_exercise` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `workout_template_set` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `workout_session` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `logged_set` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `command_queue` ADD COLUMN `originDeviceId` TEXT NOT NULL DEFAULT ''")
 
-                // 2. Add global reference columns
-                db.execSQL("ALTER TABLE `workout_template_exercise` ADD COLUMN `templateGlobalId` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `workout_template_set` ADD COLUMN `templateExerciseGlobalId` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `workout_session` ADD COLUMN `templateGlobalId` TEXT")
-                db.execSQL("ALTER TABLE `logged_set` ADD COLUMN `sessionGlobalId` TEXT NOT NULL DEFAULT ''")
+                    // 2. Add global reference columns
+                    db.execSQL("ALTER TABLE `workout_template_exercise` ADD COLUMN `templateGlobalId` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `workout_template_set` ADD COLUMN `templateExerciseGlobalId` TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE `workout_session` ADD COLUMN `templateGlobalId` TEXT")
+                    db.execSQL("ALTER TABLE `logged_set` ADD COLUMN `sessionGlobalId` TEXT NOT NULL DEFAULT ''")
 
-                // 3. Populate originDeviceId for all existing records
-                val deviceId = DeviceIdGenerator.getOrGenerateDeviceId()
-                db.execSQL("UPDATE `user_profile` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
-                db.execSQL("UPDATE `body_weight` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
-                db.execSQL("UPDATE `tape_measurement` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
-                db.execSQL("UPDATE `exercise` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
-                db.execSQL("UPDATE `workout_template` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
-                db.execSQL("UPDATE `workout_template_exercise` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
-                db.execSQL("UPDATE `workout_template_set` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
-                db.execSQL("UPDATE `workout_session` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
-                db.execSQL("UPDATE `logged_set` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
-                db.execSQL("UPDATE `command_queue` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
+                    // 3. Populate originDeviceId for all existing records
+                    val deviceId = DeviceIdGenerator.getOrGenerateDeviceId()
+                    db.execSQL("UPDATE `user_profile` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
+                    db.execSQL("UPDATE `body_weight` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
+                    db.execSQL("UPDATE `tape_measurement` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
+                    db.execSQL("UPDATE `exercise` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
+                    db.execSQL("UPDATE `workout_template` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
+                    db.execSQL("UPDATE `workout_template_exercise` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
+                    db.execSQL("UPDATE `workout_template_set` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
+                    db.execSQL("UPDATE `workout_session` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
+                    db.execSQL("UPDATE `logged_set` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
+                    db.execSQL("UPDATE `command_queue` SET `originDeviceId` = '$deviceId' WHERE `originDeviceId` = ''")
 
-                // 4. Populate child-parent global references
-                db.execSQL(
-                    "UPDATE `workout_template_exercise` " +
-                    "SET `templateGlobalId` = COALESCE((SELECT `globalId` FROM `workout_template` WHERE `workout_template`.`id` = `workout_template_exercise`.`templateId`), '') " +
-                    "WHERE `templateGlobalId` = ''"
-                )
-                db.execSQL(
-                    "UPDATE `workout_template_set` " +
-                    "SET `templateExerciseGlobalId` = COALESCE((SELECT `globalId` FROM `workout_template_exercise` WHERE `workout_template_exercise`.`id` = `workout_template_set`.`templateExerciseId`), '') " +
-                    "WHERE `templateExerciseGlobalId` = ''"
-                )
-                db.execSQL(
-                    "UPDATE `workout_session` " +
-                    "SET `templateGlobalId` = (SELECT `globalId` FROM `workout_template` WHERE `workout_template`.`id` = `workout_session`.`templateId`) " +
-                    "WHERE `templateId` IS NOT NULL AND `templateGlobalId` IS NULL"
-                )
-                db.execSQL(
-                    "UPDATE `logged_set` " +
-                    "SET `sessionGlobalId` = COALESCE((SELECT `globalId` FROM `workout_session` WHERE `workout_session`.`id` = `logged_set`.`sessionId`), '') " +
-                    "WHERE `sessionGlobalId` = ''"
-                )
+                    // 4. Populate child-parent global references
+                    db.execSQL(
+                        "UPDATE `workout_template_exercise` " +
+                        "SET `templateGlobalId` = COALESCE((SELECT `globalId` FROM `workout_template` WHERE `workout_template`.`id` = `workout_template_exercise`.`templateId`), '') " +
+                        "WHERE `templateGlobalId` = ''"
+                    )
+                    db.execSQL(
+                        "UPDATE `workout_template_set` " +
+                        "SET `templateExerciseGlobalId` = COALESCE((SELECT `globalId` FROM `workout_template_exercise` WHERE `workout_template_exercise`.`id` = `workout_template_set`.`templateExerciseId`), '') " +
+                        "WHERE `templateExerciseGlobalId` = ''"
+                    )
+                    db.execSQL(
+                        "UPDATE `workout_session` " +
+                        "SET `templateGlobalId` = (SELECT `globalId` FROM `workout_template` WHERE `workout_template`.`id` = `workout_session`.`templateId`) " +
+                        "WHERE `templateId` IS NOT NULL AND `templateGlobalId` IS NULL"
+                    )
+                    db.execSQL(
+                        "UPDATE `logged_set` " +
+                        "SET `sessionGlobalId` = COALESCE((SELECT `globalId` FROM `workout_session` WHERE `workout_session`.`id` = `logged_set`.`sessionId`), '') " +
+                        "WHERE `sessionGlobalId` = ''"
+                    )
+                    android.util.Log.i("StrengthDatabase", "MIGRATION_5_6 executed successfully.")
+                } catch (e: Throwable) {
+                    android.util.Log.e("StrengthDatabase", "FATAL error during MIGRATION_5_6", e)
+                    throw e
+                }
             }
         }
 
         val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE `command_queue` ADD COLUMN `nextRetryAt` INTEGER")
+                android.util.Log.i("StrengthDatabase", "Executing MIGRATION_6_7...")
+                try {
+                    db.execSQL("ALTER TABLE `command_queue` ADD COLUMN `nextRetryAt` INTEGER")
+                    android.util.Log.i("StrengthDatabase", "MIGRATION_6_7 executed successfully.")
+                } catch (e: Throwable) {
+                    android.util.Log.e("StrengthDatabase", "FATAL error during MIGRATION_6_7", e)
+                    throw e
+                }
             }
         }
 
         fun getDatabase(context: Context, scope: CoroutineScope): StrengthDatabase {
             val appCtx = context.applicationContext
+            android.util.Log.i("StrengthDatabase", "getDatabase called. Setting appContext references.")
             HumanUserIdGenerator.appContext = appCtx
             DeviceIdGenerator.appContext = appCtx
             
             return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    appCtx,
-                    StrengthDatabase::class.java,
-                    "strength_database"
-                )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
-                    .addCallback(StrengthDatabaseCallback(scope))
-                    .build()
-                INSTANCE = instance
-                instance
+                INSTANCE ?: run {
+                    android.util.Log.i("StrengthDatabase", "Building database 'strength_database'...")
+                    val instance = Room.databaseBuilder(
+                        appCtx,
+                        StrengthDatabase::class.java,
+                        "strength_database"
+                    )
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                        .addCallback(StrengthDatabaseCallback(scope))
+                        .build()
+                    INSTANCE = instance
+                    android.util.Log.i("StrengthDatabase", "Database building completed.")
+                    instance
+                }
             }
         }
     }
@@ -633,9 +652,17 @@ abstract class StrengthDatabase : RoomDatabase() {
     ) : RoomDatabase.Callback() {
         override fun onCreate(db: SupportSQLiteDatabase) {
             super.onCreate(db)
+            android.util.Log.i("StrengthDatabase", "onCreate callback triggered.")
             INSTANCE?.let { database ->
-                scope.launch(Dispatchers.IO) {
-                    populateDatabase(database.strengthDao())
+                // Use a non-cancelable Application-level CoroutineScope to prevent cancellation if the caller's scope (e.g. activity lifecycleScope) gets destroyed.
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO).launch {
+                    try {
+                        android.util.Log.i("StrengthDatabase", "Populating database with default data...")
+                        populateDatabase(database.strengthDao())
+                        android.util.Log.i("StrengthDatabase", "Database population completed successfully.")
+                    } catch (e: Throwable) {
+                        android.util.Log.e("StrengthDatabase", "Error populating database with default data on database creation", e)
+                    }
                 }
             }
         }

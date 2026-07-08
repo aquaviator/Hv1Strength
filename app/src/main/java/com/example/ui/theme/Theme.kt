@@ -12,45 +12,44 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFFD0BCFF),
-    secondary = Color(0xFFCCC2DC),
-    tertiary = Color(0xFFEFB8C8),
-    background = Color(0xFF141218),
-    surface = Color(0xFF1D1B20),
-    surfaceVariant = Color(0xFF49454F),
-    onPrimary = Color(0xFF381E72),
-    onSecondary = Color(0xFF332D41),
-    onTertiary = Color(0xFF492532),
-    onBackground = Color(0xFFE6E1E5),
-    onSurface = Color(0xFFE6E1E5),
-    onSurfaceVariant = Color(0xFFCAC4D0),
-    outline = Color(0xFF938F99),
+    primary = HumanElectricBlue,
+    onPrimary = Color.White,
+    secondary = HumanElectricBlueLight,
+    onSecondary = HumanElectricBlueDark,
+    tertiary = HumanElectricBlueDark,
+    onTertiary = Color.White,
+    background = HumanDarkBackground,
+    onBackground = HumanDarkOnBackground,
+    surface = HumanDarkSurface,
+    onSurface = HumanDarkOnSurface,
+    surfaceVariant = HumanDarkSurfaceVariant,
+    onSurfaceVariant = HumanDarkOnSurfaceVariant,
+    outline = HumanDarkOutline,
     error = AlertRed,
     onError = Color.White
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = HighDensityPrimary,
-    secondary = HighDensitySecondary,
-    tertiary = HighDensityTertiary,
-    background = HighDensityBackground,
-    surface = Color.White,
-    surfaceVariant = HighDensitySurface,
+    primary = HumanElectricBlue,
     onPrimary = Color.White,
-    onSecondary = HighDensityPurpleDark,
-    onTertiary = HighDensityDarkText,
-    onBackground = HighDensityText,
-    onSurface = HighDensityText,
-    onSurfaceVariant = HighDensityMutedText,
-    outline = HighDensityBorder,
+    secondary = HumanElectricBlueLight,
+    onSecondary = HumanElectricBlueDark,
+    tertiary = HumanElectricBlueLight,
+    onTertiary = HumanElectricBlueDark,
+    background = HumanLightBackground,
+    onBackground = HumanLightOnBackground,
+    surface = HumanLightSurface,
+    onSurface = HumanLightOnSurface,
+    surfaceVariant = HumanLightSurfaceVariant,
+    onSurfaceVariant = HumanLightOnSurfaceVariant,
+    outline = HumanLightOutline,
     error = AlertRed,
     onError = Color.White
 )
 
 @Composable
 fun MyApplicationTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Keep dynamicColor option, but default to false to showcase our high-fidelity athletic branding
+    darkTheme: Boolean = true,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {

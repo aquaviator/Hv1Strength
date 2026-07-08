@@ -35,6 +35,8 @@ class StrengthRepository(private val dao: StrengthDao, private val context: andr
     // User Profile
     suspend fun getUserProfile(id: String): UserProfile? = dao.getUserProfile(id)
 
+    fun getUserProfileFlow(id: String): Flow<UserProfile?> = dao.getUserProfileFlow(id)
+
     suspend fun insertUserProfile(profile: UserProfile) {
         val now = System.currentTimeMillis()
         val hUserId = HumanUserIdGenerator.mapUserIdToHumanUserId(profile.id)

@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,6 +28,8 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.viewmodel.StrengthViewModel
 import com.example.data.AuthState
 import com.example.data.UserProfile
+import com.example.data.initials
+import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +48,9 @@ fun ProfileScreen(
     var showLinkDialog by remember { mutableStateOf(false) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
 
+    val userProfile by viewModel.activeUserProfile.collectAsState()
+    val profile = userProfile
+
     // Navigation back if session is cleared
     LaunchedEffect(authState) {
         if (authState is AuthState.Initial) {
@@ -55,20 +61,20 @@ fun ProfileScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Account Profile", fontWeight = FontWeight.Bold) },
+                title = { Text("Account Profile", fontWeight = FontWeight.Black) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("profile_back_button")) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    containerColor = Color.Black,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White
                 )
             )
         }
     ) { innerPadding ->
-        val userProfile = (authState as? AuthState.Authenticated)?.profile
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -84,51 +90,55 @@ fun ProfileScreen(
             Box(
                 modifier = Modifier
                     .size(110.dp)
+                    .clip(CircleShape)
                     .background(
                         brush = Brush.radialGradient(
                             colors = listOf(
                                 MaterialTheme.colorScheme.secondaryContainer,
                                 MaterialTheme.colorScheme.primaryContainer
                             )
-                        ),
-                        shape = CircleShape
+                        )
                     )
                     .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                val initials = when {
-                    userProfile != null -> {
-                        val parts = userProfile.displayName?.split(" ") ?: emptyList()
-                        if (parts.size >= 2) {
-                            "${parts[0].firstOrNull() ?: ""}${parts[1].firstOrNull() ?: ""}"
-                        } else {
-                            userProfile.displayName?.take(2) ?: "U"
-                        }
-                    }
-                    else -> "O"
-                }.uppercase()
+                var imageLoaded by remember { mutableStateOf(false) }
 
-                Text(
-                    text = initials,
-                    style = MaterialTheme.typography.headlineLarge.copy(
-                        fontWeight = FontWeight.Black,
-                        fontSize = 36.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                if (!profile?.photoUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = profile?.photoUrl,
+                        contentDescription = "Profile Photo",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape),
+                        onSuccess = { imageLoaded = true },
+                        onError = { imageLoaded = false }
+                    )
+                }
+
+                if (profile?.photoUrl.isNullOrBlank() || !imageLoaded) {
+                    Text(
+                        text = profile?.initials ?: "U",
+                        style = MaterialTheme.typography.headlineLarge.copy(
+                            fontWeight = FontWeight.Black,
+                            fontSize = 36.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
 
             // User Identity Header
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = userProfile?.displayName ?: "Offline User",
+                    text = profile?.displayName ?: "Offline User",
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.testTag("profile_display_name")
                 )
                 Text(
-                    text = userProfile?.email ?: "Offline-only Mode (No cloud backup)",
+                    text = profile?.email ?: "Offline-only Mode (No cloud backup)",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -158,31 +168,31 @@ fun ProfileScreen(
                     ProfileInfoRow(
                         icon = Icons.Default.VerifiedUser,
                         label = "Provider",
-                        value = if (userProfile?.authProvider == "google") "Google Authenticated" else "Local SQLite"
+                        value = if (profile?.authProvider == "google") "Google Authenticated" else "Local SQLite"
                     )
 
                     ProfileInfoRow(
                         icon = Icons.Default.CalendarToday,
                         label = "Joined At",
-                        value = if (userProfile != null) {
+                        value = if (profile != null) {
                             val sdf = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
-                            sdf.format(java.util.Date(userProfile.createdAt))
+                            sdf.format(java.util.Date(profile.createdAt))
                         } else "N/A"
                     )
 
                     ProfileInfoRow(
                         icon = Icons.Default.AccessTime,
                         label = "Last Sync / Session",
-                        value = if (userProfile != null) {
+                        value = if (profile != null) {
                             val sdf = java.text.SimpleDateFormat("HH:mm, MMM dd", java.util.Locale.getDefault())
-                            sdf.format(java.util.Date(userProfile.lastLoginAt))
+                            sdf.format(java.util.Date(profile.lastLoginAt))
                         } else "Continuous Local"
                     )
                 }
             }
 
             // Google Actions Section: Data Linking Card
-            if (userProfile?.authProvider == "google") {
+            if (profile?.authProvider == "google") {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
@@ -223,7 +233,7 @@ fun ProfileScreen(
             }
 
             // Edit Profile Button (Extra visual richness & custom metrics)
-            if (userProfile != null) {
+            if (profile != null) {
                 OutlinedButton(
                     onClick = { showEditProfileDialog = true },
                     shape = RoundedCornerShape(16.dp),
@@ -310,13 +320,12 @@ fun ProfileScreen(
 
     // Link Local Offline Data Dialog
     if (showLinkDialog) {
-        val userProfile = (authState as? AuthState.Authenticated)?.profile
         AlertDialog(
             onDismissRequest = { showLinkDialog = false },
             title = { Text("Merge & Link Offline Records") },
             text = {
                 Text(
-                    text = "This will find any workout templates, sessions, body weights, and tape measurements labeled as 'offline' or unassigned on this device, and associate them with your active profile (${userProfile?.displayName}). Are you sure you want to proceed?",
+                    text = "This will find any workout templates, sessions, body weights, and tape measurements labeled as 'offline' or unassigned on this device, and associate them with your active profile (${profile?.displayName}). Are you sure you want to proceed?",
                     style = MaterialTheme.typography.bodyMedium
                 )
             },
@@ -325,8 +334,8 @@ fun ProfileScreen(
                     modifier = Modifier.testTag("confirm_link_button"),
                     onClick = {
                         coroutineScope.launch {
-                            if (userProfile != null) {
-                                viewModel.authRepository.linkOfflineDataToUser(userProfile.id)
+                            if (profile != null) {
+                                viewModel.authRepository.linkOfflineDataToUser(profile.id)
                                 Toast.makeText(context, "Offline data successfully merged!", Toast.LENGTH_LONG).show()
                             }
                             showLinkDialog = false
@@ -346,11 +355,10 @@ fun ProfileScreen(
 
     // Edit Profile Metadata Dialog
     if (showEditProfileDialog) {
-        val userProfile = (authState as? AuthState.Authenticated)?.profile
-        if (userProfile != null) {
-            var dob by remember { mutableStateOf(userProfile.dateOfBirth ?: "") }
-            var sex by remember { mutableStateOf(userProfile.sex ?: "unspecified") }
-            var exp by remember { mutableStateOf(userProfile.trainingExperience ?: "beginner") }
+        if (profile != null) {
+            var dob by remember { mutableStateOf(profile.dateOfBirth ?: "") }
+            var sex by remember { mutableStateOf(profile.sex ?: "unspecified") }
+            var exp by remember { mutableStateOf(profile.trainingExperience ?: "beginner") }
 
             AlertDialog(
                 onDismissRequest = { showEditProfileDialog = false },

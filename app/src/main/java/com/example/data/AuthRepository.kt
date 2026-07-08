@@ -41,10 +41,12 @@ class AuthRepository(
     private var firebaseAuth: FirebaseAuth? = null
 
     init {
+        Log.i(TAG, "Initializing AuthRepository. isFirebaseConfigured=${com.example.StrengthApplication.isFirebaseConfigured}")
         if (com.example.StrengthApplication.isFirebaseConfigured) {
             try {
-                // Attempt to get FirebaseAuth instance if Firebase is configured
+                Log.d(TAG, "Attempting to get FirebaseAuth instance...")
                 firebaseAuth = FirebaseAuth.getInstance()
+                Log.i(TAG, "FirebaseAuth instance obtained successfully.")
             } catch (e: Exception) {
                 Log.w(TAG, "Firebase Auth not initialized. Falling back to offline-first Google profile management.", e)
             }
@@ -52,7 +54,27 @@ class AuthRepository(
             Log.w(TAG, "Firebase is not configured. Operating in offline fallback mode.")
         }
         
-        // Restore session on app startup
+        Log.i(TAG, "Launching legacy profile clean-up coroutine...")
+        // Clean legacy profile placeholder names from Room
+        scope.launch(Dispatchers.IO) {
+            try {
+                Log.d(TAG, "Fetching offline profile from Room...")
+                val offlineProfile = strengthRepository.getUserProfile("offline")
+                Log.d(TAG, "Offline profile fetched: $offlineProfile")
+                if (offlineProfile != null && (offlineProfile.displayName == "Jane Doe" || offlineProfile.displayName == "John Doe")) {
+                    val updatedOfflineProfile = offlineProfile.copy(
+                        displayName = "Offline User",
+                        updatedAt = System.currentTimeMillis()
+                    )
+                    strengthRepository.insertUserProfile(updatedOfflineProfile)
+                    Log.i(TAG, "Successfully repaired legacy offline user profile name from ${offlineProfile.displayName} to Offline User.")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error cleaning legacy profiles", e)
+            }
+        }
+        
+        Log.i(TAG, "Restoring session on app startup...")
         restoreSession()
     }
 

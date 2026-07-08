@@ -13,6 +13,7 @@ object DeviceIdGenerator {
     fun getOrGenerateDeviceId(context: Context? = null): String {
         val targetContext = context?.applicationContext ?: appContext
         if (targetContext == null) {
+            android.util.Log.w("DeviceIdGenerator", "getOrGenerateDeviceId: context was null! Returning fallback 'device_fallback'")
             return "device_fallback"
         }
         val prefs = targetContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -22,6 +23,9 @@ object DeviceIdGenerator {
             val randomPart = UUID.randomUUID().toString().replace("-", "").lowercase().take(12)
             id = "device_$randomPart"
             prefs.edit().putString(KEY_DEVICE_ID, id).apply()
+            android.util.Log.i("DeviceIdGenerator", "Generated and saved new stable device ID: $id")
+        } else {
+            android.util.Log.d("DeviceIdGenerator", "Loaded existing device ID: $id")
         }
         return id
     }
