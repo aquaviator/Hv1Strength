@@ -18,3 +18,4 @@ local.properties
 .env
 debug.keystore
 my-upload-key.jks
+upload_certificate.pem
