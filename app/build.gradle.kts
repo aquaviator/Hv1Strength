@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.humanstrength.kfqjza"
     minSdk = 24
     targetSdk = 36
-    versionCode = 20
-    versionName = "20.0"
+    versionCode = 24
+    versionName = "24.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
