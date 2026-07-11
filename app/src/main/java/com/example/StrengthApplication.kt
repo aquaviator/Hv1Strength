@@ -30,9 +30,23 @@ class StrengthApplication : Application(), Configuration.Provider {
     }
 
     private fun initializeFirebase() {
-        // Disable Firebase entirely to prevent ProviderInstaller/Phenotype API crash on the streaming emulator.
-        isFirebaseConfigured = false
-        Log.w(TAG, "Firebase initialization disabled to prevent emulator crashes. Running in offline fallback mode.")
+        try {
+            val firebaseApp = FirebaseApp.initializeApp(this)
+            isFirebaseConfigured = firebaseApp != null
+
+            if (isFirebaseConfigured) {
+                Log.i(TAG, "Firebase initialized for project ${firebaseApp?.options?.projectId}")
+
+                // App Check is intentionally best-effort. Authentication and the offline-first
+                // Room experience must continue even if a provider is unavailable on a test device.
+                initializeAppCheck(BuildConfig.DEBUG)
+            } else {
+                Log.w(TAG, "Firebase configuration was not found. Running in offline mode.")
+            }
+        } catch (e: Exception) {
+            isFirebaseConfigured = false
+            Log.e(TAG, "Firebase initialization failed. Running in offline mode.", e)
+        }
     }
 
     private fun initializeAppCheck(isDebug: Boolean) {

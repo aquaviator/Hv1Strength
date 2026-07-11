@@ -2775,7 +2775,7 @@ fun HighDensityHeader(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Image(
-                    painter = painterResource(id = com.example.R.drawable.human_launcher),
+                    painter = painterResource(id = com.example.R.drawable.human_logo),
                     contentDescription = null,
                     modifier = Modifier.size(16.dp)
                 )
