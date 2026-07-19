@@ -23,9 +23,10 @@ import kotlinx.coroutines.launch
         WorkoutTemplateExercise::class,
         WorkoutTemplateSet::class,
         CommandQueueEntity::class,
-        UserPreferences::class
+        UserPreferences::class,
+        ActiveWorkoutBackup::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class StrengthDatabase : RoomDatabase() {
@@ -660,6 +661,30 @@ abstract class StrengthDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                android.util.Log.i("StrengthDatabase", "Executing MIGRATION_8_9...")
+                try {
+                    db.execSQL("""
+                        CREATE TABLE IF NOT EXISTS `active_workout_backup` (
+                            `id` INTEGER NOT NULL,
+                            `templateId` INTEGER,
+                            `templateName` TEXT NOT NULL,
+                            `startTime` INTEGER NOT NULL,
+                            `exercisesJson` TEXT NOT NULL,
+                            `setsJson` TEXT NOT NULL,
+                            `exerciseMetadataJson` TEXT NOT NULL,
+                            PRIMARY KEY(`id`)
+                        )
+                    """.trimIndent())
+                    android.util.Log.i("StrengthDatabase", "MIGRATION_8_9 executed successfully.")
+                } catch (e: Throwable) {
+                    android.util.Log.e("StrengthDatabase", "FATAL error during MIGRATION_8_9", e)
+                    throw e
+                }
+            }
+        }
+
         fun getDatabase(context: Context, scope: CoroutineScope): StrengthDatabase {
             val appCtx = context.applicationContext
             android.util.Log.i("StrengthDatabase", "getDatabase called. Setting appContext references.")
@@ -674,7 +699,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         StrengthDatabase::class.java,
                         "strength_database"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                         .addCallback(StrengthDatabaseCallback(scope))
                         .build()
                     INSTANCE = instance

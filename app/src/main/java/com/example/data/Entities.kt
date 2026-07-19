@@ -296,3 +296,15 @@ data class UserPreferences(
     val autoScroll: Boolean = true,
     val timerPreferences: String = "standard"
 )
+
+@Entity(tableName = "active_workout_backup")
+data class ActiveWorkoutBackup(
+    @PrimaryKey val id: Int = 1, // Singleton row id
+    val templateId: Int? = null,
+    val templateName: String,
+    val startTime: Long,
+    val exercisesJson: String,
+    val setsJson: String,
+    val exerciseMetadataJson: String
+)
+

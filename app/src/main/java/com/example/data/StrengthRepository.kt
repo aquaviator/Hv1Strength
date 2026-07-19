@@ -797,4 +797,20 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
     suspend fun markTemplateSetSynced(id: Int, timestamp: Long) = dao.markTemplateSetSynced(id, timestamp)
     suspend fun markSessionSynced(id: Int, timestamp: Long) = dao.markSessionSynced(id, timestamp)
     suspend fun markLoggedSetSynced(id: Int, timestamp: Long) = dao.markLoggedSetSynced(id, timestamp)
+
+    // ==========================================
+    // ACTIVE WORKOUT BACKUP SUPPORT
+    // ==========================================
+
+    suspend fun saveActiveWorkoutBackup(backup: ActiveWorkoutBackup) {
+        dao.insertActiveWorkoutBackup(backup)
+    }
+
+    suspend fun getActiveWorkoutBackup(): ActiveWorkoutBackup? {
+        return dao.getActiveWorkoutBackup()
+    }
+
+    suspend fun clearActiveWorkoutBackup() {
+        dao.clearActiveWorkoutBackup()
+    }
 }

@@ -420,4 +420,17 @@ interface StrengthDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUserPreferences(preferences: UserPreferences)
+
+    // ==========================================
+    // ACTIVE WORKOUT BACKUP SUPPORT
+    // ==========================================
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertActiveWorkoutBackup(backup: ActiveWorkoutBackup)
+
+    @Query("SELECT * FROM active_workout_backup WHERE id = 1 LIMIT 1")
+    suspend fun getActiveWorkoutBackup(): ActiveWorkoutBackup?
+
+    @Query("DELETE FROM active_workout_backup WHERE id = 1")
+    suspend fun clearActiveWorkoutBackup()
 }

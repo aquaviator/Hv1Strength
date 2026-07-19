@@ -526,7 +526,15 @@ class StrengthViewModel(
 
         sessionsList.map { session ->
             val sessionSets = setsBySession[session.id] ?: emptyList()
-            val volume = sessionSets.filter { it.isCompleted }.sumOf { (it.weight * it.reps).toDouble() }.toFloat()
+            val volume = com.example.domain.VolumeCalculator.calculateTotalVolume(
+                sessionSets.map { set ->
+                    object : com.example.domain.SetVolumeData {
+                        override val weight: Float = set.weight
+                        override val reps: Int = set.reps
+                        override val isCompleted: Boolean = set.isCompleted
+                    }
+                }
+            )
             val durationMs = session.endTime - session.startTime
             val durationMin = max(1L, durationMs / 60000)
             val exerciseNames = sessionSets.mapNotNull { exercisesMap[it.exerciseId]?.name }.distinct()
@@ -739,7 +747,15 @@ class StrengthViewModel(
             val session = sessionsList.find { it.id == sessionId } ?: return@combine null
             val sessionSets = setsList.filter { it.sessionId == sessionId }
             val exercisesMap = exercisesList.associateBy { it.id }
-            val volume = sessionSets.filter { it.isCompleted }.sumOf { (it.weight * it.reps).toDouble() }.toFloat()
+            val volume = com.example.domain.VolumeCalculator.calculateTotalVolume(
+                sessionSets.map { set ->
+                    object : com.example.domain.SetVolumeData {
+                        override val weight: Float = set.weight
+                        override val reps: Int = set.reps
+                        override val isCompleted: Boolean = set.isCompleted
+                    }
+                }
+            )
             val durationMs = session.endTime - session.startTime
             val durationMin = kotlin.math.max(1L, durationMs / 60000)
             val exerciseNames = sessionSets.mapNotNull { exercisesMap[it.exerciseId]?.name }.distinct()
