@@ -46,6 +46,7 @@ import com.example.data.initials
 import coil.compose.AsyncImage
 import androidx.compose.ui.res.painterResource
 import com.example.ui.viewmodel.StrengthViewModel
+import com.example.ui.components.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -281,36 +282,32 @@ fun WorkoutScreen(
             // Routines List
             if (templates.isEmpty()) {
                 item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FitnessCenter,
-                            contentDescription = "No templates",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            "No Routines Built",
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            "Create one to follow your specific workout plans.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
+                    EmptyRoutineState(
+                        onCreateRoutineClick = {
+                            templateToEdit = null
+                            showTemplateEditor = true
+                        }
+                    )
                 }
             } else {
                 items(templates) { template ->
+                    val routineExerciseIds = remember(template.exerciseIdsJson) {
+                        viewModel.deserializeExerciseIds(template.exerciseIdsJson)
+                    }
+
+                    val routineExercises = remember(routineExerciseIds, exercises) {
+                        routineExerciseIds.mapNotNull { id -> exercises.find { it.id == id } }
+                    }
+
+                    var templateDetails by remember(template.id) { mutableStateOf<List<TemplateExerciseState>>(emptyList()) }
+                    LaunchedEffect(template.id) {
+                        templateDetails = viewModel.getTemplateDetails(template.id)
+                    }
+
                     RoutineCard(
                         template = template,
-                        exercises = exercises,
+                        routineExercises = routineExercises,
+                        templateDetails = templateDetails,
                         onStart = { viewModel.startWorkout(template) },
                         onEdit = {
                             templateToEdit = template
@@ -320,7 +317,6 @@ fun WorkoutScreen(
                             viewModel.duplicateTemplate(template)
                         },
                         onDelete = { viewModel.deleteTemplate(template.id) },
-                        viewModel = viewModel,
                         onExerciseClick = { exercise ->
                             selectedExerciseForHistory = exercise
                         }
@@ -484,173 +480,7 @@ fun WorkoutScreen(
 }
 }
 
-@Composable
-fun RoutineCard(
-    template: WorkoutTemplate,
-    exercises: List<Exercise>,
-    onStart: () -> Unit,
-    onEdit: () -> Unit,
-    onDuplicate: () -> Unit,
-    onDelete: () -> Unit,
-    viewModel: StrengthViewModel,
-    onExerciseClick: (Exercise) -> Unit
-) {
-    val routineExerciseIds = remember(template.exerciseIdsJson) {
-        viewModel.deserializeExerciseIds(template.exerciseIdsJson)
-    }
 
-    val routineExercises = remember(routineExerciseIds, exercises) {
-        routineExerciseIds.mapNotNull { id -> exercises.find { it.id == id } }
-    }
-
-    var templateDetails by remember(template.id) { mutableStateOf<List<TemplateExerciseState>>(emptyList()) }
-    LaunchedEffect(template.id) {
-        templateDetails = viewModel.getTemplateDetails(template.id)
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        template.name,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        "${routineExercises.size} exercises",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onEdit) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit Routine",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    IconButton(onClick = onDuplicate) {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Duplicate Routine",
-                            tint = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "Delete Routine",
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-            }
-
-            // High-Contrast Dominant Exercise List
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                routineExercises.forEach { exercise ->
-                    val templateEx = templateDetails.find { it.exerciseId == exercise.id }
-                    val setsCount = templateEx?.sets?.size ?: 1
-
-                    val targetSummary = templateEx?.sets?.firstOrNull()?.let { s ->
-                        val rStr = if (s.targetRepsMin != null && s.targetRepsMax != null) "${s.targetRepsMin}-${s.targetRepsMax}" else s.targetRepsMin ?: s.targetRepsMax ?: "?"
-                        val wStr = if (s.targetWeight != null) " @ ${s.targetWeight.toString().removeSuffix(".0")} kg" else ""
-                        "${rStr}${wStr}"
-                    } ?: ""
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { onExerciseClick(exercise) }
-                            .padding(vertical = 6.dp, horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(26.dp)
-                                    .background(MaterialTheme.colorScheme.primaryContainer, shape = CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "$setsCount",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black),
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Text(
-                                text = exercise.name,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            if (targetSummary.isNotBlank()) {
-                                Text(
-                                    text = targetSummary,
-                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowRight,
-                                contentDescription = "View Details",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            Button(
-                onClick = onStart,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .testTag("start_routine_${template.id}"),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "Start Routine")
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Start Session", fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
 
 data class ExerciseIntention(
     val goal: String = "Hypertrophy",

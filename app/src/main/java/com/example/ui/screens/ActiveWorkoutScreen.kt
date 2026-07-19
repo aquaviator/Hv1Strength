@@ -40,6 +40,7 @@ import com.example.ui.viewmodel.ExerciseIntelligence
 import com.example.ui.viewmodel.ExerciseProfile
 import com.example.ui.viewmodel.TrainingRecommendation
 import com.example.ui.viewmodel.ActiveWorkoutEvent
+import com.example.ui.components.*
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -266,156 +267,19 @@ fun ActiveWorkoutScreen(
             ) {
                 // 1. Workout Header with Minimal Progress Info
                 item {
-                    val dateStr = remember(activeWorkout.startTime) {
-                        java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(java.util.Date(activeWorkout.startTime))
+                    val activeIndex = if (activeFlatSet != null) {
+                        activeWorkout.exercises.indexOf(activeFlatSet.exercise) + 1
+                    } else {
+                        activeWorkout.exercises.size
                     }
-                    val defaultContextName = "Strength Session - $dateStr"
-
-                    var isEditingName by remember { mutableStateOf(false) }
-                    var editedName by remember(activeWorkout.templateName) { mutableStateOf(activeWorkout.templateName) }
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp)
-                    ) {
-                        if (isEditingName) {
-                            androidx.compose.foundation.text.BasicTextField(
-                                value = editedName,
-                                onValueChange = { newValue ->
-                                    editedName = newValue
-                                    val flushedName = if (newValue.isBlank()) defaultContextName else newValue
-                                    viewModel.renameActiveWorkout(flushedName)
-                                },
-                                textStyle = MaterialTheme.typography.headlineMedium.copy(
-                                    color = MaterialTheme.colorScheme.onBackground,
-                                    fontWeight = FontWeight.Black
-                                ),
-                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                                    imeAction = androidx.compose.ui.text.input.ImeAction.Done
-                                ),
-                                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                                    onDone = {
-                                        val finalName = if (editedName.isBlank()) defaultContextName else editedName
-                                        viewModel.renameActiveWorkout(finalName)
-                                        editedName = finalName
-                                        isEditingName = false
-                                    }
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("workout_name_input"),
-                                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                                decorationBox = { innerTextField ->
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp)
-                                    ) {
-                                        if (editedName.isEmpty()) {
-                                            Text(
-                                                text = defaultContextName,
-                                                style = MaterialTheme.typography.headlineMedium,
-                                                fontWeight = FontWeight.Black,
-                                                color = MaterialTheme.colorScheme.onBackground // Premium active text color, not passive hint
-                                            )
-                                        } else {
-                                            innerTextField()
-                                        }
-                                    }
-                                }
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                TextButton(
-                                    onClick = {
-                                        val finalName = if (editedName.isBlank()) defaultContextName else editedName
-                                        viewModel.renameActiveWorkout(finalName)
-                                        editedName = finalName
-                                        isEditingName = false
-                                    },
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                    modifier = Modifier.testTag("confirm_rename_button")
-                                ) {
-                                    Icon(Icons.Default.Check, contentDescription = "Save", modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Save", style = MaterialTheme.typography.labelMedium)
-                                }
-                                TextButton(
-                                    onClick = {
-                                        editedName = activeWorkout.templateName
-                                        isEditingName = false
-                                    },
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                    modifier = Modifier.testTag("cancel_rename_button")
-                                ) {
-                                    Icon(Icons.Default.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Cancel", style = MaterialTheme.typography.labelMedium)
-                                }
-                            }
-                        } else {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { isEditingName = true }
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = activeWorkout.templateName,
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    fontWeight = FontWeight.Black,
-                                    color = MaterialTheme.colorScheme.onBackground,
-                                    modifier = Modifier.weight(1f).testTag("workout_name_text")
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "Edit Workout Name",
-                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val activeIndex = if (activeFlatSet != null) {
-                                activeWorkout.exercises.indexOf(activeFlatSet.exercise) + 1
-                            } else {
-                                activeWorkout.exercises.size
-                            }
-                            Text(
-                                text = "Exercise $activeIndex of ${activeWorkout.exercises.size}",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Timer,
-                                    contentDescription = "Timer",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    text = elapsedTime,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    }
+                    WorkoutHeader(
+                        templateName = activeWorkout.templateName,
+                        startTime = activeWorkout.startTime,
+                        exercisesCount = activeWorkout.exercises.size,
+                        activeExerciseIndex = activeIndex,
+                        elapsedTime = elapsedTime,
+                        onRenameActiveWorkout = { viewModel.renameActiveWorkout(it) }
+                    )
                 }
 
                 // 2. DONE Accordion (Collapsed by Default)
@@ -978,63 +842,12 @@ fun ActiveWorkoutScreen(
                                 )
 
                                 // 5. Compact Optional Rest Guide
-                                if (restTimeRemaining != null) {
-                                    val remaining = restTimeRemaining!!
-                                    val formattedTime = remember(remaining) {
-                                        val mins = remaining / 60
-                                        val secs = remaining % 60
-                                        String.format("%02d:%02d", mins, secs)
-                                    }
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(
-                                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f),
-                                                shape = RoundedCornerShape(12.dp)
-                                            )
-                                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Timer,
-                                                contentDescription = "Rest",
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            Text(
-                                                text = "Rest guide · $formattedTime",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                                            )
-                                        }
-                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            TextButton(
-                                                onClick = { viewModel.reduceRestTime(15) },
-                                                modifier = Modifier.testTag("rest_guide_minus_15_button")
-                                            ) {
-                                                Text("-15s", fontWeight = FontWeight.Bold)
-                                            }
-                                            TextButton(
-                                                onClick = { viewModel.skipRestGuide() },
-                                                modifier = Modifier.testTag("rest_guide_skip_button")
-                                            ) {
-                                                Text("Skip", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-                                            }
-                                            TextButton(
-                                                onClick = { viewModel.addRestTime(15) },
-                                                modifier = Modifier.testTag("rest_guide_plus_15_button")
-                                            ) {
-                                                Text("+15s", fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                    }
-                                }
+                                RestTimerCard(
+                                    restTimeRemaining = restTimeRemaining,
+                                    onReduceRestTime = { viewModel.reduceRestTime(it) },
+                                    onSkipRestGuide = { viewModel.skipRestGuide() },
+                                    onAddRestTime = { viewModel.addRestTime(it) }
+                                )
 
                                 // Massive COMPLETE SET Button
                                 Button(
