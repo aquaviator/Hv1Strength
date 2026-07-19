@@ -13,13 +13,33 @@ data class ActiveExerciseMetadata(
     val supersetGroupId: String? = null
 )
 
+sealed interface WorkoutRecoveryState {
+    data object Checking : WorkoutRecoveryState
+    data object None : WorkoutRecoveryState
+    data class Available(
+        val workoutName: String,
+        val startedAt: Long,
+        val completedSets: Int,
+        val totalSets: Int
+    ) : WorkoutRecoveryState
+    data class Failed(val reason: String) : WorkoutRecoveryState
+}
+
 data class ActiveWorkoutState(
     val templateId: Int? = null,
     val templateName: String,
     val startTime: Long,
     val exercises: List<Exercise> = emptyList(),
     val sets: Map<String, List<ActiveSet>> = emptyMap(),
-    val exerciseMetadata: Map<String, ActiveExerciseMetadata> = emptyMap()
+    val exerciseMetadata: Map<String, ActiveExerciseMetadata> = emptyMap(),
+    val activeSessionId: String = java.util.UUID.randomUUID().toString(),
+    val currentExerciseId: String? = null,
+    val workoutNotes: String = "",
+    val restTimerEndTimestamp: Long? = null,
+    val restTimerDuration: Int? = null,
+    val isRestTimerPaused: Boolean = false,
+    val isMetric: Boolean = true,
+    val stateVersion: Int = 1
 )
 
 data class ActiveSet(
@@ -344,12 +364,16 @@ class StrengthViewModel(
 
     // Delegated Active Workout properties & functions
     val activeWorkoutState = activeWorkoutViewModel.activeWorkoutState
+    val workoutRecoveryState = activeWorkoutViewModel.workoutRecoveryState
     val isCompletingWorkout = activeWorkoutViewModel.isCompletingWorkout
     val navigateToActiveWorkoutEvent = activeWorkoutViewModel.navigateToActiveWorkoutEvent
     val activeWorkoutEvents = activeWorkoutViewModel.activeWorkoutEvents
     val restTimeRemaining = activeWorkoutViewModel.restTimeRemaining
     val restTimerDuration = activeWorkoutViewModel.restTimerDuration
     val isRestTimerPaused = activeWorkoutViewModel.isRestTimerPaused
+
+    fun resumeWorkout() = activeWorkoutViewModel.resumeWorkout()
+    fun discardWorkoutBackup() = activeWorkoutViewModel.discardWorkoutBackup()
 
     fun startWorkout(template: WorkoutTemplate?) = activeWorkoutViewModel.startWorkout(template)
     fun renameActiveWorkout(newName: String) = activeWorkoutViewModel.renameActiveWorkout(newName)

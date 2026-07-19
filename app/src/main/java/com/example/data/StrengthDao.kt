@@ -125,6 +125,9 @@ interface StrengthDao {
     @Query("SELECT * FROM workout_session WHERE id = :id AND deletedAt IS NULL LIMIT 1")
     suspend fun getSessionById(id: Int): WorkoutSession?
 
+    @Query("SELECT * FROM workout_session WHERE startTime = :startTime AND deletedAt IS NULL LIMIT 1")
+    suspend fun getSessionByStartTime(startTime: Long): WorkoutSession?
+
     @Query("UPDATE workout_session SET deletedAt = :deletedTime, revision = revision + 1, syncStatus = 'PENDING_DELETE' WHERE id = :id")
     suspend fun softDeleteSession(id: Int, deletedTime: Long)
 

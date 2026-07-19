@@ -39,6 +39,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import com.example.ui.viewmodel.StrengthViewModel.TemplateExerciseState
 import com.example.ui.viewmodel.StrengthViewModel.TemplateSetState
+import com.example.ui.viewmodel.WorkoutRecoveryState
 import com.example.data.Exercise
 import com.example.data.WorkoutTemplate
 import com.example.data.UserProfile
@@ -81,6 +82,7 @@ fun WorkoutScreen(
     val activeWorkout by viewModel.activeWorkoutState.collectAsState()
     val isMetric by viewModel.isMetric.collectAsState()
     val sessions by viewModel.sessions.collectAsState(initial = emptyList())
+    val workoutRecoveryState by viewModel.workoutRecoveryState.collectAsState()
 
     var showTemplateEditor by remember { mutableStateOf(false) }
     var templateToEdit by remember { mutableStateOf<WorkoutTemplate?>(null) }
@@ -96,6 +98,75 @@ fun WorkoutScreen(
     val userProfile by viewModel.activeUserProfile.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // Active Workout Recovery Dialog
+        when (val recState = workoutRecoveryState) {
+            is WorkoutRecoveryState.Available -> {
+                AlertDialog(
+                    onDismissRequest = { /* Persistent dialog until user chooses */ },
+                    title = { Text("Resume Unfinished Workout?") },
+                    text = {
+                        Column {
+                            Text(
+                                "We found an unfinished workout session from your previous run.",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        recState.workoutName,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    val timeFormatted = java.text.SimpleDateFormat(
+                                        "MMM dd, yyyy 'at' h:mm a",
+                                        java.util.Locale.getDefault()
+                                    ).format(java.util.Date(recState.startedAt))
+                                    Text(
+                                        "Started: $timeFormatted",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        "Progress: ${recState.completedSets}/${recState.totalSets} sets completed",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = { viewModel.resumeWorkout() },
+                            modifier = Modifier.testTag("resume_workout_confirm_btn")
+                        ) {
+                            Text("Resume")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { viewModel.discardWorkoutBackup() },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            ),
+                            modifier = Modifier.testTag("discard_workout_dismiss_btn")
+                        ) {
+                            Text("Discard")
+                        }
+                    },
+                    modifier = Modifier.testTag("workout_recovery_dialog")
+                )
+            }
+            else -> {}
+        }
+
         Scaffold(
             topBar = {
                 HighDensityHeader(

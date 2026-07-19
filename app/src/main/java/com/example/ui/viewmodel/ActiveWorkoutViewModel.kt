@@ -8,6 +8,7 @@ import com.example.domain.VolumeCalculator
 import com.example.domain.SetVolumeData
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -35,6 +36,9 @@ class ActiveWorkoutViewModel(
     private val _activeWorkoutState = MutableStateFlow<ActiveWorkoutState?>(null)
     val activeWorkoutState: StateFlow<ActiveWorkoutState?> = _activeWorkoutState.asStateFlow()
 
+    private val _workoutRecoveryState = MutableStateFlow<WorkoutRecoveryState>(WorkoutRecoveryState.Checking)
+    val workoutRecoveryState: StateFlow<WorkoutRecoveryState> = _workoutRecoveryState.asStateFlow()
+
     private val _isCompletingWorkout = MutableStateFlow(false)
     val isCompletingWorkout = _isCompletingWorkout.asStateFlow()
 
@@ -56,50 +60,230 @@ class ActiveWorkoutViewModel(
 
     private var restTimerJob: kotlinx.coroutines.Job? = null
 
+    private var lastSavedState: ActiveWorkoutState? = null
+    private var backupSaveJob: kotlinx.coroutines.Job? = null
+    private val saveMutex = kotlinx.coroutines.sync.Mutex()
+
     init {
         // 1. Auto-save active workout state changes to Database Backup
         viewModelScope.launch {
             _activeWorkoutState.collect { state ->
                 if (state == null) {
-                    repository.clearActiveWorkoutBackup()
-                } else {
-                    try {
-                        val backup = ActiveWorkoutBackup(
-                            id = 1,
-                            templateId = state.templateId,
-                            templateName = state.templateName,
-                            startTime = state.startTime,
-                            exercisesJson = serializeExercises(state.exercises),
-                            setsJson = serializeSets(state.sets),
-                            exerciseMetadataJson = serializeMetadata(state.exerciseMetadata)
-                        )
-                        repository.saveActiveWorkoutBackup(backup)
-                    } catch (e: Exception) {
-                        android.util.Log.e("ActiveWorkoutVM", "Failed to save active workout backup", e)
+                    // Only clear the backup if we are NOT in the Checking or Available recovery states
+                    val recState = _workoutRecoveryState.value
+                    if (recState !is WorkoutRecoveryState.Checking && recState !is WorkoutRecoveryState.Available) {
+                        backupSaveJob?.cancel()
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                repository.clearActiveWorkoutBackup()
+                            } catch (e: Exception) {
+                                android.util.Log.e("ActiveWorkoutVM", "Failed to clear backup on null state", e)
+                            }
+                        }
+                        lastSavedState = null
                     }
+                } else {
+                    triggerBackupSave(state)
                 }
             }
         }
 
-        // 2. Load active workout backup from Database on startup
-        viewModelScope.launch {
+        // 2. Check for active workout backup on startup
+        checkForActiveWorkoutBackup()
+    }
+
+    private fun isCriticalChange(old: ActiveWorkoutState?, new: ActiveWorkoutState): Boolean {
+        if (old == null) return true
+        if (old.templateId != new.templateId) return true
+        if (old.exercises != new.exercises) return true
+        
+        val oldSetsList = old.sets.flatMap { it.value }
+        val newSetsList = new.sets.flatMap { it.value }
+        if (oldSetsList.size != newSetsList.size) return true
+        
+        // Check if completion states changed
+        if (oldSetsList.map { it.isCompleted } != newSetsList.map { it.isCompleted }) return true
+        
+        return false
+    }
+
+    private fun triggerBackupSave(state: ActiveWorkoutState) {
+        val isCritical = isCriticalChange(lastSavedState, state)
+        backupSaveJob?.cancel()
+        if (isCritical) {
+            backupSaveJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                performSaveBackup(state)
+            }
+        } else {
+            backupSaveJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                kotlinx.coroutines.delay(500)
+                performSaveBackup(state)
+            }
+        }
+    }
+
+    private suspend fun performSaveBackup(state: ActiveWorkoutState) {
+        saveMutex.withLock {
+            try {
+                val backup = ActiveWorkoutBackup(
+                    id = 1,
+                    templateId = state.templateId,
+                    templateName = state.templateName,
+                    startTime = state.startTime,
+                    exercisesJson = serializeExercises(state.exercises),
+                    setsJson = serializeSets(state.sets),
+                    exerciseMetadataJson = serializeMetadata(state.exerciseMetadata, state)
+                )
+                repository.saveActiveWorkoutBackup(backup)
+                lastSavedState = state
+            } catch (e: Exception) {
+                android.util.Log.e("ActiveWorkoutVM", "Failed to save active workout backup", e)
+            }
+        }
+    }
+
+    fun checkForActiveWorkoutBackup() {
+        _workoutRecoveryState.value = WorkoutRecoveryState.Checking
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val backup = repository.getActiveWorkoutBackup()
+                if (backup != null) {
+                    try {
+                        val restoredExercises = deserializeExercises(backup.exercisesJson)
+                        val restoredSets = deserializeSets(backup.setsJson)
+                        
+                        val totalSets = restoredSets.flatMap { it.value }.size
+                        val completedSets = restoredSets.flatMap { it.value }.count { it.isCompleted }
+                        
+                        _workoutRecoveryState.value = WorkoutRecoveryState.Available(
+                            workoutName = backup.templateName,
+                            startedAt = backup.startTime,
+                            completedSets = completedSets,
+                            totalSets = totalSets
+                        )
+                    } catch (e: Exception) {
+                        android.util.Log.e("ActiveWorkoutVM", "Malformed active workout backup data", e)
+                        _workoutRecoveryState.value = WorkoutRecoveryState.Failed("Malformed backup: ${e.localizedMessage}")
+                    }
+                } else {
+                    _workoutRecoveryState.value = WorkoutRecoveryState.None
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ActiveWorkoutVM", "Failed to query active workout backup", e)
+                _workoutRecoveryState.value = WorkoutRecoveryState.Failed(e.localizedMessage ?: "Unknown error")
+            }
+        }
+    }
+
+    fun resumeWorkout() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val backup = repository.getActiveWorkoutBackup()
                 if (backup != null) {
                     val restoredExercises = deserializeExercises(backup.exercisesJson)
                     val restoredSets = deserializeSets(backup.setsJson)
                     val restoredMetadata = deserializeMetadata(backup.exerciseMetadataJson)
-                    _activeWorkoutState.value = ActiveWorkoutState(
+                    
+                    val recoveryObj = if (JSONObject(backup.exerciseMetadataJson).has("__global_recovery__")) {
+                        JSONObject(backup.exerciseMetadataJson).getJSONObject("__global_recovery__")
+                    } else {
+                        null
+                    }
+                    val activeSessionId = recoveryObj?.optString("activeSessionId") ?: java.util.UUID.randomUUID().toString()
+                    val currentExerciseId = if (recoveryObj == null || recoveryObj.isNull("currentExerciseId")) null else recoveryObj.getString("currentExerciseId")
+                    val workoutNotes = recoveryObj?.optString("workoutNotes") ?: ""
+                    val restTimerEndTimestamp = if (recoveryObj == null || recoveryObj.isNull("restTimerEndTimestamp")) null else recoveryObj.getLong("restTimerEndTimestamp")
+                    val restTimerDuration = if (recoveryObj == null || recoveryObj.isNull("restTimerDuration")) null else recoveryObj.getInt("restTimerDuration")
+                    val isRestTimerPaused = recoveryObj?.optBoolean("isRestTimerPaused", false) ?: false
+                    val isMetric = recoveryObj?.optBoolean("isMetric", true) ?: true
+                    val stateVersion = recoveryObj?.optInt("stateVersion", 1) ?: 1
+
+                    val state = ActiveWorkoutState(
                         templateId = backup.templateId,
                         templateName = backup.templateName,
                         startTime = backup.startTime,
                         exercises = restoredExercises,
                         sets = restoredSets,
-                        exerciseMetadata = restoredMetadata
+                        exerciseMetadata = restoredMetadata,
+                        activeSessionId = activeSessionId,
+                        currentExerciseId = currentExerciseId,
+                        workoutNotes = workoutNotes,
+                        restTimerEndTimestamp = restTimerEndTimestamp,
+                        restTimerDuration = restTimerDuration,
+                        isRestTimerPaused = isRestTimerPaused,
+                        isMetric = isMetric,
+                        stateVersion = stateVersion
                     )
+                    
+                    _activeWorkoutState.value = state
+                    lastSavedState = state
+                    _workoutRecoveryState.value = WorkoutRecoveryState.None
+
+                    if (restTimerEndTimestamp != null && !isRestTimerPaused) {
+                        val remainingMs = restTimerEndTimestamp - System.currentTimeMillis()
+                        if (remainingMs > 0) {
+                            val remainingSecs = (remainingMs / 1000).toInt()
+                            _restTimerDuration.value = restTimerDuration ?: remainingSecs
+                            _restTimeRemaining.value = remainingSecs
+                            _isRestTimerPaused.value = false
+                            runRestTimer(restTimerEndTimestamp)
+                        } else {
+                            _restTimeRemaining.value = null
+                        }
+                    } else if (restTimerEndTimestamp != null && isRestTimerPaused) {
+                        val remainingSecs = recoveryObj.optInt("restTimerRemainingAtSave", 0)
+                        if (remainingSecs > 0) {
+                            _restTimerDuration.value = restTimerDuration ?: remainingSecs
+                            _restTimeRemaining.value = remainingSecs
+                            _isRestTimerPaused.value = true
+                        }
+                    }
+
+                    _navigateToActiveWorkoutEvent.emit(Unit)
+                } else {
+                    _workoutRecoveryState.value = WorkoutRecoveryState.None
                 }
             } catch (e: Exception) {
-                android.util.Log.e("ActiveWorkoutVM", "Failed to restore active workout backup", e)
+                android.util.Log.e("ActiveWorkoutVM", "Failed to resume workout", e)
+                _workoutRecoveryState.value = WorkoutRecoveryState.Failed(e.localizedMessage ?: "Failed to restore backup")
+            }
+        }
+    }
+
+    fun discardWorkoutBackup() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                repository.clearActiveWorkoutBackup()
+            } catch (e: Exception) {
+                android.util.Log.e("ActiveWorkoutVM", "Failed to discard workout backup", e)
+            }
+            lastSavedState = null
+            _activeWorkoutState.value = null
+            _workoutRecoveryState.value = WorkoutRecoveryState.None
+            skipRestTimer()
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        val state = _activeWorkoutState.value
+        if (state != null) {
+            @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
+                try {
+                    val backup = ActiveWorkoutBackup(
+                        id = 1,
+                        templateId = state.templateId,
+                        templateName = state.templateName,
+                        startTime = state.startTime,
+                        exercisesJson = serializeExercises(state.exercises),
+                        setsJson = serializeSets(state.sets),
+                        exerciseMetadataJson = serializeMetadata(state.exerciseMetadata, state)
+                    )
+                    repository.saveActiveWorkoutBackup(backup)
+                } catch (e: Exception) {
+                    android.util.Log.e("ActiveWorkoutVM", "Failed onCleared backup flush", e)
+                }
             }
         }
     }
@@ -200,7 +384,7 @@ class ActiveWorkoutViewModel(
         return map
     }
 
-    private fun serializeMetadata(meta: Map<String, ActiveExerciseMetadata>): String {
+    private fun serializeMetadata(meta: Map<String, ActiveExerciseMetadata>, state: ActiveWorkoutState): String {
         return JSONObject().apply {
             meta.forEach { (exId, m) ->
                 put(exId, JSONObject().apply {
@@ -209,6 +393,20 @@ class ActiveWorkoutViewModel(
                     put("supersetGroupId", m.supersetGroupId ?: JSONObject.NULL)
                 })
             }
+            // Save global recovery properties
+            put("__global_recovery__", JSONObject().apply {
+                put("activeSessionId", state.activeSessionId)
+                put("currentExerciseId", state.currentExerciseId ?: JSONObject.NULL)
+                put("workoutNotes", state.workoutNotes)
+                put("restTimerEndTimestamp", state.restTimerEndTimestamp ?: JSONObject.NULL)
+                put("restTimerDuration", state.restTimerDuration ?: JSONObject.NULL)
+                put("isRestTimerPaused", state.isRestTimerPaused)
+                put("isMetric", state.isMetric)
+                put("stateVersion", state.stateVersion)
+                _restTimeRemaining.value?.let {
+                    put("restTimerRemainingAtSave", it)
+                }
+            })
         }.toString()
     }
 
@@ -216,35 +414,61 @@ class ActiveWorkoutViewModel(
         val map = mutableMapOf<String, ActiveExerciseMetadata>()
         val obj = JSONObject(json)
         obj.keys().forEach { exId ->
-            val m = obj.getJSONObject(exId)
-            map[exId] = ActiveExerciseMetadata(
-                restSeconds = if (m.isNull("restSeconds")) null else m.getInt("restSeconds"),
-                notes = if (m.isNull("notes")) null else m.getString("notes"),
-                supersetGroupId = if (m.isNull("supersetGroupId")) null else m.getString("supersetGroupId")
-            )
+            if (exId != "__global_recovery__") {
+                val m = obj.getJSONObject(exId)
+                map[exId] = ActiveExerciseMetadata(
+                    restSeconds = if (m.isNull("restSeconds")) null else m.getInt("restSeconds"),
+                    notes = if (m.isNull("notes")) null else m.getString("notes"),
+                    supersetGroupId = if (m.isNull("supersetGroupId")) null else m.getString("supersetGroupId")
+                )
+            }
         }
         return map
+    }
+
+    private fun updateStateTimer(
+        endTimestamp: Long?,
+        duration: Int?,
+        isPaused: Boolean
+    ) {
+        val current = _activeWorkoutState.value ?: return
+        _activeWorkoutState.value = current.copy(
+            restTimerEndTimestamp = endTimestamp,
+            restTimerDuration = duration,
+            isRestTimerPaused = isPaused
+        )
     }
 
     // Rest Timer Logic
     fun startRestTimer(duration: Int) {
         restTimerJob?.cancel()
+        val endTimestamp = System.currentTimeMillis() + (duration * 1000L)
         _restTimerDuration.value = duration
         _restTimeRemaining.value = duration
         _isRestTimerPaused.value = false
-        runRestTimer()
+        
+        updateStateTimer(
+            endTimestamp = endTimestamp,
+            duration = duration,
+            isPaused = false
+        )
+        
+        runRestTimer(endTimestamp)
     }
 
-    private fun runRestTimer() {
+    private fun runRestTimer(targetEndTime: Long) {
+        restTimerJob?.cancel()
         restTimerJob = viewModelScope.launch {
             while (true) {
                 kotlinx.coroutines.delay(1000)
                 if (!_isRestTimerPaused.value) {
-                    val remaining = _restTimeRemaining.value ?: break
-                    if (remaining > 1) {
-                        _restTimeRemaining.value = remaining - 1
+                    val remainingMs = targetEndTime - System.currentTimeMillis()
+                    val remaining = (remainingMs / 1000).toInt()
+                    if (remaining > 0) {
+                        _restTimeRemaining.value = remaining
                     } else {
                         _restTimeRemaining.value = 0
+                        updateStateTimer(null, null, false)
                         triggerRestFinishedFeedback()
                         break
                     }
@@ -255,11 +479,28 @@ class ActiveWorkoutViewModel(
 
     fun pauseRestTimer() {
         _isRestTimerPaused.value = true
+        val remaining = _restTimeRemaining.value ?: 0
+        val current = _activeWorkoutState.value
+        if (current != null) {
+            _activeWorkoutState.value = current.copy(
+                isRestTimerPaused = true,
+                restTimerEndTimestamp = System.currentTimeMillis() + (remaining * 1000L),
+                restTimerDuration = current.restTimerDuration
+            )
+        }
     }
 
     fun resumeRestTimer() {
-        if (_restTimeRemaining.value != null && _restTimeRemaining.value!! > 0) {
+        val remaining = _restTimeRemaining.value ?: return
+        if (remaining > 0) {
             _isRestTimerPaused.value = false
+            val endTimestamp = System.currentTimeMillis() + (remaining * 1000L)
+            updateStateTimer(
+                endTimestamp = endTimestamp,
+                duration = _restTimerDuration.value,
+                isPaused = false
+            )
+            runRestTimer(endTimestamp)
         }
     }
 
@@ -267,6 +508,7 @@ class ActiveWorkoutViewModel(
         restTimerJob?.cancel()
         _restTimeRemaining.value = null
         _isRestTimerPaused.value = false
+        updateStateTimer(null, null, false)
     }
 
     fun resetRestTimer() {
@@ -282,6 +524,15 @@ class ActiveWorkoutViewModel(
         val updated = (remaining + seconds).coerceAtMost(600)
         _restTimeRemaining.value = updated
         _restTimerDuration.value = updated
+        val endTimestamp = System.currentTimeMillis() + (updated * 1000L)
+        updateStateTimer(
+            endTimestamp = endTimestamp,
+            duration = updated,
+            isPaused = _isRestTimerPaused.value
+        )
+        if (!_isRestTimerPaused.value) {
+            runRestTimer(endTimestamp)
+        }
     }
 
     fun reduceRestTime(seconds: Int) {
@@ -291,6 +542,16 @@ class ActiveWorkoutViewModel(
         _restTimerDuration.value = updated
         if (updated == 0) {
             skipRestTimer()
+        } else {
+            val endTimestamp = System.currentTimeMillis() + (updated * 1000L)
+            updateStateTimer(
+                endTimestamp = endTimestamp,
+                duration = updated,
+                isPaused = _isRestTimerPaused.value
+            )
+            if (!_isRestTimerPaused.value) {
+                runRestTimer(endTimestamp)
+            }
         }
     }
 
@@ -672,70 +933,82 @@ class ActiveWorkoutViewModel(
 
         viewModelScope.launch {
             try {
-                val endTime = System.currentTimeMillis()
-                val session = WorkoutSession(
-                    templateId = currentState.templateId,
-                    templateName = currentState.templateName,
-                    startTime = currentState.startTime,
-                    endTime = endTime,
-                    userId = authViewModel.activeUserId.value
-                )
+                // Ensure complete idempotency by querying database before starting insertion
+                val existingSession = repository.dao.getSessionByStartTime(currentState.startTime)
+                val sessionId = if (existingSession != null) {
+                    android.util.Log.d("ActiveWorkoutVM", "[COMPLETION] Workout session already exists with startTime: ${currentState.startTime}. Re-using ID: ${existingSession.id}")
+                    existingSession.id
+                } else {
+                    val endTime = System.currentTimeMillis()
+                    val session = WorkoutSession(
+                        templateId = currentState.templateId,
+                        templateName = currentState.templateName,
+                        startTime = currentState.startTime,
+                        endTime = endTime,
+                        userId = authViewModel.activeUserId.value
+                    )
 
-                android.util.Log.d("ActiveWorkoutVM", "[COMPLETION] Final set persistence started...")
-                val sessionId = repository.insertSession(session).toInt()
+                    android.util.Log.d("ActiveWorkoutVM", "[COMPLETION] Final set persistence started...")
+                    val insertedId = repository.insertSession(session).toInt()
 
-                val loggedSets = mutableListOf<LoggedSet>()
-                for (exercise in currentState.exercises) {
-                    val setsList = currentState.sets[exercise.id] ?: emptyList()
-                    for (set in setsList) {
-                        val shouldSave = set.isCompleted || (setsList.none { it.isCompleted } && set.weight > 0)
-                        if (shouldSave) {
-                            loggedSets.add(
+                    val loggedSets = mutableListOf<LoggedSet>()
+                    for (exercise in currentState.exercises) {
+                        val setsList = currentState.sets[exercise.id] ?: emptyList()
+                        for (set in setsList) {
+                            val shouldSave = set.isCompleted || (setsList.none { it.isCompleted } && set.weight > 0)
+                            if (shouldSave) {
+                                loggedSets.add(
+                                    LoggedSet(
+                                        sessionId = insertedId,
+                                        exerciseId = exercise.id,
+                                        setNumber = set.setNumber,
+                                        reps = set.reps,
+                                        weight = set.weight,
+                                        isCompleted = true,
+                                        rpe = set.rpe,
+                                        actualDuration = set.actualDuration,
+                                        actualDistance = set.actualDistance,
+                                        setType = set.setType,
+                                        targetRepsMin = set.targetRepsMin,
+                                        targetRepsMax = set.targetRepsMax,
+                                        targetWeight = set.targetWeight,
+                                        targetRpe = set.targetRpe,
+                                        targetDuration = set.targetDuration,
+                                        targetDistance = set.targetDistance,
+                                        notes = set.notes
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    if (loggedSets.isNotEmpty()) {
+                        repository.insertLoggedSets(loggedSets)
+                    } else {
+                        currentState.exercises.firstOrNull()?.let { firstExercise ->
+                            repository.insertLoggedSet(
                                 LoggedSet(
-                                    sessionId = sessionId,
-                                    exerciseId = exercise.id,
-                                    setNumber = set.setNumber,
-                                    reps = set.reps,
-                                    weight = set.weight,
-                                    isCompleted = true,
-                                    rpe = set.rpe,
-                                    actualDuration = set.actualDuration,
-                                    actualDistance = set.actualDistance,
-                                    setType = set.setType,
-                                    targetRepsMin = set.targetRepsMin,
-                                    targetRepsMax = set.targetRepsMax,
-                                    targetWeight = set.targetWeight,
-                                    targetRpe = set.targetRpe,
-                                    targetDuration = set.targetDuration,
-                                    targetDistance = set.targetDistance,
-                                    notes = set.notes
+                                    sessionId = insertedId,
+                                    exerciseId = firstExercise.id,
+                                    setNumber = 1,
+                                    reps = 10,
+                                    weight = 0f,
+                                    isCompleted = true
                                 )
                             )
                         }
                     }
-                }
-
-                if (loggedSets.isNotEmpty()) {
-                    repository.insertLoggedSets(loggedSets)
-                } else {
-                    currentState.exercises.firstOrNull()?.let { firstExercise ->
-                        repository.insertLoggedSet(
-                            LoggedSet(
-                                sessionId = sessionId,
-                                exerciseId = firstExercise.id,
-                                setNumber = 1,
-                                reps = 10,
-                                weight = 0f,
-                                isCompleted = true
-                            )
-                        )
-                    }
+                    insertedId
                 }
 
                 android.util.Log.d("ActiveWorkoutVM", "[COMPLETION] Workout persistence succeeded. Assigned Session ID: $sessionId")
                 
                 clearRestGuide()
                 android.util.Log.d("ActiveWorkoutVM", "[COMPLETION] Rest guide cleared.")
+
+                // Ensure we explicitly clear database active workout backup now that permanent storage succeeded!
+                repository.clearActiveWorkoutBackup()
+                lastSavedState = null
 
                 _activeWorkoutState.value = null
                 android.util.Log.d("ActiveWorkoutVM", "[COMPLETION] Active workout state cleared.")
