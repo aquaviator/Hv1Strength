@@ -22,9 +22,10 @@ import kotlinx.coroutines.launch
         UserProfile::class,
         WorkoutTemplateExercise::class,
         WorkoutTemplateSet::class,
-        CommandQueueEntity::class
+        CommandQueueEntity::class,
+        UserPreferences::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class StrengthDatabase : RoomDatabase() {
@@ -622,6 +623,43 @@ abstract class StrengthDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                android.util.Log.i("StrengthDatabase", "Executing MIGRATION_7_8...")
+                try {
+                    db.execSQL("""
+                        CREATE TABLE IF NOT EXISTS `user_preferences` (
+                            `id` TEXT NOT NULL, 
+                            `isMetric` INTEGER NOT NULL, 
+                            `theme` TEXT NOT NULL, 
+                            `keepScreenAwake` INTEGER NOT NULL, 
+                            `defaultRestTimerDuration` INTEGER NOT NULL, 
+                            `soundOn` INTEGER NOT NULL, 
+                            `vibrationOn` INTEGER NOT NULL, 
+                            `defaultWarmupSets` INTEGER NOT NULL, 
+                            `autoCompleteBehavior` INTEGER NOT NULL, 
+                            `autoScroll` INTEGER NOT NULL, 
+                            `timerPreferences` TEXT NOT NULL, 
+                            PRIMARY KEY(`id`)
+                        )
+                    """.trimIndent())
+                    db.execSQL("""
+                        INSERT OR IGNORE INTO `user_preferences` (
+                            id, isMetric, theme, keepScreenAwake, defaultRestTimerDuration, 
+                            soundOn, vibrationOn, defaultWarmupSets, autoCompleteBehavior, 
+                            autoScroll, timerPreferences
+                        ) VALUES (
+                            'default', 1, 'system', 0, 90, 1, 1, 0, 1, 1, 'standard'
+                        )
+                    """.trimIndent())
+                    android.util.Log.i("StrengthDatabase", "MIGRATION_7_8 executed successfully.")
+                } catch (e: Throwable) {
+                    android.util.Log.e("StrengthDatabase", "FATAL error during MIGRATION_7_8", e)
+                    throw e
+                }
+            }
+        }
+
         fun getDatabase(context: Context, scope: CoroutineScope): StrengthDatabase {
             val appCtx = context.applicationContext
             android.util.Log.i("StrengthDatabase", "getDatabase called. Setting appContext references.")
@@ -636,7 +674,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         StrengthDatabase::class.java,
                         "strength_database"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                         .addCallback(StrengthDatabaseCallback(scope))
                         .build()
                     INSTANCE = instance
@@ -722,6 +760,9 @@ abstract class StrengthDatabase : RoomDatabase() {
             dao.insertTemplate(pushTemplate)
             dao.insertTemplate(pullTemplate)
             dao.insertTemplate(legsAbsTemplate)
+
+            // Insert default user preferences
+            dao.insertUserPreferences(UserPreferences())
         }
     }
 }

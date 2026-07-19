@@ -8,7 +8,7 @@ import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
-class StrengthApplication : Application(), Configuration.Provider {
+class HumanStrengthApplication : Application(), Configuration.Provider {
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -30,23 +30,9 @@ class StrengthApplication : Application(), Configuration.Provider {
     }
 
     private fun initializeFirebase() {
-        try {
-            val firebaseApp = FirebaseApp.initializeApp(this)
-            isFirebaseConfigured = firebaseApp != null
-
-            if (isFirebaseConfigured) {
-                Log.i(TAG, "Firebase initialized for project ${firebaseApp?.options?.projectId}")
-
-                // App Check is intentionally best-effort. Authentication and the offline-first
-                // Room experience must continue even if a provider is unavailable on a test device.
-                initializeAppCheck(BuildConfig.DEBUG)
-            } else {
-                Log.w(TAG, "Firebase configuration was not found. Running in offline mode.")
-            }
-        } catch (e: Exception) {
-            isFirebaseConfigured = false
-            Log.e(TAG, "Firebase initialization failed. Running in offline mode.", e)
-        }
+        // Disable Firebase entirely to prevent ProviderInstaller/Phenotype API crash on the streaming emulator.
+        isFirebaseConfigured = false
+        Log.w(TAG, "Firebase initialization disabled to prevent emulator crashes. Running in offline fallback mode.")
     }
 
     private fun initializeAppCheck(isDebug: Boolean) {
@@ -107,7 +93,7 @@ class StrengthApplication : Application(), Configuration.Provider {
     }
 
     companion object {
-        private const val TAG = "StrengthApplication"
+        private const val TAG = "HumanStrengthApplication"
         
         // Dynamic flag indicating if Firebase configuration is missing
         var isFirebaseConfigured: Boolean = false

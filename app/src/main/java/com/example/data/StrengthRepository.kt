@@ -5,7 +5,7 @@ import com.example.core.identity.HumanUserIdGenerator
 import com.example.core.identity.DeviceIdGenerator
 import kotlinx.coroutines.flow.Flow
 
-class StrengthRepository(private val dao: StrengthDao, private val context: android.content.Context? = null) {
+class StrengthRepository(val dao: StrengthDao, private val context: android.content.Context? = null) {
 
     // Helper for command queue enqueuing
     private suspend fun enqueueCommand(

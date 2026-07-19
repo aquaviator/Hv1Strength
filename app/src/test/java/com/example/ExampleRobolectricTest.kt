@@ -450,4 +450,55 @@ class ExampleRobolectricTest {
         val pendingAfterPoison = dao.getPendingCommands(retryAt + 100000)
         assertTrue(pendingAfterPoison.none { it.commandId == "cmd_fail_test" })
     }
+
+    @Test
+    fun testWorkoutCompletionSequence_success() = runBlocking {
+        // Start active workout
+        viewModel.startWorkout(null)
+        waitUntil { viewModel.activeWorkoutState.value != null }
+
+        // Add exercise
+        val benchPress = Exercise("bench_press", "Bench Press", "Chest")
+        viewModel.addExerciseToActiveWorkout(benchPress)
+        waitUntil { viewModel.activeWorkoutState.value?.exercises?.size == 1 }
+
+        // Start Rest Timer to verify it gets cleared upon completion
+        viewModel.startRestTimer(120)
+        assertEquals(120, viewModel.restTimeRemaining.value)
+
+        // Finish active workout
+        viewModel.finishActiveWorkout()
+        
+        // Wait until it's no longer completing
+        waitUntil { !viewModel.isCompletingWorkout.value }
+
+        // Verify active workout state is cleared safely
+        assertNull(viewModel.activeWorkoutState.value)
+
+        // Verify rest timer is stopped and cleared upon completion
+        assertNull(viewModel.restTimeRemaining.value)
+
+        // Verify session was persisted in Room database
+        val sessions = repository.allSessions.first()
+        assertTrue(sessions.isNotEmpty())
+    }
+
+    @Test
+    fun testRestGuideBehavior() {
+        // Start rest guide
+        viewModel.startRestGuide(90)
+        assertEquals(90, viewModel.restTimeRemaining.value)
+
+        // Add 15 seconds
+        viewModel.addRestTime(15)
+        assertEquals(105, viewModel.restTimeRemaining.value)
+
+        // Reduce 15 seconds
+        viewModel.reduceRestTime(15)
+        assertEquals(90, viewModel.restTimeRemaining.value)
+
+        // Skip/Clear rest guide
+        viewModel.skipRestGuide()
+        assertNull(viewModel.restTimeRemaining.value)
+    }
 }

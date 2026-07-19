@@ -18,11 +18,3 @@ local.properties
 .env
 debug.keystore
 my-upload-key.jks
-upload_certificate.pem
-
-emulator-startup.log
-*.jks
-*.keystore
-*.pem
-.env
-local.properties

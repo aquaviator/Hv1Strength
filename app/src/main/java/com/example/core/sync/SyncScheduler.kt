@@ -7,7 +7,7 @@ import java.util.concurrent.TimeUnit
 object SyncScheduler {
 
     fun scheduleImmediate(context: Context) {
-        if (!com.example.StrengthApplication.isFirebaseConfigured) {
+        if (!com.example.HumanStrengthApplication.isFirebaseConfigured) {
             return
         }
         val constraints = Constraints.Builder()
@@ -26,7 +26,7 @@ object SyncScheduler {
     }
 
     fun schedulePeriodic(context: Context) {
-        if (!com.example.StrengthApplication.isFirebaseConfigured) {
+        if (!com.example.HumanStrengthApplication.isFirebaseConfigured) {
             return
         }
         val constraints = Constraints.Builder()

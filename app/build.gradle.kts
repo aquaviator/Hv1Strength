@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.humanstrength.kfqjza"
     minSdk = 24
     targetSdk = 36
-    versionCode = 24
-    versionName = "24.0"
+    versionCode = 20
+    versionName = "20.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -31,6 +31,12 @@ android {
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
     }
+    create("debugConfig") {
+      storeFile = file("${rootDir}/debug.keystore")
+      storePassword = "android"
+      keyAlias = "androiddebugkey"
+      keyPassword = "android"
+    }
   }
 
   buildTypes {
@@ -41,8 +47,7 @@ android {
       signingConfig = signingConfigs.getByName("release")
     }
     debug {
-      // Use Android's automatically generated debug keystore.
-      // Release signing remains isolated behind environment variables.
+      signingConfig = signingConfigs.getByName("debugConfig")
     }
   }
   compileOptions {

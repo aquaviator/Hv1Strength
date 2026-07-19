@@ -163,12 +163,24 @@ fun MainAppScreen(viewModel: StrengthViewModel) {
         NavigationItem("settings", "Settings", Icons.Default.Settings)
     )
 
+    val currentTab = remember(currentRoute) {
+        if (currentRoute == null) null
+        else when {
+            currentRoute == "workout" || currentRoute == "active_workout" || currentRoute.startsWith("workout_summary") -> "workout"
+            currentRoute == "history" -> "history"
+            currentRoute == "exercises" -> "exercises"
+            currentRoute == "progress" -> "progress"
+            currentRoute == "settings" || currentRoute == "profile" || currentRoute == "sync_debug" -> "settings"
+            else -> null
+        }
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         snackbarHost = { SnackbarHost(viewModel.snackbarHostState) },
         bottomBar = {
-            // Hide bottom bar for active workout, welcome screen, or profile screen
-            if (currentRoute != "active_workout" && currentRoute != "welcome" && currentRoute != "profile" && currentRoute != "sync_debug" && authState !is AuthState.Initial) {
+            // Hide bottom bar for active workout or welcome screen
+            if (currentRoute != "active_workout" && currentRoute != "welcome" && authState !is AuthState.Initial) {
                 Column {
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
@@ -179,7 +191,7 @@ fun MainAppScreen(viewModel: StrengthViewModel) {
                         tonalElevation = 0.dp
                     ) {
                         navigationItems.forEach { item ->
-                            val isSelected = currentRoute == item.route
+                            val isSelected = currentTab == item.route
                             NavigationBarItem(
                                 icon = { Icon(item.icon, contentDescription = item.label) },
                                 label = { Text(item.label, style = MaterialTheme.typography.labelMedium, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium) },
@@ -192,10 +204,18 @@ fun MainAppScreen(viewModel: StrengthViewModel) {
                                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 ),
                                 onClick = {
-                                    if (currentRoute != item.route) {
-                                        navController.navigate(item.route) {
+                                    val targetRoute = item.route
+                                    if (currentTab == targetRoute) {
+                                        // Tap current tab while on child route -> return to that tab's root
+                                        if (currentRoute != targetRoute) {
+                                            navController.popBackStack(targetRoute, inclusive = false)
+                                        }
+                                    } else {
+                                        // Tap another tab -> restore state
+                                        navController.navigate(targetRoute) {
                                             popUpTo(navController.graph.startDestinationId) {
-                                                saveState = true
+                                                // Only save state if we are not leaving a transient post-workout summary screen
+                                                saveState = !currentRoute.orEmpty().startsWith("workout_summary")
                                             }
                                             launchSingleTop = true
                                             restoreState = true
@@ -278,6 +298,30 @@ fun MainAppScreen(viewModel: StrengthViewModel) {
                     viewModel = viewModel,
                     onNavigateBack = {
                         navController.popBackStack()
+                    },
+                    onNavigateToSummary = { completedId ->
+                        navController.navigate("workout_summary/$completedId") {
+                            // Pop active_workout off the back stack to avoid going back to it
+                            popUpTo("workout") { inclusive = false }
+                        }
+                    }
+                )
+            }
+            composable("workout_summary/{completedWorkoutId}") { backStackEntry ->
+                val workoutIdStr = backStackEntry.arguments?.getString("completedWorkoutId")
+                val workoutId = workoutIdStr?.toIntOrNull() ?: -1
+                WorkoutSummaryScreen(
+                    viewModel = viewModel,
+                    completedWorkoutId = workoutId,
+                    onNavigateToHistory = {
+                        navController.navigate("history") {
+                            popUpTo("workout") { inclusive = false }
+                        }
+                    },
+                    onNavigateToWorkouts = {
+                        navController.navigate("workout") {
+                            popUpTo("workout") { inclusive = true }
+                        }
                     }
                 )
             }

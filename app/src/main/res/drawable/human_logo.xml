@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    
+    <!-- Outer Hexagon Backdrop -->
+    <path
+        android:fillColor="#0D1B2A"
+        android:pathData="M100,5 L180,50 L180,150 L100,195 L20,150 L20,50 Z" />
+
+    <!-- Inner Metallic Accent Hexagon -->
+    <path
+        android:fillColor="#1B263B"
+        android:pathData="M100,15 L170,55 L170,145 L100,185 L30,145 L30,55 Z" />
+
+    <!-- Glowing Blue/Cyan Geometric Accent -->
+    <path
+        android:fillColor="#0072FF"
+        android:pathData="M100,25 L160,60 L160,140 L100,175 L40,140 L40,60 Z" />
+
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M100,35 L150,64 L150,136 L100,165 L50,136 L50,64 Z" />
+
+    <!-- Center Dumbbell Icon (Symbol of pure strength) -->
+    <!-- Dumbbell bar -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M60,95h80v10H60z" />
+    
+    <!-- Left Plate Large -->
+    <path
+        android:fillColor="#0D1B2A"
+        android:pathData="M50,75h10v50H50z" />
+    <!-- Left Plate Medium -->
+    <path
+        android:fillColor="#1B263B"
+        android:pathData="M40,80h10v40H40z" />
+    <!-- Left Plate Small -->
+    <path
+        android:fillColor="#0072FF"
+        android:pathData="M30,85h10v30H30z" />
+
+    <!-- Right Plate Large -->
+    <path
+        android:fillColor="#0D1B2A"
+        android:pathData="M140,75h10v50H140z" />
+    <!-- Right Plate Medium -->
+    <path
+        android:fillColor="#1B263B"
+        android:pathData="M150,80h10v40H150z" />
+    <!-- Right Plate Small -->
+    <path
+        android:fillColor="#0072FF"
+        android:pathData="M160,85h10v30H160z" />
+
+    <!-- Dynamic Speed Lightning Accent across dumbbell -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M110,65 L135,100 L115,100 L130,135 L80,95 L100,95 Z" />
+</vector>

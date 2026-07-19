@@ -41,8 +41,8 @@ class AuthRepository(
     private var firebaseAuth: FirebaseAuth? = null
 
     init {
-        Log.i(TAG, "Initializing AuthRepository. isFirebaseConfigured=${com.example.StrengthApplication.isFirebaseConfigured}")
-        if (com.example.StrengthApplication.isFirebaseConfigured) {
+        Log.i(TAG, "Initializing AuthRepository. isFirebaseConfigured=${com.example.HumanStrengthApplication.isFirebaseConfigured}")
+        if (com.example.HumanStrengthApplication.isFirebaseConfigured) {
             try {
                 Log.d(TAG, "Attempting to get FirebaseAuth instance...")
                 firebaseAuth = FirebaseAuth.getInstance()

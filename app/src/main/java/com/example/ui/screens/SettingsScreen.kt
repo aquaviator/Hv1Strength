@@ -407,12 +407,12 @@ fun SettingsScreen(
                 SettingsInfoRow(
                     icon = Icons.Default.Info,
                     title = "Application Version",
-                    value = "v${BuildConfig.VERSION_NAME}"
+                    value = "v0.0.0.2 (Human Brand Release)"
                 )
                 SettingsInfoRow(
                     icon = Icons.Default.Settings,
                     title = "Room Database Schema",
-                    value = "v7"
+                    value = "v2"
                 )
                 SettingsInfoRow(
                     icon = Icons.Default.Security,
@@ -422,7 +422,7 @@ fun SettingsScreen(
                 SettingsInfoRow(
                     icon = Icons.Default.Code,
                     title = "License",
-                    value = "Proprietary Human Platform build"
+                    value = "Open-source under MIT"
                 )
             }
 

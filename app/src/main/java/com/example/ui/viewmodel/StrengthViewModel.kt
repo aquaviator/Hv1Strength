@@ -48,6 +48,11 @@ data class ActiveSet(
     val notes: String? = null
 )
 
+sealed interface ActiveWorkoutEvent {
+    data class WorkoutCompleted(val workoutId: Long) : ActiveWorkoutEvent
+    data class ShowError(val message: String) : ActiveWorkoutEvent
+}
+
 data class StreakStats(
     val currentStreak: Int,
     val longestStreak: Int,
@@ -244,58 +249,102 @@ class StrengthViewModel(
         repository.getUserProfileFlow(userId)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    // Settings StateFlows
-    val isMetric = MutableStateFlow(prefs.getBoolean("is_metric", true))
-    val theme = MutableStateFlow(prefs.getString("theme", "system") ?: "system")
-    val keepScreenAwake = MutableStateFlow(prefs.getBoolean("keep_screen_awake", false))
-    val defaultRestTimerDuration = MutableStateFlow(prefs.getInt("default_rest_timer_duration", 90))
-    val soundOn = MutableStateFlow(prefs.getBoolean("sound_on", true))
-    val vibrationOn = MutableStateFlow(prefs.getBoolean("vibration_on", true))
-    val defaultWarmupSets = MutableStateFlow(prefs.getInt("default_warmup_sets", 0))
-    val autoCompleteBehavior = MutableStateFlow(prefs.getBoolean("auto_complete_behavior", true))
-    val autoScroll = MutableStateFlow(prefs.getBoolean("auto_scroll", true))
-    val timerPreferences = MutableStateFlow(prefs.getString("timer_preferences", "standard") ?: "standard")
+    // Settings StateFlows using modern database-backed UserPreferencesRepository
+    val preferencesRepository = UserPreferencesRepository(repository.dao)
+
+    val userPreferencesFlow = preferencesRepository.userPreferencesFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, UserPreferences())
+
+    val isMetric = preferencesRepository.userPreferencesFlow
+        .map { it.isMetric }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val theme = preferencesRepository.userPreferencesFlow
+        .map { it.theme }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "system")
+
+    val keepScreenAwake = preferencesRepository.userPreferencesFlow
+        .map { it.keepScreenAwake }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val defaultRestTimerDuration = preferencesRepository.userPreferencesFlow
+        .map { it.defaultRestTimerDuration }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 90)
+
+    val soundOn = preferencesRepository.userPreferencesFlow
+        .map { it.soundOn }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val vibrationOn = preferencesRepository.userPreferencesFlow
+        .map { it.vibrationOn }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val defaultWarmupSets = preferencesRepository.userPreferencesFlow
+        .map { it.defaultWarmupSets }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    val autoCompleteBehavior = preferencesRepository.userPreferencesFlow
+        .map { it.autoCompleteBehavior }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val autoScroll = preferencesRepository.userPreferencesFlow
+        .map { it.autoScroll }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val timerPreferences = preferencesRepository.userPreferencesFlow
+        .map { it.timerPreferences }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "standard")
 
     // Setters
     fun setMetric(value: Boolean) {
-        prefs.edit().putBoolean("is_metric", value).apply()
-        isMetric.value = value
+        viewModelScope.launch {
+            preferencesRepository.setMetric(value)
+        }
     }
     fun setTheme(value: String) {
-        prefs.edit().putString("theme", value).apply()
-        theme.value = value
+        viewModelScope.launch {
+            preferencesRepository.setTheme(value)
+        }
     }
     fun setKeepScreenAwake(value: Boolean) {
-        prefs.edit().putBoolean("keep_screen_awake", value).apply()
-        keepScreenAwake.value = value
+        viewModelScope.launch {
+            preferencesRepository.setKeepScreenAwake(value)
+        }
     }
     fun setDefaultRestTimerDuration(value: Int) {
-        prefs.edit().putInt("default_rest_timer_duration", value).apply()
-        defaultRestTimerDuration.value = value
+        viewModelScope.launch {
+            preferencesRepository.setDefaultRestTimerDuration(value)
+        }
     }
     fun setSoundOn(value: Boolean) {
-        prefs.edit().putBoolean("sound_on", value).apply()
-        soundOn.value = value
+        viewModelScope.launch {
+            preferencesRepository.setSoundOn(value)
+        }
     }
     fun setVibrationOn(value: Boolean) {
-        prefs.edit().putBoolean("vibration_on", value).apply()
-        vibrationOn.value = value
+        viewModelScope.launch {
+            preferencesRepository.setVibrationOn(value)
+        }
     }
     fun setDefaultWarmupSets(value: Int) {
-        prefs.edit().putInt("default_warmup_sets", value).apply()
-        defaultWarmupSets.value = value
+        viewModelScope.launch {
+            preferencesRepository.setDefaultWarmupSets(value)
+        }
     }
     fun setAutoCompleteBehavior(value: Boolean) {
-        prefs.edit().putBoolean("auto_complete_behavior", value).apply()
-        autoCompleteBehavior.value = value
+        viewModelScope.launch {
+            preferencesRepository.setAutoCompleteBehavior(value)
+        }
     }
     fun setAutoScroll(value: Boolean) {
-        prefs.edit().putBoolean("auto_scroll", value).apply()
-        autoScroll.value = value
+        viewModelScope.launch {
+            preferencesRepository.setAutoScroll(value)
+        }
     }
     fun setTimerPreferences(value: String) {
-        prefs.edit().putString("timer_preferences", value).apply()
-        timerPreferences.value = value
+        viewModelScope.launch {
+            preferencesRepository.setTimerPreferences(value)
+        }
     }
 
     // Favorite Exercises Support
@@ -368,6 +417,35 @@ class StrengthViewModel(
 
     fun resetRestTimer() {
         startRestTimer(_restTimerDuration.value)
+    }
+
+    fun startRestGuide(seconds: Int) {
+        startRestTimer(seconds)
+    }
+
+    fun addRestTime(seconds: Int) {
+        val remaining = _restTimeRemaining.value ?: return
+        val updated = (remaining + seconds).coerceAtMost(600)
+        _restTimeRemaining.value = updated
+        _restTimerDuration.value = updated
+    }
+
+    fun reduceRestTime(seconds: Int) {
+        val remaining = _restTimeRemaining.value ?: return
+        val updated = (remaining - seconds).coerceAtLeast(0)
+        _restTimeRemaining.value = updated
+        _restTimerDuration.value = updated
+        if (updated == 0) {
+            skipRestTimer()
+        }
+    }
+
+    fun skipRestGuide() {
+        skipRestTimer()
+    }
+
+    fun clearRestGuide() {
+        skipRestTimer()
     }
 
     private fun triggerRestFinishedFeedback() {
@@ -633,6 +711,15 @@ class StrengthViewModel(
     private val _activeWorkoutState = MutableStateFlow<ActiveWorkoutState?>(null)
     val activeWorkoutState: StateFlow<ActiveWorkoutState?> = _activeWorkoutState.asStateFlow()
 
+    private val _isCompletingWorkout = MutableStateFlow(false)
+    val isCompletingWorkout = _isCompletingWorkout.asStateFlow()
+
+    private val _navigateToActiveWorkoutEvent = MutableSharedFlow<Unit>(replay = 0)
+    val navigateToActiveWorkoutEvent = _navigateToActiveWorkoutEvent.asSharedFlow()
+
+    private val _activeWorkoutEvents = MutableSharedFlow<ActiveWorkoutEvent>()
+    val activeWorkoutEvents = _activeWorkoutEvents.asSharedFlow()
+
     // Completed sets lookup cache (Exercise ID to completed sets for progress screen)
     fun getCompletedSetsForExercise(exerciseId: String): Flow<List<LoggedSet>> {
         return repository.getCompletedSetsForExercise(exerciseId)
@@ -641,6 +728,29 @@ class StrengthViewModel(
     // Get logged sets for a workout session
     fun getSetsForSession(sessionId: Int): Flow<List<LoggedSet>> {
         return repository.getSetsForSession(sessionId)
+    }
+
+    fun getEnrichedSession(sessionId: Int): Flow<EnrichedSession?> {
+        return combine(
+            sessions,
+            allLoggedSets,
+            exercises
+        ) { sessionsList, setsList, exercisesList ->
+            val session = sessionsList.find { it.id == sessionId } ?: return@combine null
+            val sessionSets = setsList.filter { it.sessionId == sessionId }
+            val exercisesMap = exercisesList.associateBy { it.id }
+            val volume = sessionSets.filter { it.isCompleted }.sumOf { (it.weight * it.reps).toDouble() }.toFloat()
+            val durationMs = session.endTime - session.startTime
+            val durationMin = kotlin.math.max(1L, durationMs / 60000)
+            val exerciseNames = sessionSets.mapNotNull { exercisesMap[it.exerciseId]?.name }.distinct()
+            EnrichedSession(
+                session = session,
+                sets = sessionSets,
+                totalVolume = volume,
+                durationMinutes = durationMin,
+                exerciseNames = exerciseNames
+            )
+        }
     }
 
     // Active Workout Operations
@@ -748,7 +858,19 @@ class StrengthViewModel(
                 sets = activeSetsMap,
                 exerciseMetadata = exerciseMetadata
             )
+            _navigateToActiveWorkoutEvent.emit(Unit)
         }
+    }
+
+    fun renameActiveWorkout(newName: String) {
+        val currentState = _activeWorkoutState.value ?: return
+        val finalName = if (newName.isBlank()) {
+            val dateStr = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(java.util.Date())
+            "Strength Session - $dateStr"
+        } else {
+            newName
+        }
+        _activeWorkoutState.value = currentState.copy(templateName = finalName)
     }
 
     fun addExerciseToActiveWorkout(exercise: Exercise) {
@@ -916,79 +1038,132 @@ class StrengthViewModel(
 
         // Automatically start rest timer if newly checked
         if (isCompleted && !oldSet.isCompleted) {
-            val customRest = currentState.exerciseMetadata[exerciseId]?.restSeconds
-            startRestTimer(customRest ?: defaultRestTimerDuration.value)
+            val groupId = currentState.exerciseMetadata[exerciseId]?.supersetGroupId
+            val shouldStartTimer = if (!groupId.isNullOrEmpty()) {
+                // It's a superset. Check if all other exercises in this superset have setIndex completed.
+                val supersetExercises = currentState.exercises.filter { currentState.exerciseMetadata[it.id]?.supersetGroupId == groupId }
+                supersetExercises.all { ex ->
+                    val sets = if (ex.id == exerciseId) updatedSetsList else (currentState.sets[ex.id] ?: emptyList())
+                    if (setIndex in sets.indices) {
+                        sets[setIndex].isCompleted
+                    } else {
+                        true
+                    }
+                }
+            } else {
+                true // Sequential exercise always starts the timer
+            }
+
+            if (shouldStartTimer) {
+                val customRest = currentState.exerciseMetadata[exerciseId]?.restSeconds
+                startRestTimer(customRest ?: defaultRestTimerDuration.value)
+            }
         }
     }
 
     fun finishActiveWorkout() {
-        val currentState = _activeWorkoutState.value ?: return
+        if (_isCompletingWorkout.value) {
+            android.util.Log.d("StrengthViewModel", "[COMPLETION] Duplicate workout completion request ignored.")
+            return
+        }
+        val currentState = _activeWorkoutState.value
+        if (currentState == null) {
+            android.util.Log.e("StrengthViewModel", "[COMPLETION] Cannot finish workout: active workout state is null.")
+            return
+        }
+        
+        android.util.Log.d("StrengthViewModel", "[COMPLETION] Workout completion requested for templateName: ${currentState.templateName}")
+        _isCompletingWorkout.value = true
+
         viewModelScope.launch {
-            val endTime = System.currentTimeMillis()
-            val session = WorkoutSession(
-                templateId = currentState.templateId,
-                templateName = currentState.templateName,
-                startTime = currentState.startTime,
-                endTime = endTime,
-                userId = activeUserId.value
-            )
+            try {
+                val endTime = System.currentTimeMillis()
+                val session = WorkoutSession(
+                    templateId = currentState.templateId,
+                    templateName = currentState.templateName,
+                    startTime = currentState.startTime,
+                    endTime = endTime,
+                    userId = activeUserId.value
+                )
 
-            val sessionId = repository.insertSession(session).toInt()
+                android.util.Log.d("StrengthViewModel", "[COMPLETION] Final set persistence started...")
+                val sessionId = repository.insertSession(session).toInt()
 
-            val loggedSets = mutableListOf<LoggedSet>()
-            for (exercise in currentState.exercises) {
-                val setsList = currentState.sets[exercise.id] ?: emptyList()
-                for (set in setsList) {
-                    val shouldSave = set.isCompleted || (setsList.none { it.isCompleted } && set.weight > 0)
-                    if (shouldSave) {
-                        loggedSets.add(
+                val loggedSets = mutableListOf<LoggedSet>()
+                for (exercise in currentState.exercises) {
+                    val setsList = currentState.sets[exercise.id] ?: emptyList()
+                    for (set in setsList) {
+                        val shouldSave = set.isCompleted || (setsList.none { it.isCompleted } && set.weight > 0)
+                        if (shouldSave) {
+                            loggedSets.add(
+                                LoggedSet(
+                                    sessionId = sessionId,
+                                    exerciseId = exercise.id,
+                                    setNumber = set.setNumber,
+                                    reps = set.reps,
+                                    weight = set.weight,
+                                    isCompleted = true,
+                                    rpe = set.rpe,
+                                    actualDuration = set.actualDuration,
+                                    actualDistance = set.actualDistance,
+                                    setType = set.setType,
+                                    targetRepsMin = set.targetRepsMin,
+                                    targetRepsMax = set.targetRepsMax,
+                                    targetWeight = set.targetWeight,
+                                    targetRpe = set.targetRpe,
+                                    targetDuration = set.targetDuration,
+                                    targetDistance = set.targetDistance,
+                                    notes = set.notes
+                                )
+                            )
+                        }
+                    }
+                }
+
+                if (loggedSets.isNotEmpty()) {
+                    repository.insertLoggedSets(loggedSets)
+                } else {
+                    currentState.exercises.firstOrNull()?.let { firstExercise ->
+                        repository.insertLoggedSet(
                             LoggedSet(
                                 sessionId = sessionId,
-                                exerciseId = exercise.id,
-                                setNumber = set.setNumber,
-                                reps = set.reps,
-                                weight = set.weight,
-                                isCompleted = true,
-                                rpe = set.rpe,
-                                actualDuration = set.actualDuration,
-                                actualDistance = set.actualDistance,
-                                setType = set.setType,
-                                targetRepsMin = set.targetRepsMin,
-                                targetRepsMax = set.targetRepsMax,
-                                targetWeight = set.targetWeight,
-                                targetRpe = set.targetRpe,
-                                targetDuration = set.targetDuration,
-                                targetDistance = set.targetDistance,
-                                notes = set.notes
+                                exerciseId = firstExercise.id,
+                                setNumber = 1,
+                                reps = 10,
+                                weight = 0f,
+                                isCompleted = true
                             )
                         )
                     }
                 }
-            }
 
-            if (loggedSets.isNotEmpty()) {
-                repository.insertLoggedSets(loggedSets)
-            } else {
-                currentState.exercises.firstOrNull()?.let { firstExercise ->
-                    repository.insertLoggedSet(
-                        LoggedSet(
-                            sessionId = sessionId,
-                            exerciseId = firstExercise.id,
-                            setNumber = 1,
-                            reps = 10,
-                            weight = 0f,
-                            isCompleted = true
-                        )
-                    )
-                }
-            }
+                android.util.Log.d("StrengthViewModel", "[COMPLETION] Workout persistence succeeded. Assigned Session ID: $sessionId")
+                
+                // Clear the rest guide/timer
+                clearRestGuide()
+                android.util.Log.d("StrengthViewModel", "[COMPLETION] Rest guide cleared.")
 
-            _activeWorkoutState.value = null
+                // Clear the active workout state FIRST to avoid any racing during UI recomposition/navigation
+                _activeWorkoutState.value = null
+                android.util.Log.d("StrengthViewModel", "[COMPLETION] Active workout state cleared.")
+
+                // Emit navigation event
+                _activeWorkoutEvents.emit(ActiveWorkoutEvent.WorkoutCompleted(sessionId.toLong()))
+                android.util.Log.d("StrengthViewModel", "[COMPLETION] Navigation event emitted with ID: $sessionId")
+
+            } catch (e: Exception) {
+                android.util.Log.e("StrengthViewModel", "[COMPLETION] Workout completion failed!", e)
+                _activeWorkoutEvents.emit(ActiveWorkoutEvent.ShowError(e.localizedMessage ?: "Unknown database error occurred"))
+            } finally {
+                _isCompletingWorkout.value = false
+            }
         }
     }
 
     fun cancelActiveWorkout() {
+        android.util.Log.d("StrengthViewModel", "[COMPLETION] Cancelling active workout.")
         _activeWorkoutState.value = null
+        clearRestGuide()
     }
 
 

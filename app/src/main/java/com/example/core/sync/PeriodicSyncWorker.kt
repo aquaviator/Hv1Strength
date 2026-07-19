@@ -12,7 +12,7 @@ class PeriodicSyncWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
-        if (!com.example.StrengthApplication.isFirebaseConfigured) {
+        if (!com.example.HumanStrengthApplication.isFirebaseConfigured) {
             return Result.success()
         }
         val db = StrengthDatabase.getDatabase(

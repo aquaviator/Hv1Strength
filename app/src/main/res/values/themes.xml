@@ -2,4 +2,5 @@
 <resources>
 
     <style name="Theme.MyApplication" parent="android:Theme.DeviceDefault.NoActionBar" />
+    <style name="Theme.HumanStrength" parent="Theme.MyApplication" />
 </resources>

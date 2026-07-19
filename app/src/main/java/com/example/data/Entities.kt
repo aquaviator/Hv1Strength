@@ -281,3 +281,18 @@ data class CommandQueueEntity(
     val originDeviceId: String = "",
     val nextRetryAt: Long? = null
 )
+
+@Entity(tableName = "user_preferences")
+data class UserPreferences(
+    @PrimaryKey val id: String = "default",
+    val isMetric: Boolean = true,
+    val theme: String = "system",
+    val keepScreenAwake: Boolean = false,
+    val defaultRestTimerDuration: Int = 90,
+    val soundOn: Boolean = true,
+    val vibrationOn: Boolean = true,
+    val defaultWarmupSets: Int = 0,
+    val autoCompleteBehavior: Boolean = true,
+    val autoScroll: Boolean = true,
+    val timerPreferences: String = "standard"
+)

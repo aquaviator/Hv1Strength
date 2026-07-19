@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Human v1 - Strength</string>
+    <string name="attribution_strength_tracker">Human v1 - Strength Tracker</string>
+    <string name="core_app_attribution_label">Human v1 - Strength Tracker</string>
 </resources>

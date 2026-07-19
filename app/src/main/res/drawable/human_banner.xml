@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    
+    <!-- Deep Cosmic Blue Background -->
+    <path
+        android:fillColor="#0B0F19"
+        android:pathData="M0,0h320v180H0z" />
+
+    <!-- Abstract Cyber-Grid/Diagonal Lines representing progress -->
+    <path
+        android:fillColor="#121A2E"
+        android:pathData="M-20,180 L180,-20 L220,-20 L20,180 Z" />
+    <path
+        android:fillColor="#1E294B"
+        android:pathData="M30,180 L230,-20 L260,-20 L60,180 Z" />
+    <path
+        android:fillColor="#0052D4"
+        android:pathData="M100,180 L300,-20 L315,-20 L115,180 Z" />
+    <path
+        android:fillColor="#0072FF"
+        android:pathData="M140,180 L320,0 L320,15 L155,180 Z" />
+
+    <!-- Large glowing abstract power circle -->
+    <path
+        android:fillColor="#0D2B45"
+        android:pathData="M160,90m-60,0a60,60 0 1,1 120,0a60,60 0 1,1 -120,0" />
+    <path
+        android:fillColor="#103F68"
+        android:pathData="M160,90m-50,0a50,50 0 1,1 100,0a50,50 0 1,1 -100,0" />
+
+    <!-- Tech Mesh Dots (decorative background pattern) -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M10,20h2v2h-2z M20,20h2v2h-2z M30,20h2v2h-2z M40,20h2v2h-2z M10,30h2v2h-2z M20,30h2v2h-2z M30,30h2v2h-2z M40,30h2v2h-2z" />
+
+    <!-- Stylized Hero Athlete Silhouette pulling a heavy deadlift -->
+    <!-- Head -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M160,54c2.2,0 4,-1.8 4,-4s-1.8,-4 -4,-4s-4,1.8 -4,4s1.8,4 4,4z" />
+    <!-- Barbell weights -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M80,95h12v18H80z M70,98h10v12H70z M228,95h12v18h-12z M240,98h10v12h-10z" />
+    <!-- Barbell Shaft -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M92,103h136v2H92z" />
+    <!-- Core Athlete Body (back, legs, arms) bent in pull position -->
+    <!-- Torso -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M150,58l20,12l-15,15l-15,-8z" />
+    <!-- Arms holding bar -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M152,60l-12,32l-3,12h4l4,-12l11,-32z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M168,64l12,28l3,12h-4l-4,-12l-11,-28z" />
+    <!-- Legs in strong stance -->
+    <path
+        android:fillColor="#0072FF"
+        android:pathData="M140,77l15,48h-8l-12,-44z" />
+    <path
+        android:fillColor="#0072FF"
+        android:pathData="M165,81l12,44h-8l-9,-40z" />
+    <!-- Ground platform shadow -->
+    <path
+        android:fillColor="#1B263B"
+        android:pathData="M50,135h220v6H50z" />
+
+    <!-- App Title overlay styling -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M10,155h300v2H10z" />
+</vector>

@@ -407,4 +407,17 @@ interface StrengthDao {
 
     @Query("UPDATE command_queue SET status = 'POISONED', errorMessage = :error WHERE id = :id")
     suspend fun markCommandPoisoned(id: Int, error: String)
+
+    // ==========================================
+    // USER PREFERENCES SUPPORT
+    // ==========================================
+
+    @Query("SELECT * FROM user_preferences WHERE id = 'default' LIMIT 1")
+    fun getUserPreferencesFlow(): Flow<UserPreferences?>
+
+    @Query("SELECT * FROM user_preferences WHERE id = 'default' LIMIT 1")
+    suspend fun getUserPreferences(): UserPreferences?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertUserPreferences(preferences: UserPreferences)
 }

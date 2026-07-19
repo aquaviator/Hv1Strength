@@ -49,7 +49,7 @@ class SyncEngineImpl(
     private val pendingDependencies = ConcurrentHashMap<String, CopyOnWriteArrayList<DeferredChild>>()
 
     init {
-        if (com.example.StrengthApplication.isFirebaseConfigured) {
+        if (com.example.HumanStrengthApplication.isFirebaseConfigured) {
             try {
                 firestore = FirebaseFirestore.getInstance()
             } catch (e: Exception) {
