@@ -420,7 +420,7 @@ fun CurrentExerciseHero(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        "PREVIOUS BEST",
+                        "PREVIOUS",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
@@ -1063,7 +1063,7 @@ fun CompleteSetButton(
         ) {
             Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(24.dp))
             Text(
-                text = "LOG SET",
+                text = "COMPLETE SET",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 1.sp

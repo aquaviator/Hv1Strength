@@ -401,33 +401,37 @@ fun ActiveWorkoutScreen(
                             // Massive Complete/Log Button (with haptic feedback)
                             val haptic = LocalHapticFeedback.current
                             val isCurrentSetCompleted = currentActiveFlatSet.set.isCompleted
+                            var isSubmittingSet by remember(currentActiveFlatSet.exercise.id, currentActiveFlatSet.setIndex) { mutableStateOf(false) }
 
                             CompleteSetButton(
                                 onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    viewModel.updateSet(
-                                        exerciseId = activeEx.id,
-                                        setIndex = currentSetIndex,
-                                        reps = activeReps,
-                                        weight = activeWeight,
-                                        isCompleted = true,
-                                        rpe = activeRpe,
-                                        actualDuration = currentActiveFlatSet.set.actualDuration,
-                                        actualDistance = currentActiveFlatSet.set.actualDistance,
-                                        setType = currentActiveFlatSet.set.setType,
-                                        targetRepsMin = currentActiveFlatSet.set.targetRepsMin,
-                                        targetRepsMax = currentActiveFlatSet.set.targetRepsMax,
-                                        targetWeight = currentActiveFlatSet.set.targetWeight,
-                                        targetRpe = currentActiveFlatSet.set.targetRpe,
-                                        targetDuration = currentActiveFlatSet.set.targetDuration,
-                                        targetDistance = currentActiveFlatSet.set.targetDistance,
-                                        tempo = currentActiveFlatSet.set.tempo,
-                                        notes = currentActiveFlatSet.set.notes
-                                    )
-                                    // Reset focus override to ensure it tracks the next global set automatically
-                                    focusedSetIndexOverride = null
+                                    if (!isSubmittingSet) {
+                                        isSubmittingSet = true
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        viewModel.updateSet(
+                                            exerciseId = activeEx.id,
+                                            setIndex = currentSetIndex,
+                                            reps = activeReps,
+                                            weight = activeWeight,
+                                            isCompleted = true,
+                                            rpe = activeRpe,
+                                            actualDuration = currentActiveFlatSet.set.actualDuration,
+                                            actualDistance = currentActiveFlatSet.set.actualDistance,
+                                            setType = currentActiveFlatSet.set.setType,
+                                            targetRepsMin = currentActiveFlatSet.set.targetRepsMin,
+                                            targetRepsMax = currentActiveFlatSet.set.targetRepsMax,
+                                            targetWeight = currentActiveFlatSet.set.targetWeight,
+                                            targetRpe = currentActiveFlatSet.set.targetRpe,
+                                            targetDuration = currentActiveFlatSet.set.targetDuration,
+                                            targetDistance = currentActiveFlatSet.set.targetDistance,
+                                            tempo = currentActiveFlatSet.set.tempo,
+                                            notes = currentActiveFlatSet.set.notes
+                                        )
+                                        // Reset focus override to ensure it tracks the next global set automatically
+                                        focusedSetIndexOverride = null
+                                    }
                                 },
-                                enabled = true
+                                enabled = !isSubmittingSet
                             )
                         }
                     }
