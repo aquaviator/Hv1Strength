@@ -149,9 +149,11 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainAppScreen(viewModel: StrengthViewModel) {
+fun MainAppScreen(
+    viewModel: StrengthViewModel,
+    navController: androidx.navigation.NavHostController = rememberNavController()
+) {
     val authState by viewModel.authState.collectAsState()
-    val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
