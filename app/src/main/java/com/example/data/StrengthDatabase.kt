@@ -345,7 +345,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         val gId = genUuid("measurement")
                         db.execSQL(
                             "UPDATE body_weight SET globalId = ?, humanUserId = ?, createdAt = ?, updatedAt = ? WHERE id = ?",
-                            arrayOf(gId, hId, date, date, id)
+                            arrayOf<Any>(gId, hId, date, date, id)
                         )
                     }
                 } finally {
@@ -368,7 +368,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         val gId = genUuid("measurement")
                         db.execSQL(
                             "UPDATE tape_measurement SET globalId = ?, humanUserId = ?, createdAt = ?, updatedAt = ? WHERE id = ?",
-                            arrayOf(gId, hId, date, date, id)
+                            arrayOf<Any>(gId, hId, date, date, id)
                         )
                     }
                 } finally {
@@ -410,7 +410,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         val gId = genUuid("template")
                         db.execSQL(
                             "UPDATE workout_template SET globalId = ?, humanUserId = ?, createdAt = ?, updatedAt = ? WHERE id = ?",
-                            arrayOf(gId, hId, now, now, id)
+                            arrayOf<Any>(gId, hId, now, now, id)
                         )
                     }
                 } finally {
@@ -445,7 +445,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         val gId = genUuid("template_exercise")
                         db.execSQL(
                             "UPDATE workout_template_exercise SET globalId = ?, humanUserId = ? WHERE id = ?",
-                            arrayOf(gId, parentHumanId, id)
+                            arrayOf<Any>(gId, parentHumanId, id)
                         )
                     }
                 } finally {
@@ -480,7 +480,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         val gId = genUuid("template_set")
                         db.execSQL(
                             "UPDATE workout_template_set SET globalId = ?, humanUserId = ? WHERE id = ?",
-                            arrayOf(gId, parentHumanId, id)
+                            arrayOf<Any>(gId, parentHumanId, id)
                         )
                     }
                 } finally {
@@ -503,7 +503,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         val gId = genUuid("session")
                         db.execSQL(
                             "UPDATE workout_session SET globalId = ?, humanUserId = ?, createdAt = ?, updatedAt = ? WHERE id = ?",
-                            arrayOf(gId, hId, startTime, startTime, id)
+                            arrayOf<Any>(gId, hId, startTime, startTime, id)
                         )
                     }
                 } finally {
@@ -538,7 +538,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         val gId = genUuid("logged_set")
                         db.execSQL(
                             "UPDATE logged_set SET globalId = ?, humanUserId = ?, createdAt = ?, updatedAt = ? WHERE id = ?",
-                            arrayOf(gId, parentHumanId, parentTime, parentTime, id)
+                            arrayOf<Any>(gId, parentHumanId, parentTime, parentTime, id)
                         )
                     }
                 } finally {
