@@ -649,6 +649,7 @@ fun ExercisePrescriptionCard(
                 category = exerciseObj.category,
                 labelTag = labelTag,
                 isExpanded = isExpanded,
+                onToggleExpand = onToggleExpand,
                 onDelete = onDelete,
                 onMoveUp = onMoveUp,
                 onMoveDown = onMoveDown,
@@ -704,12 +705,6 @@ fun ExercisePrescriptionCard(
                                 )
                             }
                         }
-                        Icon(
-                            imageVector = Icons.Default.ExpandMore,
-                            contentDescription = "Expand",
-                            tint = SlateMutedText,
-                            modifier = Modifier.size(16.dp)
-                        )
                     }
                 }
             } else {
@@ -835,6 +830,7 @@ fun ExerciseCardHeader(
     category: String,
     labelTag: String?,
     isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
     onDelete: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
@@ -885,6 +881,33 @@ fun ExerciseCardHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
+            // Unmistakable Expand/Collapse Control in the Header!
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .minimumInteractiveComponentSize() // Ensures at least 48dp x 48dp touch target
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(
+                        onClick = onToggleExpand,
+                        onClickLabel = if (isExpanded) "Collapse $exerciseName" else "Expand $exerciseName"
+                    )
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .testTag("expand_collapse_control_${exerciseName.replace(" ", "_")}")
+            ) {
+                Text(
+                    text = if (isExpanded) "Collapse" else "Expand",
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                    color = KineticAccent,
+                    fontWeight = FontWeight.Bold
+                )
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (isExpanded) "Collapse $exerciseName" else "Expand $exerciseName",
+                    tint = KineticAccent,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
             if (isExpanded) {
                 // Large move up/down icons inside the expanded state
                 IconButton(onClick = onMoveUp, enabled = canMoveUp) {

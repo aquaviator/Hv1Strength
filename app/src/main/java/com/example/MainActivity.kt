@@ -213,7 +213,7 @@ fun MainAppScreen(viewModel: StrengthViewModel) {
                                     } else {
                                         // Tap another tab -> restore state
                                         navController.navigate(targetRoute) {
-                                            popUpTo(navController.graph.startDestinationId) {
+                                            popUpTo("workout") {
                                                 // Only save state if we are not leaving a transient post-workout summary screen
                                                 saveState = !currentRoute.orEmpty().startsWith("workout_summary")
                                             }
