@@ -3,6 +3,7 @@ package com.example
 import android.content.Context
 import android.os.Looper
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -21,6 +22,7 @@ import com.example.ui.components.ExercisePrescriptionCard
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.StrengthViewModel
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -33,7 +35,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+@Config(sdk = [36], qualifiers = "w480dp-h1500dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class NavigationAndIndicatorRegressionTest {
 
@@ -66,6 +68,8 @@ class NavigationAndIndicatorRegressionTest {
             HumanUserIdGenerator.appContext = context
             val db = Room.inMemoryDatabaseBuilder(context, StrengthDatabase::class.java)
                 .allowMainThreadQueries()
+                .setQueryExecutor { it.run() }
+                .setTransactionExecutor { it.run() }
                 .build()
             database = db
             val repo = StrengthRepository(db.strengthDao(), context)
@@ -215,6 +219,103 @@ class NavigationAndIndicatorRegressionTest {
         // Verify that the back-stack only has 1 instance of "workout" (or has launchSingleTop behavior working)
         val entriesCount = navController.currentBackStack.value.count { it.destination.route == "workout" }
         assertEquals(1, entriesCount)
+    }
+
+    @Test
+    fun testNavigation_reproduceWorkoutSummaryToHistoryToWorkout() {
+        val vm = getLazyViewModel()
+        runBlocking {
+            vm.authViewModel.authRepository.signInAnonymously()
+        }
+        waitUntil { vm.authState.value is AuthState.Offline }
+
+        lateinit var navController: NavHostController
+
+        composeTestRule.setContent {
+            MyApplicationTheme {
+                navController = rememberNavController()
+                Box(modifier = Modifier.width(1000.dp).height(2000.dp)) {
+                    MainAppScreen(viewModel = vm, navController = navController)
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // 1. Start an active workout
+        vm.activeWorkoutViewModel.startWorkout(null)
+        composeTestRule.waitForIdle()
+        waitUntil { vm.activeWorkoutViewModel.activeWorkoutState.value != null }
+        assertEquals("active_workout", navController.currentDestination?.route)
+
+        // Add an exercise to active workout to ensure it is populated
+        val ex = Exercise("curls", "Bicep Curls", "Arms")
+        vm.activeWorkoutViewModel.addExerciseToActiveWorkout(ex)
+        composeTestRule.waitForIdle()
+        waitUntil { vm.activeWorkoutViewModel.activeWorkoutState.value?.exercises?.size == 1 }
+
+        // 2. Finish the workout
+        vm.finishActiveWorkout()
+        composeTestRule.waitForIdle()
+
+        // It should navigate to workout_summary/{completedWorkoutId}
+        waitUntil { navController.currentDestination?.route?.startsWith("workout_summary/") == true }
+        composeTestRule.waitForIdle()
+
+        // DIAGNOSTIC DIRECT FILE WRITE
+        try {
+            val nodes = composeTestRule.onAllNodes(isRoot().or(isRoot().not())).fetchSemanticsNodes()
+            val tags = mutableListOf<String>()
+            val texts = mutableListOf<String>()
+            val descs = mutableListOf<String>()
+            for (node in nodes) {
+                for (entry in node.config) {
+                    val keyName = entry.key.name
+                    val value = entry.value
+                    if (keyName == "TestTag" && value is String) {
+                        tags.add(value)
+                    } else if (keyName == "Text" && value is List<*>) {
+                        texts.add(value.joinToString())
+                    } else if (keyName == "ContentDescription" && value is List<*>) {
+                        descs.add(value.joinToString())
+                    }
+                }
+            }
+            val message = "STATE: error=${tags.contains("summary_error_card")}, loading=${tags.contains("summary_loading_indicator")}, success=${tags.contains("summary_view_history_button")}\nALL TAGS: $tags\nTEXTS: $texts\nDESCS: $descs"
+            java.io.File("diagnostic.txt").writeText(message)
+        } catch (e: Exception) {
+            java.io.File("diagnostic.txt").writeText("DIAGNOSTIC FAILED: ${e.message}")
+        }
+
+        // Wait for the asynchronous database loading to complete and show the summary UI
+        composeTestRule.waitUntil(5000) {
+            composeTestRule.onAllNodesWithTag("summary_hero_card").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        // 3. Scroll to and click "View History" button on the workout summary screen
+        composeTestRule.onNodeWithTag("summary_view_history_button").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+
+        // Assert current destination is history
+        assertEquals("history", navController.currentDestination?.route)
+
+        // Record backstack details (before click)
+        val routeSequenceBefore = navController.currentBackStack.value.map { it?.destination?.route }
+        val msgBefore = "BACKSTACK BEFORE TAB CLICK: $routeSequenceBefore"
+        println(msgBefore)
+        java.io.File("diagnostic.txt").appendText("\n" + msgBefore)
+
+        // 4. Tap the Workout item in bottom navigation
+        composeTestRule.onNodeWithContentDescription("Workout", useUnmergedTree = true).performClick()
+        composeTestRule.waitForIdle()
+
+        // Record backstack details (after click)
+        val routeSequenceAfter = navController.currentBackStack.value.map { it?.destination?.route }
+        val msgAfter = "BACKSTACK AFTER TAB CLICK: $routeSequenceAfter"
+        println(msgAfter)
+        java.io.File("diagnostic.txt").appendText("\n" + msgAfter)
+
+        // Assert destination is workout
+        assertEquals("workout", navController.currentDestination?.route)
     }
 
     @Test

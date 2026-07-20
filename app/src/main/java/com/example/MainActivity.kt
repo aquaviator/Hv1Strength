@@ -177,6 +177,45 @@ fun MainAppScreen(
         }
     }
 
+    val navigateToTab = remember(navController, currentRoute, currentTab) {
+        { targetRoute: String ->
+            val hasWorkoutInBackStack = navController.currentBackStack.value.any { it.destination.route == "workout" }
+            if (currentTab == targetRoute) {
+                // Tap current tab while on child route -> return to that tab's root
+                if (currentRoute != targetRoute) {
+                    if (targetRoute == "workout" && hasWorkoutInBackStack) {
+                        navController.popBackStack("workout", inclusive = false)
+                    } else {
+                        try {
+                            navController.popBackStack(targetRoute, inclusive = false)
+                        } catch (e: Exception) {
+                            navController.navigate(targetRoute) {
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Tap another tab -> restore state
+                if (targetRoute == "workout" && hasWorkoutInBackStack) {
+                    navController.popBackStack("workout", inclusive = false)
+                } else {
+                    navController.navigate(targetRoute) {
+                        if (hasWorkoutInBackStack) {
+                            popUpTo("workout") {
+                                // Only save state if we are not leaving a transient post-workout summary screen
+                                saveState = !currentRoute.orEmpty().startsWith("workout_summary")
+                            }
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            }
+        }
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         snackbarHost = { SnackbarHost(viewModel.snackbarHostState) },
@@ -206,23 +245,7 @@ fun MainAppScreen(
                                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 ),
                                 onClick = {
-                                    val targetRoute = item.route
-                                    if (currentTab == targetRoute) {
-                                        // Tap current tab while on child route -> return to that tab's root
-                                        if (currentRoute != targetRoute) {
-                                            navController.popBackStack(targetRoute, inclusive = false)
-                                        }
-                                    } else {
-                                        // Tap another tab -> restore state
-                                        navController.navigate(targetRoute) {
-                                            popUpTo("workout") {
-                                                // Only save state if we are not leaving a transient post-workout summary screen
-                                                saveState = !currentRoute.orEmpty().startsWith("workout_summary")
-                                            }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    }
+                                    navigateToTab(item.route)
                                 }
                             )
                         }
@@ -316,14 +339,10 @@ fun MainAppScreen(
                     viewModel = viewModel,
                     completedWorkoutId = workoutId,
                     onNavigateToHistory = {
-                        navController.navigate("history") {
-                            popUpTo("workout") { inclusive = false }
-                        }
+                        navigateToTab("history")
                     },
                     onNavigateToWorkouts = {
-                        navController.navigate("workout") {
-                            popUpTo("workout") { inclusive = true }
-                        }
+                        navigateToTab("workout")
                     }
                 )
             }
