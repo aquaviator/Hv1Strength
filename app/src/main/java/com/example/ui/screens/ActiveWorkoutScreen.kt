@@ -202,38 +202,8 @@ fun ActiveWorkoutScreen(
             var nextExpanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
 
             // Authorization: derived authoritative ordered workout structures (Superset round-robin interleaved)
-            val flatSets = remember(activeWorkout) {
-                val list = mutableListOf<FlatSet>()
-                val processedGroups = mutableSetOf<String>()
-                
-                for (exercise in activeWorkout.exercises) {
-                    val groupId = activeWorkout.exerciseMetadata[exercise.id]?.supersetGroupId
-                    if (groupId.isNullOrEmpty()) {
-                        // Normal sequential exercise
-                        val setsList = activeWorkout.sets[exercise.id] ?: emptyList()
-                        setsList.forEachIndexed { index, set ->
-                            list.add(FlatSet(exercise, index, set))
-                        }
-                    } else {
-                        // Part of a superset group
-                        if (groupId !in processedGroups) {
-                            processedGroups.add(groupId)
-                            val groupExercises = activeWorkout.exercises.filter { activeWorkout.exerciseMetadata[it.id]?.supersetGroupId == groupId }
-                            val maxSets = groupExercises.maxOfOrNull { (activeWorkout.sets[it.id] ?: emptyList()).size } ?: 0
-                            for (setIdx in 0 until maxSets) {
-                                for (groupEx in groupExercises) {
-                                    val setsList = activeWorkout.sets[groupEx.id] ?: emptyList()
-                                    if (setIdx in setsList.indices) {
-                                        list.add(FlatSet(groupEx, setIdx, setsList[setIdx]))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                list
-            }
-
+            val flatSets by viewModel.executionQueue.collectAsState()
+ 
             // The active set is the first valid incomplete set
             val activeFlatSet = flatSets.firstOrNull { !it.set.isCompleted }
 

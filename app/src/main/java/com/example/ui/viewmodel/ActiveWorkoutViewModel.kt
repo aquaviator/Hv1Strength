@@ -36,6 +36,17 @@ class ActiveWorkoutViewModel(
     private val _activeWorkoutState = MutableStateFlow<ActiveWorkoutState?>(null)
     val activeWorkoutState: StateFlow<ActiveWorkoutState?> = _activeWorkoutState.asStateFlow()
 
+    val executionQueue: StateFlow<List<WorkoutStep>> = _activeWorkoutState
+        .map { state ->
+            if (state == null) emptyList()
+            else WorkoutExecutionQueue.generateQueue(state.exercises, state.sets, state.exerciseMetadata)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = emptyList()
+        )
+
     private val _workoutRecoveryState = MutableStateFlow<WorkoutRecoveryState>(WorkoutRecoveryState.Checking)
     val workoutRecoveryState: StateFlow<WorkoutRecoveryState> = _workoutRecoveryState.asStateFlow()
 
@@ -312,8 +323,8 @@ class ActiveWorkoutViewModel(
                 id = obj.getString("id"),
                 name = obj.getString("name"),
                 category = obj.getString("category"),
-                isCustom = obj.getBoolean("isCustom"),
-                humanUserId = if (obj.isNull("userId")) "" else obj.getString("userId")
+                isCustom = if (obj.has("isCustom")) obj.getBoolean("isCustom") else false,
+                humanUserId = if (obj.isNull("userId") || !obj.has("userId")) "" else obj.getString("userId")
             ))
         }
         return list
@@ -896,21 +907,23 @@ class ActiveWorkoutViewModel(
 
         if (isCompleted && !oldSet.isCompleted) {
             val groupId = currentState.exerciseMetadata[exerciseId]?.supersetGroupId
-            val shouldStartTimer = if (!groupId.isNullOrEmpty()) {
-                val supersetExercises = currentState.exercises.filter { currentState.exerciseMetadata[it.id]?.supersetGroupId == groupId }
-                supersetExercises.all { ex ->
-                    val sets = if (ex.id == exerciseId) updatedSetsList else (currentState.sets[ex.id] ?: emptyList())
-                    if (setIndex in sets.indices) {
-                        sets[setIndex].isCompleted
-                    } else {
-                        true
-                    }
+            if (!groupId.isNullOrEmpty()) {
+                val groupExercises = currentState.exercises.filter { currentState.exerciseMetadata[it.id]?.supersetGroupId == groupId }
+                val currentInGroupIdx = groupExercises.indexOfFirst { it.id == exerciseId }
+                
+                // If it is the final exercise of the round in the group
+                val isFinalExerciseInRound = currentInGroupIdx == groupExercises.size - 1
+                
+                val restDuration = if (isFinalExerciseInRound) {
+                    // Rest after round: use the exercise's restSeconds (group's designated round rest)
+                    currentState.exerciseMetadata[exerciseId]?.restSeconds ?: defaultRestTimerDuration.value
+                } else {
+                    // Rest between exercises: use 45 seconds as standard interval between exercises in a group
+                    45
                 }
+                startRestTimer(restDuration)
             } else {
-                true
-            }
-
-            if (shouldStartTimer) {
+                // Single exercise: use its own rest seconds
                 val customRest = currentState.exerciseMetadata[exerciseId]?.restSeconds
                 startRestTimer(customRest ?: defaultRestTimerDuration.value)
             }

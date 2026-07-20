@@ -364,6 +364,7 @@ class StrengthViewModel(
 
     // Delegated Active Workout properties & functions
     val activeWorkoutState = activeWorkoutViewModel.activeWorkoutState
+    val executionQueue = activeWorkoutViewModel.executionQueue
     val workoutRecoveryState = activeWorkoutViewModel.workoutRecoveryState
     val isCompletingWorkout = activeWorkoutViewModel.isCompletingWorkout
     val navigateToActiveWorkoutEvent = activeWorkoutViewModel.navigateToActiveWorkoutEvent
