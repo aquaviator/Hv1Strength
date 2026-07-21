@@ -59,20 +59,16 @@ import com.example.ui.theme.HumanDarkSurfaceVariant
 import com.example.ui.theme.HumanElectricBlue
 import com.example.ui.theme.HumanElectricBlueDark
 import com.example.ui.theme.HumanElectricBlueLight
+import com.example.ui.theme.KineticAccent
+import com.example.ui.theme.HumanPrimaryAccent
+import com.example.ui.theme.SlateBackground
+import com.example.ui.theme.SlateElevatedSurface
+import com.example.ui.theme.SlateBorderColor
+import com.example.ui.theme.SlateMutedText
+import com.example.ui.theme.SlateSuccess
 import com.example.ui.viewmodel.StrengthViewModel.TemplateExerciseState
 import com.example.ui.viewmodel.StrengthViewModel.TemplateSetState
 import kotlinx.coroutines.launch
-
-// ============================================================================
-// KINETIK SLATE DESIGN TOKENS
-// ============================================================================
-val KineticAccent = Color(0xFF00E5FF)       // Cyan for supersets/circuits
-val HumanPrimaryAccent = Color(0xFF0066FF)  // Vibrant athletic blue
-val SlateBackground = Color(0xFF0A0A0B)     // Deep near-black background
-val SlateElevatedSurface = Color(0xFF141416)// Elevated surface container
-val SlateBorderColor = Color(0xFF2C2D31)    // Subtle outline
-val SlateMutedText = Color(0xFF8E8E93)      // Grey labels
-val SlateSuccess = Color(0xFF10B981)        // Emerald green
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable

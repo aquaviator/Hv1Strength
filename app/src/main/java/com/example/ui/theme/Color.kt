@@ -34,3 +34,15 @@ val AlertRed = Color(0xFFEF4444)
 val AlertRedDim = Color(0xFF7F1D1D)
 val SuccessGreen = Color(0xFF10B981)
 val SuccessGreenDim = Color(0xFF064E3B)
+
+// ============================================================================
+// KINETIK SLATE DESIGN TOKENS (Unified Theme Tokens)
+// ============================================================================
+val KineticAccent = Color(0xFF00E5FF)       // Cyan for supersets/circuits
+val HumanPrimaryAccent = Color(0xFF0066FF)  // Vibrant athletic blue
+val SlateBackground = Color(0xFF0A0A0B)     // Deep near-black background
+val SlateElevatedSurface = Color(0xFF141416)// Elevated surface container
+val SlateBorderColor = Color(0xFF2C2D31)    // Subtle outline
+val SlateMutedText = Color(0xFF8E8E93)      // Grey labels
+val SlateSuccess = Color(0xFF10B981)        // Emerald green
+
