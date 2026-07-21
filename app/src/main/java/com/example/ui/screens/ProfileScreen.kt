@@ -50,6 +50,8 @@ fun ProfileScreen(
     val userProfile by viewModel.activeUserProfile.collectAsState()
     val sessions by viewModel.sessions.collectAsState()
     val isMetric by viewModel.isMetric.collectAsState()
+    val isTrialExpired by viewModel.isTrialExpired.collectAsState()
+    val simulateTrialExpired by viewModel.simulateTrialExpired.collectAsState()
 
     var showSignOutDialog by remember { mutableStateOf(false) }
     var deleteLocalDataOnSignOut by remember { mutableStateOf(false) }
@@ -110,7 +112,7 @@ fun ProfileScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "ACCOUNT",
+                        text = if (userProfile?.authProvider == "google") "GOOGLE PROFILE" else "LOCAL PROFILE",
                         style = MaterialTheme.typography.titleSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -183,8 +185,14 @@ fun ProfileScreen(
 
                     ProfileInfoRow(
                         icon = Icons.Default.VerifiedUser,
-                        label = "Provider",
-                        value = if (userProfile?.authProvider == "google") "Google Account" else "Local SQLite"
+                        label = "Profile Type",
+                        value = if (userProfile?.authProvider == "google") "Google Account" else "Local Profile"
+                    )
+
+                    ProfileInfoRow(
+                        icon = Icons.Default.VerifiedUser,
+                        label = "Storage",
+                        value = if (userProfile?.authProvider == "google") "Cloud synchronization enabled" else "Data stored on this device"
                     )
 
                     ProfileInfoRow(
@@ -211,31 +219,11 @@ fun ProfileScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "MEMBERSHIP",
-                            style = MaterialTheme.typography.titleSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        
-                        // Active Badge
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.padding(start = 8.dp)
-                        ) {
-                            Text(
-                                text = "ACTIVE TRIAL",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
+                    Text(
+                        text = "MEMBERSHIP",
+                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                        color = MaterialTheme.colorScheme.primary
+                    )
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -249,13 +237,13 @@ fun ProfileScreen(
                         )
                         Column {
                             Text(
-                                text = "One-Month Full Access Trial",
+                                text = "Subscription system not yet active",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyLarge
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "30 days remaining",
+                                text = "One-month full-access trial and annual membership are coming soon.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -263,7 +251,7 @@ fun ProfileScreen(
                     }
 
                     Text(
-                        text = "Then £24 per year for continuous premium workout synchronization, coaching metrics, and active statistics tracking.",
+                        text = "Planned UK price: £24 per year. All premium synchronization, coaching metrics, and active statistics tracking will be available standard during the preview period.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -298,13 +286,19 @@ fun ProfileScreen(
                     ProfileInfoRow(
                         icon = Icons.Default.TrendingUp,
                         label = "Experience level",
-                        value = (userProfile?.trainingExperience ?: "Beginner").replaceFirstChar { it.uppercase() }
+                        value = if (!userProfile?.trainingExperience.isNullOrBlank()) userProfile!!.trainingExperience!!.replaceFirstChar { it.uppercase() } else "Not set"
                     )
 
                     ProfileInfoRow(
-                        icon = Icons.Default.TrackChanges,
-                        label = "Training goal",
-                        value = "Build Strength"
+                        icon = Icons.Default.Cake,
+                        label = "Date of birth",
+                        value = if (!userProfile?.dateOfBirth.isNullOrBlank()) userProfile!!.dateOfBirth!! else "Not set"
+                    )
+
+                    ProfileInfoRow(
+                        icon = Icons.Default.Person,
+                        label = "Assigned sex",
+                        value = if (!userProfile?.sex.isNullOrBlank()) userProfile!!.sex!!.replaceFirstChar { it.uppercase() } else "Not set"
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
@@ -364,7 +358,7 @@ fun ProfileScreen(
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Backup, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                            Text("Export JSON Backup", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text("Export workout data as JSON", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                         }
                         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -385,7 +379,7 @@ fun ProfileScreen(
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.TableChart, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                            Text("Export Workout History to CSV", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text("Export workout history to CSV", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                         }
                         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -434,15 +428,7 @@ fun ProfileScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                    data = Uri.parse("mailto:support@humanstrength.app")
-                                    putExtra(Intent.EXTRA_SUBJECT, "Human Strength App Support Request")
-                                }
-                                try {
-                                    context.startActivity(intent)
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "No email application found.", Toast.LENGTH_SHORT).show()
-                                }
+                                Toast.makeText(context, "Support portal is coming soon!", Toast.LENGTH_SHORT).show()
                             }
                             .padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -450,9 +436,12 @@ fun ProfileScreen(
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.HelpOutline, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                            Text("Help & Support", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Column {
+                                Text("Help & Support", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                Text("Coming soon", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                            }
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
                     }
 
                     // Privacy Policy Row
@@ -460,12 +449,7 @@ fun ProfileScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://humanstrength.app/privacy"))
-                                try {
-                                    context.startActivity(intent)
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "No web browser application found.", Toast.LENGTH_SHORT).show()
-                                }
+                                Toast.makeText(context, "Privacy Policy is coming soon!", Toast.LENGTH_SHORT).show()
                             }
                             .padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -473,9 +457,12 @@ fun ProfileScreen(
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.PrivacyTip, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                            Text("Privacy Policy", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Column {
+                                Text("Privacy Policy", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                Text("Coming soon", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                            }
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
                     }
 
                     // Terms of Service Row
@@ -483,12 +470,7 @@ fun ProfileScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://humanstrength.app/terms"))
-                                try {
-                                    context.startActivity(intent)
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "No web browser application found.", Toast.LENGTH_SHORT).show()
-                                }
+                                Toast.makeText(context, "Terms of Service are coming soon!", Toast.LENGTH_SHORT).show()
                             }
                             .padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -496,9 +478,12 @@ fun ProfileScreen(
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                            Text("Terms of Service", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Column {
+                                Text("Terms of Service", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                Text("Coming soon", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                            }
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
                     }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -810,7 +795,7 @@ fun ProfileScreen(
             title = { Text("Delete Local Workout Data?") },
             text = {
                 Text(
-                    text = "This will permanently erase all your historical workout sessions, custom routines, body weights, and tape measurements from this device. This action is irreversible and cannot be undone.",
+                    text = "This will permanently erase all your historical workout sessions, custom routines, body weights, and tape measurements from this device. Profile preferences and settings will be preserved. This action is irreversible and cannot be undone.",
                     style = MaterialTheme.typography.bodyMedium
                 )
             },

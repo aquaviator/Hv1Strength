@@ -64,6 +64,27 @@ class ProfileViewModel(
         repository.getUserProfileFlow(userId)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    private val sharedPrefs = context.getSharedPreferences("strength_settings", Context.MODE_PRIVATE)
+    val simulateTrialExpired = MutableStateFlow(sharedPrefs.getBoolean("simulate_trial_expired", false))
+
+    fun setSimulateTrialExpired(expired: Boolean) {
+        sharedPrefs.edit().putBoolean("simulate_trial_expired", expired).apply()
+        simulateTrialExpired.value = expired
+    }
+
+    val isTrialExpired: StateFlow<Boolean> = activeUserProfile.combine(simulateTrialExpired) { profile, simulate ->
+        if (simulate) {
+            true
+        } else if (profile == null) {
+            false
+        } else {
+            val joinedAt = profile.createdAt
+            val thirtyDaysInMillis = 30L * 24L * 60L * 60L * 1000L
+            val expirationTime = joinedAt + thirtyDaysInMillis
+            System.currentTimeMillis() > expirationTime
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     // Body Weight State
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val bodyWeights: StateFlow<List<BodyWeight>> = authViewModel.activeUserId.flatMapLatest { userId ->

@@ -51,6 +51,7 @@ fun SettingsScreen(
     val autoCompleteBehavior by viewModel.autoCompleteBehavior.collectAsState()
     val autoScroll by viewModel.autoScroll.collectAsState()
     val timerPreferences by viewModel.timerPreferences.collectAsState()
+    val simulateTrialExpired by viewModel.simulateTrialExpired.collectAsState()
 
     // Import/Export dialog states
     var showImportDialog by remember { mutableStateOf(false) }
@@ -280,58 +281,34 @@ fun SettingsScreen(
                 }
 
                 // Auto Complete Behavior Toggle
-                SettingsToggleRow(
+                SettingsClickableRow(
                     icon = Icons.Default.Check,
                     title = "Auto-Complete Active Sets",
-                    subtitle = "Auto-focus/advance when completing sets",
-                    checked = autoCompleteBehavior,
-                    onCheckedChange = { viewModel.setAutoCompleteBehavior(it) }
+                    subtitle = "Coming soon (Candidate 4B)",
+                    onClick = {
+                        Toast.makeText(context, "Auto-Complete Active Sets is coming soon!", Toast.LENGTH_SHORT).show()
+                    }
                 )
 
                 // Auto Scroll Behavior Toggle
-                SettingsToggleRow(
+                SettingsClickableRow(
                     icon = Icons.Default.SwapVert,
                     title = "Auto-Scroll list",
-                    subtitle = "Auto-scroll viewport to active exercise card",
-                    checked = autoScroll,
-                    onCheckedChange = { viewModel.setAutoScroll(it) }
+                    subtitle = "Coming soon (Candidate 4B)",
+                    onClick = {
+                        Toast.makeText(context, "Auto-Scroll list is coming soon!", Toast.LENGTH_SHORT).show()
+                    }
                 )
 
                 // Timer sound/vibration Preferences Selection
-                var timerPrefExpanded by remember { mutableStateOf(false) }
                 SettingsClickableRow(
                     icon = Icons.Default.NotificationsActive,
                     title = "Rest Timer Preferences",
-                    subtitle = "Current preference: ${timerPreferences.replaceFirstChar { it.uppercase() }}",
-                    onClick = { timerPrefExpanded = true }
-                ) {
-                    DropdownMenu(
-                        expanded = timerPrefExpanded,
-                        onDismissRequest = { timerPrefExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Standard Alert") },
-                            onClick = {
-                                viewModel.setTimerPreferences("standard")
-                                timerPrefExpanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Loud Long Alarm") },
-                            onClick = {
-                                viewModel.setTimerPreferences("loud")
-                                timerPrefExpanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Silent Flashing / Vibration") },
-                            onClick = {
-                                viewModel.setTimerPreferences("silent")
-                                timerPrefExpanded = false
-                            }
-                        )
+                    subtitle = "Coming soon (Candidate 4B)",
+                    onClick = {
+                        Toast.makeText(context, "Rest Timer Preferences are coming soon!", Toast.LENGTH_SHORT).show()
                     }
-                }
+                )
             }
 
             // Data & Backup section
@@ -339,7 +316,7 @@ fun SettingsScreen(
                 // Export JSON
                 SettingsClickableRow(
                     icon = Icons.Default.CloudDownload,
-                    title = "Export JSON Backup",
+                    title = "Export workout data as JSON",
                     subtitle = "Generate offline backup JSON for security and migration",
                     onClick = {
                         coroutineScope.launch {
@@ -352,7 +329,7 @@ fun SettingsScreen(
                 // Export CSV
                 SettingsClickableRow(
                     icon = Icons.Default.GridOn,
-                    title = "Export Workout History to CSV",
+                    title = "Export workout history to CSV",
                     subtitle = "Create spreadsheets of sets, weights, reps, and RPE",
                     onClick = {
                         coroutineScope.launch {
@@ -365,7 +342,7 @@ fun SettingsScreen(
                 // Import JSON
                 SettingsClickableRow(
                     icon = Icons.Default.CloudUpload,
-                    title = "Import JSON Backup",
+                    title = "Import workout data from JSON",
                     subtitle = "Restore database and user settings from JSON copy",
                     onClick = {
                         importText = ""
@@ -430,6 +407,14 @@ fun SettingsScreen(
             // Developer Tools Section Card
             if (BuildConfig.DEBUG) {
                 SettingsSectionCard(title = "DEVELOPER TOOLS") {
+                    SettingsToggleRow(
+                        icon = Icons.Default.Timer,
+                        title = "Simulate Trial Expiration",
+                        subtitle = "Forces the 30-day trial period to enter the EXPIRED state instantly",
+                        checked = simulateTrialExpired,
+                        onCheckedChange = { viewModel.setSimulateTrialExpired(it) }
+                    )
+
                     SettingsClickableRow(
                         icon = Icons.Default.BugReport,
                         title = "Sync Debug Utility",

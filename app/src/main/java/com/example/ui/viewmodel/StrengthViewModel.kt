@@ -248,6 +248,9 @@ class StrengthViewModel(
 
     // Delegated User Profile & Settings properties & functions
     val activeUserProfile = profileViewModel.activeUserProfile
+    val simulateTrialExpired = profileViewModel.simulateTrialExpired
+    fun setSimulateTrialExpired(expired: Boolean) = profileViewModel.setSimulateTrialExpired(expired)
+    val isTrialExpired = profileViewModel.isTrialExpired
     val isMetric = profileViewModel.isMetric
     val theme = profileViewModel.theme
     val keepScreenAwake = profileViewModel.keepScreenAwake
