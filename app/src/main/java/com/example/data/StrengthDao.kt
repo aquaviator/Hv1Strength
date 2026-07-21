@@ -436,4 +436,25 @@ interface StrengthDao {
 
     @Query("DELETE FROM active_workout_backup WHERE id = 1")
     suspend fun clearActiveWorkoutBackup()
+
+    @Query("DELETE FROM workout_session")
+    suspend fun clearWorkoutSessions()
+
+    @Query("DELETE FROM logged_set")
+    suspend fun clearLoggedSets()
+
+    @Query("DELETE FROM workout_template")
+    suspend fun clearWorkoutTemplates()
+
+    @Query("DELETE FROM workout_template_exercise")
+    suspend fun clearWorkoutTemplateExercises()
+
+    @Query("DELETE FROM workout_template_set")
+    suspend fun clearWorkoutTemplateSets()
+
+    @Query("DELETE FROM body_weight")
+    suspend fun clearBodyWeights()
+
+    @Query("DELETE FROM tape_measurement")
+    suspend fun clearTapeMeasurements()
 }

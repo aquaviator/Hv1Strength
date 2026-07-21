@@ -813,4 +813,14 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
     suspend fun clearActiveWorkoutBackup() {
         dao.clearActiveWorkoutBackup()
     }
+
+    suspend fun clearAllLocalData() {
+        dao.clearWorkoutSessions()
+        dao.clearLoggedSets()
+        dao.clearWorkoutTemplates()
+        dao.clearWorkoutTemplateExercises()
+        dao.clearWorkoutTemplateSets()
+        dao.clearBodyWeights()
+        dao.clearTapeMeasurements()
+    }
 }

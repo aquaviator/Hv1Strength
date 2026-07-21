@@ -444,6 +444,13 @@ class StrengthViewModel(
     fun importData(jsonStr: String, onSuccess: (ProfileViewModel.ImportResult) -> Unit, onError: (String) -> Unit) =
         profileViewModel.importData(jsonStr, onSuccess, onError)
 
+    fun deleteLocalWorkoutData(onComplete: () -> Unit) {
+        viewModelScope.launch {
+            repository.clearAllLocalData()
+            onComplete()
+        }
+    }
+
     // Serialization Helpers
     fun serializeExerciseIds(ids: List<String>): String {
         return serializeExerciseIdsList(ids)

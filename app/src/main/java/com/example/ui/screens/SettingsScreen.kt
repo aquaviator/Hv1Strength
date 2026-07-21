@@ -66,7 +66,8 @@ fun SettingsScreen(
         topBar = {
             HighDensityHeader(
                 title = "Settings",
-                userProfile = userProfile
+                userProfile = userProfile,
+                onProfileClick = onNavigateToProfile
             )
         }
     ) { innerPadding ->

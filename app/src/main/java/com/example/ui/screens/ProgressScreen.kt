@@ -40,7 +40,10 @@ import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProgressScreen(viewModel: StrengthViewModel) {
+fun ProgressScreen(
+    viewModel: StrengthViewModel,
+    onNavigateToProfile: () -> Unit = {}
+) {
     val bodyWeights by viewModel.bodyWeights.collectAsState()
     val tapeMeasurements by viewModel.tapeMeasurements.collectAsState()
     val exercises by viewModel.exercises.collectAsState()
@@ -80,7 +83,8 @@ fun ProgressScreen(viewModel: StrengthViewModel) {
         topBar = {
             HighDensityHeader(
                 title = "Progress",
-                userProfile = userProfile
+                userProfile = userProfile,
+                onProfileClick = onNavigateToProfile
             )
         }
     ) { innerPadding ->

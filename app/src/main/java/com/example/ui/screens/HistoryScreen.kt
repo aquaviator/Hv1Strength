@@ -35,7 +35,10 @@ import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(viewModel: StrengthViewModel) {
+fun HistoryScreen(
+    viewModel: StrengthViewModel,
+    onNavigateToProfile: () -> Unit = {}
+) {
     val filteredSessions by viewModel.filteredSessions.collectAsState()
     val exercises by viewModel.exercises.collectAsState()
     val templates by viewModel.templates.collectAsState()
@@ -55,7 +58,8 @@ fun HistoryScreen(viewModel: StrengthViewModel) {
         topBar = {
             HighDensityHeader(
                 title = "Coaching Dashboard",
-                userProfile = userProfile
+                userProfile = userProfile,
+                onProfileClick = onNavigateToProfile
             ) {
                 IconButton(
                     modifier = Modifier.testTag("toggle_filters_button"),

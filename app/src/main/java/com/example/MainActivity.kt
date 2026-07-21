@@ -287,23 +287,41 @@ fun MainAppScreen(
                     viewModel = viewModel,
                     onNavigateToActiveWorkout = {
                         navController.navigate("active_workout")
+                    },
+                    onNavigateToProfile = {
+                        navController.navigate("profile") { launchSingleTop = true }
                     }
                 )
             }
             composable("history") {
-                HistoryScreen(viewModel = viewModel)
+                HistoryScreen(
+                    viewModel = viewModel,
+                    onNavigateToProfile = {
+                        navController.navigate("profile") { launchSingleTop = true }
+                    }
+                )
             }
             composable("exercises") {
-                ExerciseScreen(viewModel = viewModel)
+                ExerciseScreen(
+                    viewModel = viewModel,
+                    onNavigateToProfile = {
+                        navController.navigate("profile") { launchSingleTop = true }
+                    }
+                )
             }
             composable("progress") {
-                ProgressScreen(viewModel = viewModel)
+                ProgressScreen(
+                    viewModel = viewModel,
+                    onNavigateToProfile = {
+                        navController.navigate("profile") { launchSingleTop = true }
+                    }
+                )
             }
             composable("settings") {
                 SettingsScreen(
                     viewModel = viewModel,
                     onNavigateToProfile = {
-                        navController.navigate("profile")
+                        navController.navigate("profile") { launchSingleTop = true }
                     },
                     onNavigateToSyncDebug = {
                         navController.navigate("sync_debug")

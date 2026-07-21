@@ -30,7 +30,10 @@ import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExerciseScreen(viewModel: StrengthViewModel) {
+fun ExerciseScreen(
+    viewModel: StrengthViewModel,
+    onNavigateToProfile: () -> Unit = {}
+) {
     val exercises by viewModel.exercises.collectAsState()
     val sessions by viewModel.sessions.collectAsState()
     val favoriteExercises by viewModel.favoriteExercises.collectAsState()
@@ -51,6 +54,7 @@ fun ExerciseScreen(viewModel: StrengthViewModel) {
             HighDensityHeader(
                 title = "Exercises",
                 userProfile = userProfile,
+                onProfileClick = onNavigateToProfile,
                 actions = {
                     IconButton(
                         onClick = {

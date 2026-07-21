@@ -75,7 +75,8 @@ import androidx.compose.ui.text.input.ImeAction
 @Composable
 fun WorkoutScreen(
     viewModel: StrengthViewModel,
-    onNavigateToActiveWorkout: () -> Unit
+    onNavigateToActiveWorkout: () -> Unit,
+    onNavigateToProfile: () -> Unit = {}
 ) {
     val templates by viewModel.templates.collectAsState()
     val exercises by viewModel.exercises.collectAsState()
@@ -171,7 +172,8 @@ fun WorkoutScreen(
             topBar = {
                 HighDensityHeader(
                     title = "Strength",
-                    userProfile = userProfile
+                    userProfile = userProfile,
+                    onProfileClick = onNavigateToProfile
                 )
             }
         ) { innerPadding ->
@@ -2580,6 +2582,7 @@ fun TemplateSetEditorDialog(
 fun HighDensityHeader(
     title: String,
     userProfile: UserProfile?,
+    onProfileClick: (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null
 ) {
     val isNull = userProfile == null
@@ -2651,6 +2654,12 @@ fun HighDensityHeader(
                         width = 1.dp,
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
                         shape = CircleShape
+                    )
+                    .testTag("profile_avatar_button")
+                    .clickable(
+                        enabled = onProfileClick != null,
+                        onClickLabel = "Open profile",
+                        onClick = { onProfileClick?.invoke() }
                     ),
                 contentAlignment = Alignment.Center
             ) {

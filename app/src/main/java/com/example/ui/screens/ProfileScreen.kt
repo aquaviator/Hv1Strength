@@ -1,9 +1,14 @@
 package com.example.ui.screens
 
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -42,14 +47,22 @@ fun ProfileScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val authState by viewModel.authState.collectAsState()
-    
+    val userProfile by viewModel.activeUserProfile.collectAsState()
+    val sessions by viewModel.sessions.collectAsState()
+    val isMetric by viewModel.isMetric.collectAsState()
+
     var showSignOutDialog by remember { mutableStateOf(false) }
     var deleteLocalDataOnSignOut by remember { mutableStateOf(false) }
     var showLinkDialog by remember { mutableStateOf(false) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
-
-    val userProfile by viewModel.activeUserProfile.collectAsState()
-    val profile = userProfile
+    
+    // Data export / delete dialog states
+    var showExportJsonDialog by remember { mutableStateOf(false) }
+    var exportedJsonText by remember { mutableStateOf("") }
+    var showExportCsvDialog by remember { mutableStateOf(false) }
+    var exportedCsvText by remember { mutableStateOf("") }
+    var showDeleteLocalDataDialog by remember { mutableStateOf(false) }
+    var showPlayBillingComingSoonDialog by remember { mutableStateOf(false) }
 
     // Navigation back if session is cleared
     LaunchedEffect(authState) {
@@ -61,7 +74,7 @@ fun ProfileScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Account Profile", fontWeight = FontWeight.Black) },
+                title = { Text("User Profile", fontWeight = FontWeight.Black) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("profile_back_button")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -80,193 +93,494 @@ fun ProfileScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // User Avatar Section
-            Box(
-                modifier = Modifier
-                    .size(110.dp)
-                    .clip(CircleShape)
-                    .background(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.secondaryContainer,
-                                MaterialTheme.colorScheme.primaryContainer
-                            )
-                        )
-                    )
-                    .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                var imageLoaded by remember { mutableStateOf(false) }
-
-                if (!profile?.photoUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = profile?.photoUrl,
-                        contentDescription = "Profile Photo",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape),
-                        onSuccess = { imageLoaded = true },
-                        onError = { imageLoaded = false }
-                    )
-                }
-
-                if (profile?.photoUrl.isNullOrBlank() || !imageLoaded) {
-                    Text(
-                        text = profile?.initials ?: "U",
-                        style = MaterialTheme.typography.headlineLarge.copy(
-                            fontWeight = FontWeight.Black,
-                            fontSize = 36.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-
-            // User Identity Header
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = profile?.displayName ?: "Offline User",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.testTag("profile_display_name")
-                )
-                Text(
-                    text = profile?.email ?: "Offline-only Mode (No cloud backup)",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.testTag("profile_email")
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Account Metadata Card
+            // ==========================================
+            // SECTION 1: ACCOUNT
+            // ==========================================
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("profile_account_section"),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "ACCOUNT STATUS",
+                        text = "ACCOUNT",
                         style = MaterialTheme.typography.titleSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
                         color = MaterialTheme.colorScheme.primary
                     )
 
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // User Avatar
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(
+                                            MaterialTheme.colorScheme.secondaryContainer,
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        )
+                                    )
+                                )
+                                .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            var imageLoaded by remember { mutableStateOf(false) }
+
+                            if (!userProfile?.photoUrl.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = userProfile?.photoUrl,
+                                    contentDescription = "Profile Photo",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape),
+                                    onSuccess = { imageLoaded = true },
+                                    onError = { imageLoaded = false }
+                                )
+                            }
+
+                            if (userProfile?.photoUrl.isNullOrBlank() || !imageLoaded) {
+                                Text(
+                                    text = userProfile?.initials ?: "U",
+                                    style = MaterialTheme.typography.headlineSmall.copy(
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 24.sp
+                                    ),
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = userProfile?.displayName ?: "Local Athlete",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.testTag("profile_display_name")
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = userProfile?.email ?: "Offline Mode (No cloud backup)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.testTag("profile_email")
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
                     ProfileInfoRow(
                         icon = Icons.Default.VerifiedUser,
                         label = "Provider",
-                        value = if (profile?.authProvider == "google") "Google Authenticated" else "Local SQLite"
+                        value = if (userProfile?.authProvider == "google") "Google Account" else "Local SQLite"
                     )
 
                     ProfileInfoRow(
                         icon = Icons.Default.CalendarToday,
                         label = "Joined At",
-                        value = if (profile != null) {
+                        value = if (userProfile != null) {
                             val sdf = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
-                            sdf.format(java.util.Date(profile.createdAt))
+                            sdf.format(java.util.Date(userProfile!!.createdAt))
                         } else "N/A"
-                    )
-
-                    ProfileInfoRow(
-                        icon = Icons.Default.AccessTime,
-                        label = "Last Sync / Session",
-                        value = if (profile != null) {
-                            val sdf = java.text.SimpleDateFormat("HH:mm, MMM dd", java.util.Locale.getDefault())
-                            sdf.format(java.util.Date(profile.lastLoginAt))
-                        } else "Continuous Local"
                     )
                 }
             }
 
-            // Google Actions Section: Data Linking Card
-            if (profile?.authProvider == "google") {
+            // ==========================================
+            // SECTION 2: MEMBERSHIP
+            // ==========================================
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("profile_membership_section"),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "MEMBERSHIP",
+                            style = MaterialTheme.typography.titleSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        
+                        // Active Badge
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) {
+                            Text(
+                                text = "ACTIVE TRIAL",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CardMembership,
+                            contentDescription = "Membership status",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "One-Month Full Access Trial",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "30 days remaining",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Then £24 per year for continuous premium workout synchronization, coaching metrics, and active statistics tracking.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // ==========================================
+            // SECTION 3: TRAINING
+            // ==========================================
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("profile_training_section"),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "TRAINING",
+                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    ProfileInfoRow(
+                        icon = Icons.Default.Scale,
+                        label = "Preferred weight unit",
+                        value = if (isMetric) "Metric (kg)" else "Imperial (lbs)"
+                    )
+
+                    ProfileInfoRow(
+                        icon = Icons.Default.TrendingUp,
+                        label = "Experience level",
+                        value = (userProfile?.trainingExperience ?: "Beginner").replaceFirstChar { it.uppercase() }
+                    )
+
+                    ProfileInfoRow(
+                        icon = Icons.Default.TrackChanges,
+                        label = "Training goal",
+                        value = "Build Strength"
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    OutlinedButton(
+                        onClick = { showEditProfileDialog = true },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("edit_profile_metadata_button")
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Edit Training & Bio", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            // ==========================================
+            // SECTION 4: DATA
+            // ==========================================
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("profile_data_section"),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "DATA",
+                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    ProfileInfoRow(
+                        icon = Icons.Default.History,
+                        label = "Workout history",
+                        value = "${sessions.size} sessions logged"
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    // Export JSON Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                coroutineScope.launch {
+                                    exportedJsonText = viewModel.exportData()
+                                    showExportJsonDialog = true
+                                }
+                            }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Backup, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Text("Export JSON Backup", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
+                    // Export CSV Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                coroutineScope.launch {
+                                    exportedCsvText = viewModel.exportDataToCsv()
+                                    showExportCsvDialog = true
+                                }
+                            }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.TableChart, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Text("Export Workout History to CSV", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    // Delete Local Data Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showDeleteLocalDataDialog = true }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                            Text("Delete local workout data", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+
+            // ==========================================
+            // SECTION 5: SUPPORT
+            // ==========================================
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("profile_support_section"),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "SUPPORT",
+                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    // Contact Support Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                    data = Uri.parse("mailto:support@humanstrength.app")
+                                    putExtra(Intent.EXTRA_SUBJECT, "Human Strength App Support Request")
+                                }
+                                try {
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "No email application found.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.HelpOutline, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Text("Help & Support", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
+                    // Privacy Policy Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://humanstrength.app/privacy"))
+                                try {
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "No web browser application found.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.PrivacyTip, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Text("Privacy Policy", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
+                    // Terms of Service Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://humanstrength.app/terms"))
+                                try {
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "No web browser application found.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Text("Terms of Service", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    // Subscription Management Row (COMING SOON)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showPlayBillingComingSoonDialog = true }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.SettingsApplications, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(20.dp))
+                            Column {
+                                Text("Subscription Management", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                Text("Coming soon (Candidate 4B)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Google Actions Link/Merge local data
+            if (userProfile?.authProvider == "google") {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("profile_link_section"),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Icon(Icons.Default.MergeType, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Text(
-                                text = "Link Existing Local Data",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-
                         Text(
-                            text = "If you previously logged weight entries or routine templates while offline, you can associate and merge those historical records directly into your active Google Account profile now.",
+                            text = "Link Existing Local Data",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = "If you logged workouts offline previously, you can merge and assign those sessions directly to your Google profile now.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-
+                        Spacer(modifier = Modifier.height(4.dp))
                         Button(
                             onClick = { showLinkDialog = true },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("link_offline_data_button")
+                            modifier = Modifier.fillMaxWidth().testTag("link_offline_data_button")
                         ) {
-                            Text("Link Data to Profile", fontWeight = FontWeight.Bold)
+                            Text("Link Offline Data", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
 
-            // Edit Profile Button (Extra visual richness & custom metrics)
-            if (profile != null) {
-                OutlinedButton(
-                    onClick = { showEditProfileDialog = true },
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth().testTag("edit_profile_metadata_button")
-                ) {
-                    Icon(Icons.Default.Edit, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Edit Profile Details", fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Danger Zone: Sign Out Button
+            // Danger Zone Sign Out
             Button(
                 onClick = { showSignOutDialog = true },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
+                    .height(50.dp)
                     .testTag("profile_signout_button")
             ) {
                 Icon(Icons.Default.ExitToApp, contentDescription = "Sign Out")
-                Spacer(modifier = Modifier.width(10.dp))
-                Text("Sign Out of Account", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Sign Out of Account", fontWeight = FontWeight.Black)
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 
-    // Sign Out Options Dialog
+    // Sign Out Dialog
     if (showSignOutDialog) {
         AlertDialog(
             onDismissRequest = { showSignOutDialog = false },
@@ -318,14 +632,14 @@ fun ProfileScreen(
         )
     }
 
-    // Link Local Offline Data Dialog
+    // Link Offline Data Dialog
     if (showLinkDialog) {
         AlertDialog(
             onDismissRequest = { showLinkDialog = false },
             title = { Text("Merge & Link Offline Records") },
             text = {
                 Text(
-                    text = "This will find any workout templates, sessions, body weights, and tape measurements labeled as 'offline' or unassigned on this device, and associate them with your active profile (${profile?.displayName}). Are you sure you want to proceed?",
+                    text = "This will find any workout templates, sessions, body weights, and tape measurements labeled as 'offline' or unassigned on this device, and associate them with your active profile (${userProfile?.displayName}). Are you sure you want to proceed?",
                     style = MaterialTheme.typography.bodyMedium
                 )
             },
@@ -334,8 +648,8 @@ fun ProfileScreen(
                     modifier = Modifier.testTag("confirm_link_button"),
                     onClick = {
                         coroutineScope.launch {
-                            if (profile != null) {
-                                viewModel.authRepository.linkOfflineDataToUser(profile.id)
+                            if (userProfile != null) {
+                                viewModel.authRepository.linkOfflineDataToUser(userProfile!!.id)
                                 Toast.makeText(context, "Offline data successfully merged!", Toast.LENGTH_LONG).show()
                             }
                             showLinkDialog = false
@@ -353,12 +667,12 @@ fun ProfileScreen(
         )
     }
 
-    // Edit Profile Metadata Dialog
+    // Edit Profile details Dialog
     if (showEditProfileDialog) {
-        if (profile != null) {
-            var dob by remember { mutableStateOf(profile.dateOfBirth ?: "") }
-            var sex by remember { mutableStateOf(profile.sex ?: "unspecified") }
-            var exp by remember { mutableStateOf(profile.trainingExperience ?: "beginner") }
+        if (userProfile != null) {
+            var dob by remember { mutableStateOf(userProfile!!.dateOfBirth ?: "") }
+            var sex by remember { mutableStateOf(userProfile!!.sex ?: "unspecified") }
+            var exp by remember { mutableStateOf(userProfile!!.trainingExperience ?: "beginner") }
 
             AlertDialog(
                 onDismissRequest = { showEditProfileDialog = false },
@@ -412,6 +726,135 @@ fun ProfileScreen(
             )
         }
     }
+
+    // Export JSON Dialog
+    if (showExportJsonDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportJsonDialog = false },
+            title = { Text("Export Backup (JSON)") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Copy the backup string below to save your metrics safely offline:")
+                    OutlinedTextField(
+                        value = exportedJsonText,
+                        onValueChange = {},
+                        readOnly = true,
+                        modifier = Modifier.fillMaxWidth().height(140.dp),
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("Human Strength JSON Backup", exportedJsonText)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(context, "JSON copied to clipboard", Toast.LENGTH_SHORT).show()
+                        showExportJsonDialog = false
+                    }
+                ) {
+                    Text("Copy to Clipboard")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExportJsonDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    // Export CSV Dialog
+    if (showExportCsvDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportCsvDialog = false },
+            title = { Text("Export Workouts (CSV)") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Copy your workouts history CSV string below to use in spreadsheets:")
+                    OutlinedTextField(
+                        value = exportedCsvText,
+                        onValueChange = {},
+                        readOnly = true,
+                        modifier = Modifier.fillMaxWidth().height(140.dp),
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("Human Strength CSV History", exportedCsvText)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(context, "CSV copied to clipboard", Toast.LENGTH_SHORT).show()
+                        showExportCsvDialog = false
+                    }
+                ) {
+                    Text("Copy to Clipboard")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExportCsvDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    // Delete Local Data Dialog
+    if (showDeleteLocalDataDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteLocalDataDialog = false },
+            title = { Text("Delete Local Workout Data?") },
+            text = {
+                Text(
+                    text = "This will permanently erase all your historical workout sessions, custom routines, body weights, and tape measurements from this device. This action is irreversible and cannot be undone.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        viewModel.deleteLocalWorkoutData {
+                            Toast.makeText(context, "All local workout data erased successfully.", Toast.LENGTH_LONG).show()
+                        }
+                        showDeleteLocalDataDialog = false
+                    }
+                ) {
+                    Text("Permanently Erase")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteLocalDataDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Play Billing Coming Soon Dialog
+    if (showPlayBillingComingSoonDialog) {
+        AlertDialog(
+            onDismissRequest = { showPlayBillingComingSoonDialog = false },
+            title = { Text("Subscription Management") },
+            text = {
+                Text(
+                    text = "Google Play Billing integration is coming soon in the next update. You will be able to manage your Human Annual Membership subscriptions directly through Google Play.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showPlayBillingComingSoonDialog = false }
+                ) {
+                    Text("Got It")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -429,7 +872,12 @@ fun ProfileInfoRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
             Text(label, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
         }
         Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

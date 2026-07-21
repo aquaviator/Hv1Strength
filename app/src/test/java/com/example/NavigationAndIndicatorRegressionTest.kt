@@ -689,4 +689,82 @@ class NavigationAndIndicatorRegressionTest {
         composeTestRule.onNodeWithTag("routine_editor_review_button").assertExists().performClick()
         assertTrue(saveClicked)
     }
+
+    @Test
+    fun testNavigation_workoutToProfile() {
+        val vm = getLazyViewModel()
+        runBlocking {
+            vm.authViewModel.authRepository.signInAnonymously()
+        }
+        waitUntil { vm.authState.value is AuthState.Offline }
+
+        lateinit var navController: NavHostController
+
+        composeTestRule.setContent {
+            MyApplicationTheme {
+                navController = rememberNavController()
+                MainAppScreen(viewModel = vm, navController = navController)
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // 1. Check we are on workout screen
+        assertEquals("workout", navController.currentDestination?.route)
+
+        // 2. Click on the profile avatar button
+        composeTestRule.onNodeWithTag("profile_avatar_button").performClick()
+        composeTestRule.waitForIdle()
+
+        // 3. Verify destination is profile
+        assertEquals("profile", navController.currentDestination?.route)
+
+        // 4. Click profile back button
+        composeTestRule.onNodeWithTag("profile_back_button").performClick()
+        composeTestRule.waitForIdle()
+
+        // 5. Verify we are back on workout screen
+        assertEquals("workout", navController.currentDestination?.route)
+    }
+
+    @Test
+    fun testNavigation_repeatedProfileClicksSingleTop() {
+        val vm = getLazyViewModel()
+        runBlocking {
+            vm.authViewModel.authRepository.signInAnonymously()
+        }
+        waitUntil { vm.authState.value is AuthState.Offline }
+
+        lateinit var navController: NavHostController
+
+        composeTestRule.setContent {
+            MyApplicationTheme {
+                navController = rememberNavController()
+                MainAppScreen(viewModel = vm, navController = navController)
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // 1. Perform first navigation programmatically
+        composeTestRule.runOnUiThread {
+            navController.navigate("profile") {
+                launchSingleTop = true
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // 2. Perform second navigation programmatically
+        composeTestRule.runOnUiThread {
+            navController.navigate("profile") {
+                launchSingleTop = true
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        val routes = navController.currentBackStack.value.map { it.destination.route }
+        println("BACKSTACK ROUTES: $routes")
+
+        // Verify that only 1 instance of profile is on the backstack due to launchSingleTop
+        val profileCount = navController.currentBackStack.value.count { it.destination.route == "profile" }
+        assertEquals(1, profileCount)
+    }
 }
