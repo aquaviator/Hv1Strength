@@ -31,6 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.example.ui.theme.*
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.text.BasicTextField
 import com.example.data.Exercise
 import com.example.ui.viewmodel.ActiveSet
 
@@ -296,6 +299,572 @@ fun WorkoutStatusHeader(
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
+        }
+    }
+}
+
+/**
+ * TrainingStepper
+ * Symmetric, tactile stepper control with inline text input capabilities.
+ */
+@Composable
+fun TrainingStepper(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    isEditing: Boolean,
+    onEditToggle: (Boolean) -> Unit,
+    onDecrement: () -> Unit,
+    onIncrement: () -> Unit,
+    keyboardType: KeyboardType,
+    modifier: Modifier = Modifier
+) {
+    val focusManager = LocalFocusManager.current
+    val haptic = LocalHapticFeedback.current
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = label.uppercase(),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.2.sp
+            ),
+            color = SlateMutedText
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(SlateBackground, RoundedCornerShape(12.dp))
+                .border(BorderStroke(1.dp, SlateBorderColor.copy(alpha = 0.5f)), RoundedCornerShape(12.dp))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Minus Button (48dp x 48dp minimum touch target)
+            IconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onDecrement()
+                },
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(SlateElevatedSurface, shape = RoundedCornerShape(10.dp))
+                    .testTag("${label.lowercase()}_decrement_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Remove,
+                    contentDescription = "Decrease $label",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            // Display or Edit Area
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onEditToggle(true) }
+                    .padding(horizontal = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isEditing) {
+                    BasicTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = keyboardType,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                onEditToggle(false)
+                                focusManager.clearFocus()
+                            }
+                        ),
+                        textStyle = MaterialTheme.typography.titleMedium.copy(
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            fontSize = 20.sp
+                        ),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
+                        modifier = Modifier
+                            .width(110.dp)
+                            .background(SlateElevatedSurface, RoundedCornerShape(8.dp))
+                            .border(BorderStroke(1.dp, SlateBorderColor), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    )
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = value,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Black
+                            ),
+                            color = Color.White
+                        )
+                        Text(
+                            text = "Tap to type",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = SlateMutedText.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            }
+
+            // Plus Button (48dp x 48dp minimum touch target)
+            IconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onIncrement()
+                },
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(SlateElevatedSurface, shape = RoundedCornerShape(10.dp))
+                    .testTag("${label.lowercase()}_increment_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Increase $label",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * ActiveExerciseCard
+ * A master training card component consolidating all exercise execution states, metrics, and tactical controls.
+ */
+@Composable
+fun ActiveExerciseCard(
+    exerciseName: String,
+    category: String,
+    identityLabel: String,
+    isSuperset: Boolean,
+    currentExerciseIndex: Int,
+    totalExercisesCount: Int,
+    currentSetNumber: Int,
+    totalSetsCount: Int,
+    completedSetsCount: Int,
+    totalSetsInWorkout: Int,
+    sets: List<ActiveSet>,
+    currentSetIndex: Int,
+    onSetClick: (Int) -> Unit,
+    // Weight Input
+    weight: Float,
+    onWeightChange: (Float) -> Unit,
+    // Reps Input
+    reps: Int,
+    onRepsChange: (Int) -> Unit,
+    // RPE
+    rpe: Int?,
+    onRpeChange: (Int?) -> Unit,
+    // Previous Session
+    prevSummary: String,
+    daysAgoText: String?,
+    // Coaching Notes
+    coachingCues: String?,
+    onCuesClick: () -> Unit,
+    // Complete Set
+    onCompleteSetClick: () -> Unit,
+    completeSetEnabled: Boolean,
+    // Add/Remove sets
+    onAddSetClick: () -> Unit,
+    onRemoveSetClick: () -> Unit,
+    totalSetsInExercise: Int,
+    onRemoveExerciseClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isEditingWeight by remember(weight) { mutableStateOf(false) }
+    var weightInputText by remember(weight) { mutableStateOf(weight.toString().removeSuffix(".0")) }
+
+    var isEditingReps by remember(reps) { mutableStateOf(false) }
+    var repsInputText by remember(reps) { mutableStateOf(reps.toString()) }
+
+    val haptic = LocalHapticFeedback.current
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .background(SlateElevatedSurface, shape = RoundedCornerShape(20.dp))
+            .border(BorderStroke(1.dp, if (isSuperset) KineticAccent.copy(alpha = 0.3f) else HumanPrimaryAccent.copy(alpha = 0.3f)), shape = RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(20.dp))
+    ) {
+        // Left accent bar
+        Box(
+            modifier = Modifier
+                .width(6.dp)
+                .fillMaxHeight()
+                .background(if (isSuperset) KineticAccent else HumanPrimaryAccent)
+        )
+
+        // Main content
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // 1. Identity Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (isSuperset) {
+                        Icon(
+                            imageVector = Icons.Default.Layers,
+                            contentDescription = "Superset",
+                            tint = KineticAccent,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "SUPERSET • $identityLabel".uppercase(),
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            ),
+                            color = KineticAccent
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.FitnessCenter,
+                            contentDescription = "Standard Exercise",
+                            tint = HumanPrimaryAccent,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "STANDARD EXERCISE",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            ),
+                            color = HumanPrimaryAccent
+                        )
+                    }
+                }
+
+                // Delete/Remove exercise button
+                IconButton(
+                    onClick = onRemoveExerciseClick,
+                    modifier = Modifier.size(24.dp),
+                    colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.error.copy(alpha = 0.8f))
+                ) {
+                    Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = "Remove Exercise", modifier = Modifier.size(16.dp))
+                }
+            }
+
+            // 2. Exercise Title (Crossfade for seamless changing)
+            Crossfade(
+                targetState = exerciseName,
+                animationSpec = tween(durationMillis = 200),
+                label = "ExerciseNameChange"
+            ) { targetName ->
+                Column {
+                    Text(
+                        text = targetName,
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Black
+                        ),
+                        color = Color.White
+                    )
+                    Text(
+                        text = category.uppercase(),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        ),
+                        color = SlateMutedText
+                    )
+                }
+            }
+
+            HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
+
+            // 3. Progress Info & Bar
+            val progressFraction = if (totalSetsInWorkout > 0) completedSetsCount.toFloat() / totalSetsInWorkout else 0f
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Exercise $currentExerciseIndex of $totalExercisesCount",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Set $currentSetNumber of $totalSetsCount",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = if (isSuperset) KineticAccent else HumanPrimaryAccent
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "WORKOUT PROGRESS",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp),
+                        color = SlateMutedText.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = "${(progressFraction * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                        color = if (isSuperset) KineticAccent else HumanPrimaryAccent
+                    )
+                }
+
+                LinearProgressIndicator(
+                    progress = { progressFraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = if (isSuperset) KineticAccent else HumanPrimaryAccent,
+                    trackColor = SlateBackground
+                )
+            }
+
+            // 4. Sets Progress indicator strip
+            SetProgressStrip(
+                sets = sets,
+                currentSetIndex = currentSetIndex,
+                onSetClick = onSetClick
+            )
+
+            HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
+
+            // 5. Weight & Reps Stepper Controls
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                // Weight Stepper
+                TrainingStepper(
+                    label = "Weight",
+                    value = if (isEditingWeight) weightInputText else "${weight.toString().removeSuffix(".0")} kg",
+                    onValueChange = { input ->
+                        weightInputText = input
+                        val parsed = input.toFloatOrNull()
+                        if (parsed != null && parsed >= 0f) {
+                            onWeightChange(parsed)
+                        }
+                    },
+                    isEditing = isEditingWeight,
+                    onEditToggle = { isEditingWeight = it },
+                    onDecrement = {
+                        onWeightChange((weight - 2.5f).coerceAtLeast(0f))
+                    },
+                    onIncrement = {
+                        onWeightChange(weight + 2.5f)
+                    },
+                    keyboardType = KeyboardType.Decimal
+                )
+
+                // Repetitions Stepper
+                TrainingStepper(
+                    label = "Repetitions",
+                    value = if (isEditingReps) repsInputText else "$reps reps",
+                    onValueChange = { input ->
+                        repsInputText = input
+                        val parsed = input.toIntOrNull()
+                        if (parsed != null && parsed >= 1) {
+                            onRepsChange(parsed)
+                        }
+                    },
+                    isEditing = isEditingReps,
+                    onEditToggle = { isEditingReps = it },
+                    onDecrement = {
+                        onRepsChange((reps - 1).coerceAtLeast(1))
+                    },
+                    onIncrement = {
+                        onRepsChange(reps + 1)
+                    },
+                    keyboardType = KeyboardType.Number
+                )
+            }
+
+            HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
+
+            // 6. Optional Guidance (Coaching and Previous Benchmarks)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Previous Session
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "PREVIOUS SESSION",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                        color = SlateMutedText.copy(alpha = 0.7f)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = null,
+                            tint = if (isSuperset) KineticAccent.copy(alpha = 0.7f) else HumanPrimaryAccent.copy(alpha = 0.7f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Column {
+                            Text(
+                                text = prevSummary.ifBlank { "No prior history" },
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                            if (daysAgoText != null) {
+                                Text(
+                                    text = daysAgoText,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = SlateMutedText.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Coaching Note
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onCuesClick() },
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "COACHING NOTE",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                        color = SlateMutedText.copy(alpha = 0.7f)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lightbulb,
+                            contentDescription = null,
+                            tint = SlateSuccess.copy(alpha = 0.8f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = coachingCues?.ifBlank { "Add coaching note" } ?: "Add coaching note",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = if (coachingCues.isNullOrBlank()) FontWeight.Normal else FontWeight.Medium,
+                                color = if (coachingCues.isNullOrBlank()) SlateMutedText.copy(alpha = 0.5f) else Color.White
+                            ),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
+
+            // 7. Optional RPE Effort Control (minimized and cleanly integrated)
+            EffortControl(
+                rpe = rpe,
+                onRpeChange = onRpeChange,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
+
+            // 8. On-the-fly Set Controls (Add / Remove Set)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilledTonalIconButton(
+                        onClick = onRemoveSetClick,
+                        enabled = totalSetsInExercise > 1,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = SlateElevatedSurface,
+                            contentColor = Color.White,
+                            disabledContainerColor = SlateElevatedSurface.copy(alpha = 0.4f),
+                            disabledContentColor = Color.White.copy(alpha = 0.2f)
+                        ),
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Default.Remove, contentDescription = "Remove Set", modifier = Modifier.size(16.dp))
+                    }
+                    Text(
+                        text = "$totalSetsInExercise Sets Total",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.ExtraBold),
+                        color = Color.White
+                    )
+                    FilledTonalIconButton(
+                        onClick = onAddSetClick,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = SlateElevatedSurface,
+                            contentColor = Color.White
+                        ),
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Add Set", modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+
+            HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
+
+            // 9. Primary Call to Action: COMPLETE SET button
+            Button(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onCompleteSetClick()
+                },
+                enabled = completeSetEnabled,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+                    .testTag("submit_button"),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isSuperset) KineticAccent else HumanPrimaryAccent,
+                    contentColor = Color.Black, // High-contrast contrast
+                    disabledContainerColor = SlateElevatedSurface.copy(alpha = 0.5f),
+                    disabledContentColor = SlateMutedText.copy(alpha = 0.4f)
+                )
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(22.dp))
+                    Text(
+                        text = "COMPLETE SET",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                    )
+                }
+            }
         }
     }
 }

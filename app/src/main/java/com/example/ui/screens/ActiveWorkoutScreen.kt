@@ -296,144 +296,99 @@ fun ActiveWorkoutScreen(
                     // Main execution panels (when not actively resting)
                     val activeEx = currentActiveFlatSet!!.exercise
 
-                    // ZONE 2: Current Prescription (Hero Card)
                     item {
                         val groupId = activeWorkout.exerciseMetadata[activeEx.id]?.supersetGroupId
-                        val groupLabel = if (!groupId.isNullOrEmpty()) "Superset" else null
+                        val isSuperset = !groupId.isNullOrEmpty()
+                        
+                        // Calculate identityLabel for Supersets
+                        val identityLabel = if (isSuperset) {
+                            val distinctGroups = activeWorkout.exercises.mapNotNull { activeWorkout.exerciseMetadata[it.id]?.supersetGroupId }.distinct()
+                            val groupIndex = distinctGroups.indexOf(groupId)
+                            val groupLetter = if (groupIndex >= 0) ('A' + groupIndex).toString() else "A"
+                            val groupExercises = activeWorkout.exercises.filter { activeWorkout.exerciseMetadata[it.id]?.supersetGroupId == groupId }
+                            val exerciseIndexInGroup = groupExercises.indexOf(activeEx) + 1
+                            "SUPERSET $groupLetter • EXERCISE $exerciseIndexInGroup OF ${groupExercises.size}"
+                        } else {
+                            "STANDARD EXERCISE"
+                        }
 
-                        CurrentExerciseHero(
+                        // Calculate previous history completed days ago
+                        val mostRecentSet = allLoggedSets.filter { it.exerciseId == activeEx.id && it.isCompleted }.maxByOrNull { it.createdAt }
+                        val daysAgoText = if (mostRecentSet != null) {
+                            val diffMillis = System.currentTimeMillis() - mostRecentSet.createdAt
+                            val days = (diffMillis / (1000 * 60 * 60 * 24)).toInt()
+                            if (days <= 0) "Today" else if (days == 1) "1 day ago" else "$days days ago"
+                        } else {
+                            null
+                        }
+
+                        var isSubmittingSet by remember(currentActiveFlatSet.exercise.id, currentActiveFlatSet.setIndex) { mutableStateOf(false) }
+
+                        ActiveExerciseCard(
                             exerciseName = activeEx.name,
                             category = activeEx.category,
-                            groupLabel = groupLabel,
+                            identityLabel = identityLabel,
+                            isSuperset = isSuperset,
+                            currentExerciseIndex = activeWorkout.exercises.indexOf(activeEx) + 1,
+                            totalExercisesCount = activeWorkout.exercises.size,
                             currentSetNumber = currentSetIndex + 1,
-                            totalSets = setsList.size,
-                            targetWeight = currentActiveFlatSet.set.targetWeight ?: currentActiveFlatSet.set.weight,
-                            targetReps = currentActiveFlatSet.set.targetRepsMin ?: currentActiveFlatSet.set.reps,
+                            totalSetsCount = setsList.size,
+                            completedSetsCount = completedSetsCount,
+                            totalSetsInWorkout = totalSetsCount,
+                            sets = setsList,
+                            currentSetIndex = currentSetIndex,
+                            onSetClick = { index ->
+                                focusedSetIndexOverride = index
+                            },
+                            weight = activeWeight,
+                            onWeightChange = { activeWeight = it },
+                            reps = activeReps,
+                            onRepsChange = { activeReps = it },
+                            rpe = activeRpe,
+                            onRpeChange = { activeRpe = it },
                             prevSummary = exProfile?.bestSet ?: "No prior history",
+                            daysAgoText = daysAgoText,
                             coachingCues = currentActiveFlatSet.set.notes,
-                            onCuesClick = { showCuesDialog = true }
+                            onCuesClick = { showCuesDialog = true },
+                            completeSetEnabled = !isSubmittingSet,
+                            onCompleteSetClick = {
+                                if (!isSubmittingSet) {
+                                    isSubmittingSet = true
+                                    viewModel.updateSet(
+                                        exerciseId = activeEx.id,
+                                        setIndex = currentSetIndex,
+                                        reps = activeReps,
+                                        weight = activeWeight,
+                                        isCompleted = true,
+                                        rpe = activeRpe,
+                                        actualDuration = currentActiveFlatSet.set.actualDuration,
+                                        actualDistance = currentActiveFlatSet.set.actualDistance,
+                                        setType = currentActiveFlatSet.set.setType,
+                                        targetRepsMin = currentActiveFlatSet.set.targetRepsMin,
+                                        targetRepsMax = currentActiveFlatSet.set.targetRepsMax,
+                                        targetWeight = currentActiveFlatSet.set.targetWeight,
+                                        targetRpe = currentActiveFlatSet.set.targetRpe,
+                                        targetDuration = currentActiveFlatSet.set.targetDuration,
+                                        targetDistance = currentActiveFlatSet.set.targetDistance,
+                                        tempo = currentActiveFlatSet.set.tempo,
+                                        notes = currentActiveFlatSet.set.notes
+                                    )
+                                    focusedSetIndexOverride = null
+                                }
+                            },
+                            onAddSetClick = {
+                                viewModel.addSetToExercise(activeEx.id)
+                            },
+                            onRemoveSetClick = {
+                                if (setsList.isNotEmpty()) {
+                                    viewModel.removeSetFromExercise(activeEx.id, setsList.size - 1)
+                                }
+                            },
+                            totalSetsInExercise = setsList.size,
+                            onRemoveExerciseClick = {
+                                viewModel.removeExerciseFromActiveWorkout(activeEx.id)
+                            }
                         )
-                    }
-
-                    // ZONE 3: Primary Tactical Controls
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            // Set Navigation Row
-                            SetProgressStrip(
-                                sets = setsList,
-                                currentSetIndex = currentSetIndex,
-                                onSetClick = { index ->
-                                    focusedSetIndexOverride = index
-                                }
-                            )
-
-                            // Weight Stepper Input
-                            val isBodyweight = (recSpecs.startWeight <= 0f && activeWeight <= 0f)
-                            if (!isBodyweight) {
-                                WeightControl(
-                                    weight = activeWeight,
-                                    isMetric = true,
-                                    onWeightChange = { activeWeight = it }
-                                )
-                            }
-
-                            // Reps Stepper Input
-                            RepControl(
-                                reps = activeReps,
-                                onRepsChange = { activeReps = it }
-                            )
-
-                            // RPE / Intensity control
-                            EffortControl(
-                                rpe = activeRpe,
-                                onRpeChange = { activeRpe = it }
-                            )
-
-                            // Tactile Action: Add / Remove Sets or Exercises on the fly
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    FilledTonalIconButton(
-                                        onClick = {
-                                            if (setsList.isNotEmpty()) {
-                                                viewModel.removeSetFromExercise(activeEx.id, setsList.size - 1)
-                                            }
-                                        },
-                                        enabled = setsList.size > 1,
-                                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                                        )
-                                    ) {
-                                        Icon(Icons.Default.Remove, contentDescription = "Remove Set")
-                                    }
-                                    Text(
-                                        text = "${setsList.size} Sets Total",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    FilledTonalIconButton(
-                                        onClick = { viewModel.addSetToExercise(activeEx.id) },
-                                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                                        )
-                                    ) {
-                                        Icon(Icons.Default.Add, contentDescription = "Add Set")
-                                    }
-                                }
-
-                                IconButton(
-                                    onClick = { viewModel.removeExerciseFromActiveWorkout(activeEx.id) },
-                                    colors = IconButtonDefaults.iconButtonColors(
-                                        contentColor = MaterialTheme.colorScheme.error
-                                    )
-                                ) {
-                                    Icon(Icons.Default.DeleteOutline, contentDescription = "Remove Exercise")
-                                }
-                            }
-
-                            // Massive Complete/Log Button (with haptic feedback)
-                            val haptic = LocalHapticFeedback.current
-                            val isCurrentSetCompleted = currentActiveFlatSet.set.isCompleted
-                            var isSubmittingSet by remember(currentActiveFlatSet.exercise.id, currentActiveFlatSet.setIndex) { mutableStateOf(false) }
-
-                            CompleteSetButton(
-                                onClick = {
-                                    if (!isSubmittingSet) {
-                                        isSubmittingSet = true
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        viewModel.updateSet(
-                                            exerciseId = activeEx.id,
-                                            setIndex = currentSetIndex,
-                                            reps = activeReps,
-                                            weight = activeWeight,
-                                            isCompleted = true,
-                                            rpe = activeRpe,
-                                            actualDuration = currentActiveFlatSet.set.actualDuration,
-                                            actualDistance = currentActiveFlatSet.set.actualDistance,
-                                            setType = currentActiveFlatSet.set.setType,
-                                            targetRepsMin = currentActiveFlatSet.set.targetRepsMin,
-                                            targetRepsMax = currentActiveFlatSet.set.targetRepsMax,
-                                            targetWeight = currentActiveFlatSet.set.targetWeight,
-                                            targetRpe = currentActiveFlatSet.set.targetRpe,
-                                            targetDuration = currentActiveFlatSet.set.targetDuration,
-                                            targetDistance = currentActiveFlatSet.set.targetDistance,
-                                            tempo = currentActiveFlatSet.set.tempo,
-                                            notes = currentActiveFlatSet.set.notes
-                                        )
-                                        // Reset focus override to ensure it tracks the next global set automatically
-                                        focusedSetIndexOverride = null
-                                    }
-                                },
-                                enabled = !isSubmittingSet
-                            )
-                        }
                     }
 
                     // If Superset Round-Robin is executing -> Round details
