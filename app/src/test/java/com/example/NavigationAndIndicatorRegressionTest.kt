@@ -596,4 +596,97 @@ class NavigationAndIndicatorRegressionTest {
         assertTrue(isBenchPressExpanded)
         assertFalse(isSquatsExpanded)
     }
+
+    @Test
+    fun testRoutineBuilder_spaceRecoveryAndCompactFooter() {
+        val selectedExercises = androidx.compose.runtime.mutableStateListOf<StrengthViewModel.TemplateExerciseState>()
+        var nameInput = "My Ultra Routine"
+
+        composeTestRule.setContent {
+            MyApplicationTheme {
+                com.example.ui.components.HumanRoutineBuilderScreen(
+                    routineName = nameInput,
+                    onRoutineNameChange = { nameInput = it },
+                    routineNameError = null,
+                    selectedExercises = selectedExercises,
+                    exercises = emptyList(),
+                    isMetric = true,
+                    totalSets = 0,
+                    estDurationMin = 0,
+                    totalVolume = 0f,
+                    musclesCount = emptyMap(),
+                    trainingFocus = "General Focus",
+                    difficulty = "Easy",
+                    onBackClick = {},
+                    onCancelClick = {},
+                    onAddExerciseClick = {},
+                    onSaveClick = {},
+                    pairingDialogIndex = null,
+                    onPairingDialogIndexChange = {},
+                    showRestConfigGroupIndex = null,
+                    onShowRestConfigGroupIndexChange = {},
+                    isEditing = false
+                )
+            }
+        }
+
+        // Verify routine name editor is rendered and can be found via test tag
+        composeTestRule.onNodeWithTag("routine_name_editor_input").assertExists()
+        // Verify sticky review and save button is rendered
+        composeTestRule.onNodeWithTag("routine_editor_review_button").assertExists()
+        // Verify summary text displays 0 exercises since selectedExercises is empty
+        composeTestRule.onNodeWithText("0 exercises").assertExists()
+    }
+
+    @Test
+    fun testRoutineBuilder_withExercisesAndCompactReviewButton() {
+        val selectedExercises = androidx.compose.runtime.mutableStateListOf(
+            StrengthViewModel.TemplateExerciseState(
+                id = 1,
+                exerciseId = "ex_squat",
+                restSeconds = 90,
+                sets = listOf(
+                    StrengthViewModel.TemplateSetState(id = 10, targetRepsMin = 5, targetRepsMax = 5, targetWeight = 100f)
+                )
+            )
+        )
+        val exercises = listOf(Exercise("ex_squat", "Barbell Squat", "Legs"))
+        var saveClicked = false
+
+        composeTestRule.setContent {
+            MyApplicationTheme {
+                Box(modifier = Modifier.width(320.dp).height(640.dp)) {
+                    com.example.ui.components.HumanRoutineBuilderScreen(
+                        routineName = "Powerlifting Prep",
+                        onRoutineNameChange = {},
+                        routineNameError = null,
+                        selectedExercises = selectedExercises,
+                        exercises = exercises,
+                        isMetric = true,
+                        totalSets = 1,
+                        estDurationMin = 5,
+                        totalVolume = 500f,
+                        musclesCount = mapOf("Legs" to 1),
+                        trainingFocus = "Strength",
+                        difficulty = "Moderate",
+                        onBackClick = {},
+                        onCancelClick = {},
+                        onAddExerciseClick = {},
+                        onSaveClick = { saveClicked = true },
+                        pairingDialogIndex = null,
+                        onPairingDialogIndexChange = {},
+                        showRestConfigGroupIndex = null,
+                        onShowRestConfigGroupIndexChange = {},
+                        isEditing = false
+                    )
+                }
+            }
+        }
+
+        // Verify exercise and sets display correctly
+        composeTestRule.onNodeWithText("1 exercises").assertExists()
+        // Review and save routine button is clickable
+        composeTestRule.onNodeWithTag("routine_editor_review_button").assertExists().performClick()
+        assertTrue(saveClicked)
+    }
 }

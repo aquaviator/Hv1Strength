@@ -160,6 +160,37 @@ class ActiveWorkoutBehavioralTest {
         assertNull(activeWorkoutViewModel.restTimeRemaining.value)
     }
 
+    @Test
+    fun testRestTimerNaturalExpiry() = runBlocking {
+        activeWorkoutViewModel.startWorkout(null)
+        waitUntil { activeWorkoutViewModel.activeWorkoutState.value != null }
+
+        activeWorkoutViewModel.startRestTimer(1) // 1 second
+        assertEquals(1, activeWorkoutViewModel.restTimeRemaining.value)
+
+        // Robustly advance Robolectric's virtual clock to trigger delay(1000) and execute completeRest
+        shadowOf(Looper.getMainLooper()).idleFor(1500, java.util.concurrent.TimeUnit.MILLISECONDS)
+
+        // Rest state should be cleared
+        assertNull(activeWorkoutViewModel.restTimeRemaining.value)
+    }
+
+    @Test
+    fun testRestTimerReduceToZeroExpiry() = runBlocking {
+        activeWorkoutViewModel.startWorkout(null)
+        waitUntil { activeWorkoutViewModel.activeWorkoutState.value != null }
+
+        activeWorkoutViewModel.startRestTimer(30)
+        assertEquals(30, activeWorkoutViewModel.restTimeRemaining.value)
+
+        // Reduce by 30s
+        activeWorkoutViewModel.reduceRestTime(30)
+        idleLooper()
+
+        // Rest state should be cleared
+        assertNull(activeWorkoutViewModel.restTimeRemaining.value)
+    }
+
     /**
      * Test 4: Superset round progression (Round-robin routing)
      */

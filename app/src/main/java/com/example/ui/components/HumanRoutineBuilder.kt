@@ -40,6 +40,9 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -146,7 +149,7 @@ fun HumanRoutineBuilderScreen(
                 }
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             // 2. live routine summary strip (replacing progress bar)
             RoutineSummaryStrip(
@@ -156,7 +159,7 @@ fun HumanRoutineBuilderScreen(
                 groupCount = selectedExercises.mapNotNull { it.supersetGroupId }.distinct().size
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Scrollable Content
             Box(modifier = Modifier.weight(1f)) {
@@ -397,7 +400,7 @@ fun HumanBuilderHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 16.dp, bottom = 8.dp)
+            .padding(top = 0.dp, bottom = 4.dp)
     ) {
         // Top Action Row
         Row(
@@ -439,7 +442,7 @@ fun HumanBuilderHeader(
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         // Large dominant routine name editing area
         Box(
@@ -453,7 +456,7 @@ fun HumanBuilderHeader(
                         strokeWidth = 1.dp.toPx()
                     )
                 }
-                .padding(bottom = 6.dp)
+                .padding(bottom = 4.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -471,7 +474,7 @@ fun HumanBuilderHeader(
                     onValueChange = onRoutineNameChange,
                     textStyle = TextStyle(
                         color = Color.White,
-                        fontSize = 22.sp,
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = FontFamily.SansSerif
                     ),
@@ -493,7 +496,7 @@ fun HumanBuilderHeader(
                                 text = "Routine Name (e.g., Push Day)",
                                 style = TextStyle(
                                     color = SlateMutedText,
-                                    fontSize = 22.sp,
+                                    fontSize = 19.sp,
                                     fontWeight = FontWeight.Black
                                 )
                             )
@@ -535,7 +538,7 @@ fun RoutineSummaryStrip(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -629,7 +632,13 @@ fun ExercisePrescriptionCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onToggleExpand() },
+            .clickable { onToggleExpand() }
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = SlateElevatedSurface),
         border = BorderStroke(
@@ -881,31 +890,36 @@ fun ExerciseCardHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            // Unmistakable Expand/Collapse Control in the Header!
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            // Explicit Expand/Collapse Button for Accessibility & Regression Tests
+            val cleanName = exerciseName.replace(" ", "_")
+            val actionText = if (isExpanded) "Collapse" else "Expand"
+            
+            TextButton(
+                onClick = onToggleExpand,
                 modifier = Modifier
-                    .minimumInteractiveComponentSize() // Ensures at least 48dp x 48dp touch target
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(
-                        onClick = onToggleExpand,
-                        onClickLabel = if (isExpanded) "Collapse $exerciseName" else "Expand $exerciseName"
-                    )
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .testTag("expand_collapse_control_${exerciseName.replace(" ", "_")}")
+                    .testTag("expand_collapse_control_$cleanName")
+                    .semantics { 
+                        contentDescription = "$actionText $exerciseName"
+                    },
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = if (isExpanded) KineticAccent else HumanPrimaryAccent
+                ),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
             ) {
-                Text(
-                    text = if (isExpanded) "Collapse" else "Expand",
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
-                    color = KineticAccent,
-                    fontWeight = FontWeight.Bold
-                )
-                Icon(
-                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (isExpanded) "Collapse $exerciseName" else "Expand $exerciseName",
-                    tint = KineticAccent,
-                    modifier = Modifier.size(20.dp)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = actionText,
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
 
             if (isExpanded) {
@@ -1446,16 +1460,16 @@ fun BuilderBottomActionBar(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp)
+                .padding(top = 4.dp, bottom = 0.dp)
         ) {
             Button(
                 onClick = onSaveClick,
                 enabled = isSaveEnabled,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp)
+                    .height(48.dp)
                     .testTag("routine_editor_review_button"),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = HumanPrimaryAccent,
                     contentColor = Color.White,
@@ -1465,8 +1479,8 @@ fun BuilderBottomActionBar(
             ) {
                 Text(
                     text = "Review & Save Routine ➔",
-                    fontWeight = FontWeight.Black,
-                    fontSize = 16.sp
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
                 )
             }
         }

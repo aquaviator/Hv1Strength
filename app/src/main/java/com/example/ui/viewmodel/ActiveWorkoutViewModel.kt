@@ -478,9 +478,7 @@ class ActiveWorkoutViewModel(
                     if (remaining > 0) {
                         _restTimeRemaining.value = remaining
                     } else {
-                        _restTimeRemaining.value = 0
-                        updateStateTimer(null, null, false)
-                        triggerRestFinishedFeedback()
+                        completeRest(RestCompletionReason.Expired)
                         break
                     }
                 }
@@ -515,11 +513,20 @@ class ActiveWorkoutViewModel(
         }
     }
 
-    fun skipRestTimer() {
+    enum class RestCompletionReason { Skipped, Expired }
+
+    fun completeRest(reason: RestCompletionReason = RestCompletionReason.Skipped) {
         restTimerJob?.cancel()
         _restTimeRemaining.value = null
         _isRestTimerPaused.value = false
         updateStateTimer(null, null, false)
+        if (reason == RestCompletionReason.Expired) {
+            triggerRestFinishedFeedback()
+        }
+    }
+
+    fun skipRestTimer() {
+        completeRest(RestCompletionReason.Skipped)
     }
 
     fun resetRestTimer() {
@@ -552,7 +559,7 @@ class ActiveWorkoutViewModel(
         _restTimeRemaining.value = updated
         _restTimerDuration.value = updated
         if (updated == 0) {
-            skipRestTimer()
+            completeRest(RestCompletionReason.Skipped)
         } else {
             val endTimestamp = System.currentTimeMillis() + (updated * 1000L)
             updateStateTimer(
