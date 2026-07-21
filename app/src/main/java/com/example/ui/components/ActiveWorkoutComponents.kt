@@ -317,14 +317,16 @@ fun TrainingStepper(
     onDecrement: () -> Unit,
     onIncrement: () -> Unit,
     keyboardType: KeyboardType,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    subtext: String = "Tap to type"
 ) {
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = label.uppercase(),
@@ -341,7 +343,7 @@ fun TrainingStepper(
                 .fillMaxWidth()
                 .background(SlateBackground, RoundedCornerShape(12.dp))
                 .border(BorderStroke(1.dp, SlateBorderColor.copy(alpha = 0.5f)), RoundedCornerShape(12.dp))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 6.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -352,7 +354,7 @@ fun TrainingStepper(
                     onDecrement()
                 },
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(44.dp)
                     .background(SlateElevatedSurface, shape = RoundedCornerShape(10.dp))
                     .testTag("${label.lowercase()}_decrement_button")
             ) {
@@ -360,7 +362,7 @@ fun TrainingStepper(
                     imageVector = Icons.Default.Remove,
                     contentDescription = "Decrease $label",
                     tint = Color.White,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
 
@@ -369,7 +371,7 @@ fun TrainingStepper(
                 modifier = Modifier
                     .weight(1f)
                     .clickable { onEditToggle(true) }
-                    .padding(horizontal = 8.dp),
+                    .padding(horizontal = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
                 if (isEditing) {
@@ -391,32 +393,36 @@ fun TrainingStepper(
                             textAlign = TextAlign.Center,
                             fontWeight = FontWeight.Black,
                             color = Color.White,
-                            fontSize = 20.sp
+                            fontSize = 16.sp
                         ),
                         cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
                         modifier = Modifier
-                            .width(110.dp)
+                            .fillMaxWidth()
                             .background(SlateElevatedSurface, RoundedCornerShape(8.dp))
                             .border(BorderStroke(1.dp, SlateBorderColor), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                            .padding(horizontal = 4.dp, vertical = 6.dp)
                     )
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = value,
                             style = MaterialTheme.typography.titleMedium.copy(
-                                fontSize = 20.sp,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Black
                             ),
-                            color = Color.White
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "Tap to type",
+                            text = subtext,
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.SemiBold
                             ),
-                            color = SlateMutedText.copy(alpha = 0.6f)
+                            color = SlateMutedText.copy(alpha = 0.6f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -429,7 +435,7 @@ fun TrainingStepper(
                     onIncrement()
                 },
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(44.dp)
                     .background(SlateElevatedSurface, shape = RoundedCornerShape(10.dp))
                     .testTag("${label.lowercase()}_increment_button")
             ) {
@@ -437,7 +443,7 @@ fun TrainingStepper(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Increase $label",
                     tint = Color.White,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
@@ -486,7 +492,8 @@ fun ActiveExerciseCard(
     onRemoveSetClick: () -> Unit,
     totalSetsInExercise: Int,
     onRemoveExerciseClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    weightSource: String = "Tap to type"
 ) {
     var isEditingWeight by remember(weight) { mutableStateOf(false) }
     var weightInputText by remember(weight) { mutableStateOf(weight.toString().removeSuffix(".0")) }
@@ -494,15 +501,18 @@ fun ActiveExerciseCard(
     var isEditingReps by remember(reps) { mutableStateOf(false) }
     var repsInputText by remember(reps) { mutableStateOf(reps.toString()) }
 
+    var isPrevExpanded by remember { mutableStateOf(false) }
+    var isCuesExpanded by remember { mutableStateOf(false) }
+
     val haptic = LocalHapticFeedback.current
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
-            .background(SlateElevatedSurface, shape = RoundedCornerShape(20.dp))
-            .border(BorderStroke(1.dp, if (isSuperset) KineticAccent.copy(alpha = 0.3f) else HumanPrimaryAccent.copy(alpha = 0.3f)), shape = RoundedCornerShape(20.dp))
-            .clip(RoundedCornerShape(20.dp))
+            .background(SlateElevatedSurface, shape = RoundedCornerShape(16.dp))
+            .border(BorderStroke(1.dp, if (isSuperset) KineticAccent.copy(alpha = 0.3f) else HumanPrimaryAccent.copy(alpha = 0.3f)), shape = RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
     ) {
         // Left accent bar
         Box(
@@ -516,8 +526,8 @@ fun ActiveExerciseCard(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // 1. Identity Header
             Row(
@@ -537,7 +547,7 @@ fun ActiveExerciseCard(
                             modifier = Modifier.size(14.dp)
                         )
                         Text(
-                            text = "SUPERSET • $identityLabel".uppercase(),
+                            text = identityLabel.uppercase(),
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
@@ -584,7 +594,7 @@ fun ActiveExerciseCard(
                     Text(
                         text = targetName,
                         style = MaterialTheme.typography.headlineMedium.copy(
-                            fontSize = 24.sp,
+                            fontSize = 20.sp,
                             fontWeight = FontWeight.Black
                         ),
                         color = Color.White
@@ -592,7 +602,7 @@ fun ActiveExerciseCard(
                     Text(
                         text = category.uppercase(),
                         style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp
                         ),
@@ -601,57 +611,14 @@ fun ActiveExerciseCard(
                 }
             }
 
-            HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
+            // Compact progress line
+            Text(
+                text = "Exercise $currentExerciseIndex of $totalExercisesCount  •  Set $currentSetNumber of $totalSetsCount",
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
+                color = if (isSuperset) KineticAccent else HumanPrimaryAccent
+            )
 
-            // 3. Progress Info & Bar
-            val progressFraction = if (totalSetsInWorkout > 0) completedSetsCount.toFloat() / totalSetsInWorkout else 0f
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Exercise $currentExerciseIndex of $totalExercisesCount",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
-                    )
-                    Text(
-                        text = "Set $currentSetNumber of $totalSetsCount",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                        color = if (isSuperset) KineticAccent else HumanPrimaryAccent
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "WORKOUT PROGRESS",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp),
-                        color = SlateMutedText.copy(alpha = 0.7f)
-                    )
-                    Text(
-                        text = "${(progressFraction * 100).toInt()}%",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                        color = if (isSuperset) KineticAccent else HumanPrimaryAccent
-                    )
-                }
-
-                LinearProgressIndicator(
-                    progress = { progressFraction },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp)),
-                    color = if (isSuperset) KineticAccent else HumanPrimaryAccent,
-                    trackColor = SlateBackground
-                )
-            }
-
-            // 4. Sets Progress indicator strip
+            // 3. Sets Progress indicator strip (Clickable progress row)
             SetProgressStrip(
                 sets = sets,
                 currentSetIndex = currentSetIndex,
@@ -660,9 +627,12 @@ fun ActiveExerciseCard(
 
             HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
 
-            // 5. Weight & Reps Stepper Controls
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                // Weight Stepper
+            // 4. Weight & Reps matched pair (side-by-side columns)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Weight column
                 TrainingStepper(
                     label = "Weight",
                     value = if (isEditingWeight) weightInputText else "${weight.toString().removeSuffix(".0")} kg",
@@ -681,10 +651,12 @@ fun ActiveExerciseCard(
                     onIncrement = {
                         onWeightChange(weight + 2.5f)
                     },
-                    keyboardType = KeyboardType.Decimal
+                    keyboardType = KeyboardType.Decimal,
+                    subtext = weightSource,
+                    modifier = Modifier.weight(1f)
                 )
 
-                // Repetitions Stepper
+                // Repetitions column
                 TrainingStepper(
                     label = "Repetitions",
                     value = if (isEditingReps) repsInputText else "$reps reps",
@@ -703,21 +675,42 @@ fun ActiveExerciseCard(
                     onIncrement = {
                         onRepsChange(reps + 1)
                     },
-                    keyboardType = KeyboardType.Number
+                    keyboardType = KeyboardType.Number,
+                    subtext = "Tap to type",
+                    modifier = Modifier.weight(1f)
                 )
             }
 
             HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
 
-            // 6. Optional Guidance (Coaching and Previous Benchmarks)
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // 5. Expandable Previous Session & Coaching Notes
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 // Previous Session
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "PREVIOUS SESSION",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                        color = SlateMutedText.copy(alpha = 0.7f)
-                    )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isPrevExpanded = !isPrevExpanded }
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "PREVIOUS SESSION",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                            color = SlateMutedText.copy(alpha = 0.7f)
+                        )
+                        Icon(
+                            imageVector = if (isPrevExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = "Toggle Previous Session Details",
+                            tint = SlateMutedText.copy(alpha = 0.6f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -728,19 +721,33 @@ fun ActiveExerciseCard(
                             tint = if (isSuperset) KineticAccent.copy(alpha = 0.7f) else HumanPrimaryAccent.copy(alpha = 0.7f),
                             modifier = Modifier.size(16.dp)
                         )
-                        Column {
-                            Text(
-                                text = prevSummary.ifBlank { "No prior history" },
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
-                            if (daysAgoText != null) {
+                        if (isPrevExpanded) {
+                            Column {
                                 Text(
-                                    text = daysAgoText,
-                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                    color = SlateMutedText.copy(alpha = 0.6f)
+                                    text = prevSummary.ifBlank { "No prior history" },
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
                                 )
+                                if (daysAgoText != null) {
+                                    Text(
+                                        text = daysAgoText,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                        color = SlateMutedText.copy(alpha = 0.6f)
+                                    )
+                                }
                             }
+                        } else {
+                            Text(
+                                text = if (prevSummary.isNotBlank()) {
+                                    if (daysAgoText != null) "$prevSummary ($daysAgoText)" else prevSummary
+                                } else {
+                                    "No prior history"
+                                },
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                color = if (prevSummary.isNotBlank()) Color.White else SlateMutedText.copy(alpha = 0.5f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }
@@ -749,14 +756,31 @@ fun ActiveExerciseCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onCuesClick() },
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                        .clickable {
+                            isCuesExpanded = !isCuesExpanded
+                            onCuesClick()
+                        }
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Text(
-                        text = "COACHING NOTE",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                        color = SlateMutedText.copy(alpha = 0.7f)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "COACHING NOTE",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                            color = SlateMutedText.copy(alpha = 0.7f)
+                        )
+                        Icon(
+                            imageVector = if (isCuesExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = "Toggle Coaching Note Details",
+                            tint = SlateMutedText.copy(alpha = 0.6f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -767,23 +791,33 @@ fun ActiveExerciseCard(
                             tint = SlateSuccess.copy(alpha = 0.8f),
                             modifier = Modifier.size(16.dp)
                         )
-                        Text(
-                            text = coachingCues?.ifBlank { "Add coaching note" } ?: "Add coaching note",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = if (coachingCues.isNullOrBlank()) FontWeight.Normal else FontWeight.Medium,
-                                color = if (coachingCues.isNullOrBlank()) SlateMutedText.copy(alpha = 0.5f) else Color.White
-                            ),
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
+                        if (isCuesExpanded) {
+                            Text(
+                                text = coachingCues?.ifBlank { "Add coaching note" } ?: "Add coaching note",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = if (coachingCues.isNullOrBlank()) FontWeight.Normal else FontWeight.Medium,
+                                    color = if (coachingCues.isNullOrBlank()) SlateMutedText.copy(alpha = 0.5f) else Color.White
+                                ),
+                                color = Color.White
+                            )
+                        } else {
+                            Text(
+                                text = coachingCues?.ifBlank { "Add note" } ?: "Add note",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = if (coachingCues.isNullOrBlank()) FontWeight.Normal else FontWeight.Medium,
+                                    color = if (coachingCues.isNullOrBlank()) SlateMutedText.copy(alpha = 0.5f) else Color.White
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
 
             HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
 
-            // 7. Optional RPE Effort Control (minimized and cleanly integrated)
+            // 6. RPE Effort Control (minimized and cleanly integrated)
             EffortControl(
                 rpe = rpe,
                 onRpeChange = onRpeChange,
@@ -792,50 +826,7 @@ fun ActiveExerciseCard(
 
             HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
 
-            // 8. On-the-fly Set Controls (Add / Remove Set)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilledTonalIconButton(
-                        onClick = onRemoveSetClick,
-                        enabled = totalSetsInExercise > 1,
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = SlateElevatedSurface,
-                            contentColor = Color.White,
-                            disabledContainerColor = SlateElevatedSurface.copy(alpha = 0.4f),
-                            disabledContentColor = Color.White.copy(alpha = 0.2f)
-                        ),
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Default.Remove, contentDescription = "Remove Set", modifier = Modifier.size(16.dp))
-                    }
-                    Text(
-                        text = "$totalSetsInExercise Sets Total",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.ExtraBold),
-                        color = Color.White
-                    )
-                    FilledTonalIconButton(
-                        onClick = onAddSetClick,
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = SlateElevatedSurface,
-                            contentColor = Color.White
-                        ),
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Set", modifier = Modifier.size(16.dp))
-                    }
-                }
-            }
-
-            HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
-
-            // 9. Primary Call to Action: COMPLETE SET button
+            // 7. Primary Call to Action: COMPLETE SET button
             Button(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -844,12 +835,12 @@ fun ActiveExerciseCard(
                 enabled = completeSetEnabled,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(58.dp)
+                    .height(50.dp)
                     .testTag("submit_button"),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isSuperset) KineticAccent else HumanPrimaryAccent,
-                    contentColor = Color.Black, // High-contrast contrast
+                    containerColor = HumanPrimaryAccent,
+                    contentColor = Color.White,
                     disabledContainerColor = SlateElevatedSurface.copy(alpha = 0.5f),
                     disabledContentColor = SlateMutedText.copy(alpha = 0.4f)
                 )
@@ -858,10 +849,10 @@ fun ActiveExerciseCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(22.dp))
+                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(20.dp))
                     Text(
                         text = "COMPLETE SET",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black, letterSpacing = 1.sp, fontSize = 15.sp)
                     )
                 }
             }
@@ -1657,18 +1648,13 @@ fun RestStatePanel(
     onReduceSecs: (Int) -> Unit,
     onSkip: () -> Unit,
     onPauseToggle: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    nextIsSuperset: Boolean = false,
+    nextIdentityLabel: String = ""
 ) {
     val mins = restTimeRemaining / 60
     val secs = restTimeRemaining % 60
     val clockStr = String.format("%02d:%02d", mins, secs)
-
-    // Calculate circular progress
-    val progressFraction = if (totalRestDuration > 0) {
-        (restTimeRemaining.toFloat() / totalRestDuration).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
 
     Card(
         modifier = modifier
@@ -1676,16 +1662,16 @@ fun RestStatePanel(
             .padding(vertical = 8.dp),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.08f)
+            containerColor = SlateElevatedSurface
         ),
-        border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+        border = BorderStroke(2.dp, if (nextIsSuperset) KineticAccent.copy(alpha = 0.5f) else HumanPrimaryAccent.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier.padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header Action
+            // 1. Header Label: RESTING
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1698,160 +1684,155 @@ fun RestStatePanel(
                     Icon(
                         imageVector = Icons.Default.Timer,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = if (nextIsSuperset) KineticAccent else HumanPrimaryAccent
                     )
                     Text(
                         text = "RESTING",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.primary,
-                        letterSpacing = 1.sp
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.2.sp
+                        ),
+                        color = if (nextIsSuperset) KineticAccent else HumanPrimaryAccent
                     )
                 }
 
                 Text(
                     text = if (isPaused) "PAUSED" else "ACTIVE",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isPaused) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = if (isPaused) AlertRed else SlateSuccess
                 )
             }
 
-            // Big Clock Display with Circular Progress indicator
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(160.dp)
-                    .drawBehind {
-                        // Drawing track
-                        drawCircle(
-                            color = Color.Gray.copy(alpha = 0.1f),
-                            radius = size.minDimension / 2,
-                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 8.dp.toPx())
-                        )
-                    }
-            ) {
-                CircularProgressIndicator(
-                    progress = progressFraction,
-                    modifier = Modifier.size(160.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 8.dp,
-                    trackColor = Color.Transparent
-                )
+            // 2. Countdown Display (Big Clock)
+            Text(
+                text = clockStr,
+                style = MaterialTheme.typography.headlineLarge.copy(fontSize = 54.sp),
+                fontWeight = FontWeight.Black,
+                color = Color.White
+            )
 
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = clockStr,
-                        style = MaterialTheme.typography.headlineLarge.copy(fontSize = 38.sp),
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "remaining",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                }
-            }
-
-            // Time Adjustment controls
+            // 3. Time Adjustment controls: −15s   Pause   +15s
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(
                     onClick = { onReduceSecs(15) },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    colors = ButtonDefaults.textButtonColors(contentColor = AlertRed),
                     modifier = Modifier.testTag("rest_guide_minus_15_button")
                 ) {
-                    Text("-15s", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black)
+                    Text("−15s", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Black, fontSize = 16.sp))
                 }
 
                 Button(
                     onClick = onPauseToggle,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        containerColor = SlateBackground,
+                        contentColor = Color.White
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, SlateBorderColor)
                 ) {
                     Icon(
                         imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                        contentDescription = if (isPaused) "Resume rest timer" else "Pause rest timer"
+                        contentDescription = if (isPaused) "Resume rest timer" else "Pause rest timer",
+                        modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = if (isPaused) "Resume" else "Pause",
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
                     )
                 }
 
                 TextButton(
                     onClick = { onAddSecs(15) },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+                    colors = ButtonDefaults.textButtonColors(contentColor = if (nextIsSuperset) KineticAccent else HumanPrimaryAccent),
                     modifier = Modifier.testTag("rest_guide_plus_15_button")
                 ) {
-                    Text("+15s", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black)
+                    Text("+15s", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Black, fontSize = 16.sp))
                 }
             }
 
-            // Rest Divider
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+            HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.5f))
 
-            // Information of UP NEXT exercise
+            // 4. NEXT UP section
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "UP NEXT",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    letterSpacing = 1.sp
+                    text = "NEXT UP",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.2.sp
+                    ),
+                    color = SlateMutedText.copy(alpha = 0.8f)
                 )
-                Text(
-                    text = nextExerciseName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center
-                )
+
+                // Next Exercise Standard or Superset Identity Badge
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(vertical = 2.dp)
                 ) {
-                    Text(
-                        text = "Set $nextSetNumber",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    if (nextTargetPrescription.isNotBlank()) {
-                        Text(
-                            text = "·",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    if (nextIsSuperset) {
+                        Icon(
+                            imageVector = Icons.Default.Layers,
+                            contentDescription = "Superset",
+                            tint = KineticAccent,
+                            modifier = Modifier.size(12.dp)
                         )
                         Text(
-                            text = nextTargetPrescription,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = if (nextIdentityLabel.isNotBlank()) "SUPERSET • $nextIdentityLabel".uppercase() else "SUPERSET",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                            color = KineticAccent
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.FitnessCenter,
+                            contentDescription = "Standard Exercise",
+                            tint = HumanPrimaryAccent,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            text = "STANDARD EXERCISE",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                            color = HumanPrimaryAccent
                         )
                     }
                 }
+
+                Text(
+                    text = nextExerciseName,
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    text = "Set $nextSetNumber  •  $nextTargetPrescription",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    color = if (nextIsSuperset) KineticAccent else HumanPrimaryAccent,
+                    textAlign = TextAlign.Center
+                )
             }
 
-            // Skip Button
+            HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.5f))
+
+            // 5. SKIP REST (button)
             Button(
                 onClick = onSkip,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                    contentColor = MaterialTheme.colorScheme.primary
+                    containerColor = SlateBackground,
+                    contentColor = if (nextIsSuperset) KineticAccent else HumanPrimaryAccent
                 ),
                 shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, SlateBorderColor),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
@@ -1862,7 +1843,7 @@ fun RestStatePanel(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("SKIP REST PERIOD", fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
+                    Text("SKIP REST PERIOD", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black, letterSpacing = 0.5.sp))
                 }
             }
         }

@@ -41,6 +41,8 @@ import com.example.ui.viewmodel.StrengthViewModel
 import com.example.ui.viewmodel.ExerciseIntelligence
 import com.example.ui.viewmodel.ActiveWorkoutEvent
 import com.example.ui.components.*
+import com.example.ui.theme.*
+import androidx.compose.animation.core.tween
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -130,14 +132,33 @@ fun ActiveWorkoutScreen(
         activeFlatSet
     }
 
+    // Resolve the priority weight and its label source
+    val resolvedWeightAndSource = remember(currentActiveFlatSet?.exercise?.id, currentActiveFlatSet?.setIndex, allLoggedSets) {
+        currentActiveFlatSet?.let { flatSet ->
+            // 1. Check active session value (entered weight on the set)
+            if (flatSet.set.weight > 0f) {
+                return@remember flatSet.set.weight to "Active: ${flatSet.set.weight.toString().removeSuffix(".0")} kg"
+            }
+            
+            // 2. Routine prescription (target weight defined in the builder)
+            if (flatSet.set.targetWeight != null && flatSet.set.targetWeight > 0f) {
+                return@remember flatSet.set.targetWeight to "Routine: ${flatSet.set.targetWeight.toString().removeSuffix(".0")} kg"
+            }
+            
+            // 3. Previous session weight (most recent completed set for this exercise ID)
+            val mostRecentCompletedSet = allLoggedSets.filter { it.exerciseId == flatSet.exercise.id && it.isCompleted }.maxByOrNull { it.createdAt }
+            if (mostRecentCompletedSet != null && mostRecentCompletedSet.weight > 0f) {
+                return@remember mostRecentCompletedSet.weight to "History: ${mostRecentCompletedSet.weight.toString().removeSuffix(".0")} kg"
+            }
+            
+            // 4. Zero (only if no prescription or history exists)
+            return@remember 0f to "No prescription or history"
+        } ?: (0f to "Tap to type")
+    }
+
     // Active Input States bind directly to the currently selected (active or overridden) set
-    var activeWeight by remember(currentActiveFlatSet?.exercise?.id, currentActiveFlatSet?.setIndex) {
-        mutableStateOf(
-            currentActiveFlatSet?.let {
-                if (it.set.weight > 0f) it.set.weight
-                else (it.set.targetWeight ?: 40f)
-            } ?: 40f
-        )
+    var activeWeight by remember(resolvedWeightAndSource) {
+        mutableStateOf(resolvedWeightAndSource.first)
     }
     var activeReps by remember(currentActiveFlatSet?.exercise?.id, currentActiveFlatSet?.setIndex) {
         mutableStateOf(
@@ -148,7 +169,7 @@ fun ActiveWorkoutScreen(
         )
     }
     var activeRpe by remember(currentActiveFlatSet?.exercise?.id, currentActiveFlatSet?.setIndex) {
-        mutableStateOf<Int?>(currentActiveFlatSet?.set?.rpe ?: 8)
+        mutableStateOf<Int?>(currentActiveFlatSet?.set?.rpe)
     }
 
     val completedSetsCount = flatSets.count { it.set.isCompleted }
@@ -214,14 +235,49 @@ fun ActiveWorkoutScreen(
                 contentPadding = PaddingValues(vertical = 12.dp)
             ) {
                 // If rest timer is active -> Rest State Panel Dominates
-                if (restTimeRemaining != null) {
+                if (restTimeRemaining != null && activeFlatSet != null) {
                     item {
-                        val nextExName = activeFlatSet?.exercise?.name ?: "No more exercises"
-                        val nextSetNum = (activeFlatSet?.setIndex ?: 0) + 1
-                        val nextPrescription = if (activeFlatSet != null) {
-                            "${activeFlatSet.set.targetWeight ?: activeFlatSet.set.weight} kg × ${activeFlatSet.set.targetRepsMin ?: activeFlatSet.set.reps} reps"
+                        val nextExName = activeFlatSet.exercise.name
+                        val nextSetNum = activeFlatSet.setIndex + 1
+                        
+                        val nextIsSuperset = activeWorkout.exerciseMetadata[activeFlatSet.exercise.id]?.supersetGroupId != null
+                        val nextGroupId = activeWorkout.exerciseMetadata[activeFlatSet.exercise.id]?.supersetGroupId
+                        val nextIdentityLabel = if (nextIsSuperset) {
+                            val distinctGroups = activeWorkout.exercises.mapNotNull { activeWorkout.exerciseMetadata[it.id]?.supersetGroupId }.distinct()
+                            val groupIndex = distinctGroups.indexOf(nextGroupId)
+                            val groupLetter = if (groupIndex >= 0) ('A' + groupIndex).toString() else "A"
+                            val groupExercises = activeWorkout.exercises.filter { activeWorkout.exerciseMetadata[it.id]?.supersetGroupId == nextGroupId }
+                            val exerciseIndexInGroup = groupExercises.indexOf(activeFlatSet.exercise) + 1
+                            "SUPERSET $groupLetter • EXERCISE $exerciseIndexInGroup OF ${groupExercises.size}"
                         } else {
-                            ""
+                            "STANDARD EXERCISE"
+                        }
+
+                        val nextWeightVal = if (activeFlatSet.set.weight > 0f) {
+                            activeFlatSet.set.weight
+                        } else if (activeFlatSet.set.targetWeight != null && activeFlatSet.set.targetWeight > 0f) {
+                            activeFlatSet.set.targetWeight
+                        } else {
+                            val mostRecentCompletedSet = allLoggedSets.filter { it.exerciseId == activeFlatSet.exercise.id && it.isCompleted }.maxByOrNull { it.createdAt }
+                            if (mostRecentCompletedSet != null && mostRecentCompletedSet.weight > 0f) {
+                                mostRecentCompletedSet.weight
+                            } else {
+                                0f
+                            }
+                        }
+
+                        val nextRepsVal = if (activeFlatSet.set.reps > 0) {
+                            activeFlatSet.set.reps
+                        } else if (activeFlatSet.set.targetRepsMin != null && activeFlatSet.set.targetRepsMin > 0) {
+                            activeFlatSet.set.targetRepsMin
+                        } else {
+                            8
+                        }
+
+                        val nextPrescription = if (nextWeightVal > 0f) {
+                            "${nextWeightVal.toString().removeSuffix(".0")} kg × $nextRepsVal reps"
+                        } else {
+                            "$nextRepsVal reps"
                         }
 
                         RestStatePanel(
@@ -236,7 +292,9 @@ fun ActiveWorkoutScreen(
                             onSkip = { viewModel.skipRestTimer() },
                             onPauseToggle = {
                                 if (isRestTimerPaused) viewModel.resumeRestTimer() else viewModel.pauseRestTimer()
-                            }
+                            },
+                            nextIsSuperset = nextIsSuperset,
+                            nextIdentityLabel = nextIdentityLabel
                         )
                     }
                 }
@@ -247,12 +305,13 @@ fun ActiveWorkoutScreen(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .testTag("workout_complete_card"),
+                                .testTag("workout_complete_card")
+                                .padding(vertical = 12.dp),
                             shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+                                containerColor = SlateElevatedSurface
                             ),
-                            border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                            border = BorderStroke(2.dp, HumanPrimaryAccent)
                         ) {
                             Column(
                                 modifier = Modifier
@@ -264,19 +323,18 @@ fun ActiveWorkoutScreen(
                                 Icon(
                                     imageVector = Icons.Default.CheckCircle,
                                     contentDescription = "Workout Complete",
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    tint = SlateSuccess,
                                     modifier = Modifier.size(64.dp)
                                 )
                                 Text(
                                     text = "ALL SETS COMPLETED!",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Black,
-                                    color = MaterialTheme.colorScheme.primary
+                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
+                                    color = SlateSuccess
                                 )
                                 Text(
                                     text = "Phenomenal effort today. Ready to log your session?",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onBackground,
+                                    color = Color.White,
                                     textAlign = TextAlign.Center
                                 )
                                 Button(
@@ -285,9 +343,13 @@ fun ActiveWorkoutScreen(
                                         .fillMaxWidth()
                                         .height(56.dp)
                                         .testTag("finish_workout_button_card"),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = HumanPrimaryAccent,
+                                        contentColor = Color.White
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Text("FINISH WORKOUT", fontWeight = FontWeight.Black)
+                                    Text("FINISH WORKOUT", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black))
                                 }
                             }
                         }
@@ -324,71 +386,86 @@ fun ActiveWorkoutScreen(
 
                         var isSubmittingSet by remember(currentActiveFlatSet.exercise.id, currentActiveFlatSet.setIndex) { mutableStateOf(false) }
 
-                        ActiveExerciseCard(
-                            exerciseName = activeEx.name,
-                            category = activeEx.category,
-                            identityLabel = identityLabel,
-                            isSuperset = isSuperset,
-                            currentExerciseIndex = activeWorkout.exercises.indexOf(activeEx) + 1,
-                            totalExercisesCount = activeWorkout.exercises.size,
-                            currentSetNumber = currentSetIndex + 1,
-                            totalSetsCount = setsList.size,
-                            completedSetsCount = completedSetsCount,
-                            totalSetsInWorkout = totalSetsCount,
-                            sets = setsList,
-                            currentSetIndex = currentSetIndex,
-                            onSetClick = { index ->
-                                focusedSetIndexOverride = index
+                        val hapticFeedback = LocalHapticFeedback.current
+                        LaunchedEffect(activeEx.id) {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+
+                        AnimatedContent(
+                            targetState = activeEx.id,
+                            transitionSpec = {
+                                (slideInHorizontally(animationSpec = tween(220)) { width -> width / 12 } + fadeIn(animationSpec = tween(220)))
+                                    .togetherWith(slideOutHorizontally(animationSpec = tween(220)) { width -> -width / 12 } + fadeOut(animationSpec = tween(220)))
                             },
-                            weight = activeWeight,
-                            onWeightChange = { activeWeight = it },
-                            reps = activeReps,
-                            onRepsChange = { activeReps = it },
-                            rpe = activeRpe,
-                            onRpeChange = { activeRpe = it },
-                            prevSummary = exProfile?.bestSet ?: "No prior history",
-                            daysAgoText = daysAgoText,
-                            coachingCues = currentActiveFlatSet.set.notes,
-                            onCuesClick = { showCuesDialog = true },
-                            completeSetEnabled = !isSubmittingSet,
-                            onCompleteSetClick = {
-                                if (!isSubmittingSet) {
-                                    isSubmittingSet = true
-                                    viewModel.updateSet(
-                                        exerciseId = activeEx.id,
-                                        setIndex = currentSetIndex,
-                                        reps = activeReps,
-                                        weight = activeWeight,
-                                        isCompleted = true,
-                                        rpe = activeRpe,
-                                        actualDuration = currentActiveFlatSet.set.actualDuration,
-                                        actualDistance = currentActiveFlatSet.set.actualDistance,
-                                        setType = currentActiveFlatSet.set.setType,
-                                        targetRepsMin = currentActiveFlatSet.set.targetRepsMin,
-                                        targetRepsMax = currentActiveFlatSet.set.targetRepsMax,
-                                        targetWeight = currentActiveFlatSet.set.targetWeight,
-                                        targetRpe = currentActiveFlatSet.set.targetRpe,
-                                        targetDuration = currentActiveFlatSet.set.targetDuration,
-                                        targetDistance = currentActiveFlatSet.set.targetDistance,
-                                        tempo = currentActiveFlatSet.set.tempo,
-                                        notes = currentActiveFlatSet.set.notes
-                                    )
-                                    focusedSetIndexOverride = null
-                                }
-                            },
-                            onAddSetClick = {
-                                viewModel.addSetToExercise(activeEx.id)
-                            },
-                            onRemoveSetClick = {
-                                if (setsList.isNotEmpty()) {
-                                    viewModel.removeSetFromExercise(activeEx.id, setsList.size - 1)
-                                }
-                            },
-                            totalSetsInExercise = setsList.size,
-                            onRemoveExerciseClick = {
-                                viewModel.removeExerciseFromActiveWorkout(activeEx.id)
-                            }
-                        )
+                            label = "ExerciseTransition"
+                        ) { targetExerciseId ->
+                            ActiveExerciseCard(
+                                exerciseName = activeEx.name,
+                                category = activeEx.category,
+                                identityLabel = identityLabel,
+                                isSuperset = isSuperset,
+                                currentExerciseIndex = activeWorkout.exercises.indexOf(activeEx) + 1,
+                                totalExercisesCount = activeWorkout.exercises.size,
+                                currentSetNumber = currentSetIndex + 1,
+                                totalSetsCount = setsList.size,
+                                completedSetsCount = completedSetsCount,
+                                totalSetsInWorkout = totalSetsCount,
+                                sets = setsList,
+                                currentSetIndex = currentSetIndex,
+                                onSetClick = { index ->
+                                    focusedSetIndexOverride = index
+                                },
+                                weight = activeWeight,
+                                onWeightChange = { activeWeight = it },
+                                reps = activeReps,
+                                onRepsChange = { activeReps = it },
+                                rpe = activeRpe,
+                                onRpeChange = { activeRpe = it },
+                                prevSummary = exProfile?.bestSet ?: "No prior history",
+                                daysAgoText = daysAgoText,
+                                coachingCues = currentActiveFlatSet.set.notes,
+                                onCuesClick = { showCuesDialog = true },
+                                completeSetEnabled = !isSubmittingSet,
+                                onCompleteSetClick = {
+                                    if (!isSubmittingSet) {
+                                        isSubmittingSet = true
+                                        viewModel.updateSet(
+                                            exerciseId = activeEx.id,
+                                            setIndex = currentSetIndex,
+                                            reps = activeReps,
+                                            weight = activeWeight,
+                                            isCompleted = true,
+                                            rpe = activeRpe,
+                                            actualDuration = currentActiveFlatSet.set.actualDuration,
+                                            actualDistance = currentActiveFlatSet.set.actualDistance,
+                                            setType = currentActiveFlatSet.set.setType,
+                                            targetRepsMin = currentActiveFlatSet.set.targetRepsMin,
+                                            targetRepsMax = currentActiveFlatSet.set.targetRepsMax,
+                                            targetWeight = currentActiveFlatSet.set.targetWeight,
+                                            targetRpe = currentActiveFlatSet.set.targetRpe,
+                                            targetDuration = currentActiveFlatSet.set.targetDuration,
+                                            targetDistance = currentActiveFlatSet.set.targetDistance,
+                                            tempo = currentActiveFlatSet.set.tempo,
+                                            notes = currentActiveFlatSet.set.notes
+                                        )
+                                        focusedSetIndexOverride = null
+                                    }
+                                },
+                                onAddSetClick = {
+                                    viewModel.addSetToExercise(activeEx.id)
+                                },
+                                onRemoveSetClick = {
+                                    if (setsList.isNotEmpty()) {
+                                        viewModel.removeSetFromExercise(activeEx.id, setsList.size - 1)
+                                    }
+                                },
+                                totalSetsInExercise = setsList.size,
+                                onRemoveExerciseClick = {
+                                    viewModel.removeExerciseFromActiveWorkout(activeEx.id)
+                                },
+                                weightSource = resolvedWeightAndSource.second
+                            )
+                        }
                     }
 
                     // If Superset Round-Robin is executing -> Round details
