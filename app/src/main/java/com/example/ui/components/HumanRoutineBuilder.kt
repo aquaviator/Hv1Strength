@@ -628,6 +628,7 @@ fun ExercisePrescriptionCard(
     labelTag: String? = null // Optional Superset labels such as "A1"
 ) {
     val intention = remember(templateExercise.notes) { ExerciseIntention.fromSerializedString(templateExercise.notes) }
+    val isGrouped = !labelTag.isNullOrEmpty()
     
     Card(
         modifier = Modifier
@@ -639,192 +640,354 @@ fun ExercisePrescriptionCard(
                     stiffness = Spring.StiffnessLow
                 )
             ),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = SlateElevatedSurface),
+        shape = if (isGrouped) RoundedCornerShape(12.dp) else RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isExpanded) SlateElevatedSurface.copy(alpha = 1.0f) else SlateElevatedSurface
+        ),
         border = BorderStroke(
-            width = if (isExpanded) 1.5.dp else 1.dp,
-            color = if (isExpanded) HumanPrimaryAccent else SlateBorderColor
+            width = 1.dp,
+            color = if (isExpanded) {
+                if (isGrouped) KineticAccent.copy(alpha = 0.35f) else HumanPrimaryAccent.copy(alpha = 0.35f)
+            } else {
+                SlateBorderColor.copy(alpha = if (isGrouped) 0.3f else 0.5f)
+            }
         )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Card Header
-            ExerciseCardHeader(
-                exerciseName = exerciseObj.name,
-                category = exerciseObj.category,
-                labelTag = labelTag,
-                isExpanded = isExpanded,
-                onToggleExpand = onToggleExpand,
-                onDelete = onDelete,
-                onMoveUp = onMoveUp,
-                onMoveDown = onMoveDown,
-                onPairClick = onPairClick,
-                canMoveUp = exIndex > 0,
-                canMoveDown = true // Let it be enabled generally, boundary checks inside screen
-            )
+            // Elegant Left Accent Indicator Strip for the Active Card
+            if (isExpanded) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(4.dp)
+                        .background(
+                            if (isGrouped) KineticAccent else HumanPrimaryAccent,
+                            RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp)
+                        )
+                )
+            }
+            
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Card Header
+                ExerciseCardHeader(
+                    exerciseName = exerciseObj.name,
+                    category = exerciseObj.category,
+                    labelTag = labelTag,
+                    isExpanded = isExpanded,
+                    onToggleExpand = onToggleExpand,
+                    onDelete = onDelete,
+                    onMoveUp = onMoveUp,
+                    onMoveDown = onMoveDown,
+                    onPairClick = onPairClick,
+                    canMoveUp = exIndex > 0,
+                    canMoveDown = true // Let it be enabled generally, boundary checks inside screen
+                )
 
-            if (!isExpanded) {
-                // Collapsed State details: High information density, compact layout
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                if (!isExpanded) {
+                    // Collapsed State details: High-end athletic dashboard alignment
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(SlateBackground.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Prescriptions
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(text = "${templateExercise.sets.size}", fontWeight = FontWeight.Black, fontSize = 15.sp, color = Color.White)
-                            Text(text = "sets", fontSize = 12.sp, color = SlateMutedText)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Sets
+                            Column {
+                                Text(
+                                    text = "SETS",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 9.sp, 
+                                        fontWeight = FontWeight.Bold, 
+                                        letterSpacing = 1.sp
+                                    ),
+                                    color = SlateMutedText
+                                )
+                                Text(
+                                    text = "${templateExercise.sets.size}",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontSize = 15.sp, 
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                    color = Color.White
+                                )
+                            }
+                            
+                            // Vertical Divider
+                            Box(modifier = Modifier.width(1.dp).height(22.dp).background(SlateBorderColor))
+                            
+                            // Reps
+                            Column {
+                                Text(
+                                    text = "REPS",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 9.sp, 
+                                        fontWeight = FontWeight.Bold, 
+                                        letterSpacing = 1.sp
+                                    ),
+                                    color = SlateMutedText
+                                )
+                                Text(
+                                    text = "${intention.targetRepsMin}–${intention.targetRepsMax}",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontSize = 15.sp, 
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                    color = Color.White
+                                )
+                            }
+                            
+                            // Vertical Divider
+                            Box(modifier = Modifier.width(1.dp).height(22.dp).background(SlateBorderColor))
+                            
+                            // Rest
+                            Column {
+                                Text(
+                                    text = "REST",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 9.sp, 
+                                        fontWeight = FontWeight.Bold, 
+                                        letterSpacing = 1.sp
+                                    ),
+                                    color = SlateMutedText
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.Timer, null, modifier = Modifier.size(11.dp), tint = SlateMutedText)
+                                    Text(
+                                        text = "${templateExercise.restSeconds}s",
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontSize = 14.sp, 
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = Color.White
+                                    )
+                                }
+                            }
                         }
-                        Text(text = "•", color = SlateBorderColor)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(text = "${intention.targetRepsMin}-${intention.targetRepsMax}", fontWeight = FontWeight.Black, fontSize = 15.sp, color = Color.White)
-                            Text(text = "reps", fontSize = 12.sp, color = SlateMutedText)
-                        }
-                        Text(text = "•", color = SlateBorderColor)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(Icons.Default.Timer, null, modifier = Modifier.size(12.dp), tint = SlateMutedText)
-                            Text(text = "${templateExercise.restSeconds}s rest", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White)
-                        }
-                    }
 
-                    // Extra Strategy/Previous Indicators
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                        // Starting Weight Badge
                         if (intention.startingWeight != null) {
                             Box(
                                 modifier = Modifier
-                                    .background(SlateBackground, RoundedCornerShape(6.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .background(
+                                        if (isGrouped) KineticAccent.copy(alpha = 0.12f) else HumanPrimaryAccent.copy(alpha = 0.12f), 
+                                        RoundedCornerShape(6.dp)
+                                    )
+                                    .border(
+                                        1.dp, 
+                                        if (isGrouped) KineticAccent.copy(alpha = 0.25f) else HumanPrimaryAccent.copy(alpha = 0.25f), 
+                                        RoundedCornerShape(6.dp)
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Text(
-                                    text = "Start: ${intention.startingWeight}kg",
-                                    fontSize = 11.sp,
+                                    text = "START: ${intention.startingWeight}kg",
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = HumanPrimaryAccent
+                                    color = if (isGrouped) KineticAccent else HumanPrimaryAccent,
+                                    letterSpacing = 0.5.sp
                                 )
                             }
                         }
                     }
-                }
-            } else {
-                // Expanded State details: In-depth set configuration & strategy tools
-                Divider(color = SlateBorderColor)
+                } else {
+                    // Expanded State details: In-depth set configuration & strategy tools
+                    HorizontalDivider(color = SlateBorderColor)
 
-                // Sets & Reps Config rows (Prescription Editor)
-                SetPrescriptionEditor(
-                    templateExercise = templateExercise,
-                    intention = intention,
-                    isMetric = isMetric,
-                    onUpdate = onUpdate
-                )
+                    // Sets & Reps Config rows (Prescription Editor)
+                    SetPrescriptionEditor(
+                        templateExercise = templateExercise,
+                        intention = intention,
+                        isMetric = isMetric,
+                        onUpdate = onUpdate
+                    )
 
-                Divider(color = SlateBorderColor)
+                    HorizontalDivider(color = SlateBorderColor)
 
-                // Strategy and Notes subsection
-                Text(
-                    text = "TRAINING GOAL & GUIDANCE",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Black,
-                    color = HumanPrimaryAccent
-                )
+                    // Strategy and Notes subsection header
+                    Text(
+                        text = "TRAINING GOAL & GUIDANCE",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.2.sp
+                        ),
+                        color = if (isGrouped) KineticAccent else HumanPrimaryAccent
+                    )
 
-                // Goal chip options
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val goals = listOf("Strength", "Hypertrophy", "Endurance", "Technique", "Custom")
-                    goals.forEach { g ->
-                        val isSelected = intention.goal == g
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    if (isSelected) HumanPrimaryAccent else SlateBackground,
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .border(
-                                    1.dp,
-                                    if (isSelected) Color.Transparent else SlateBorderColor,
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .clickable {
-                                    val updated = intention.copy(goal = g)
-                                    onUpdate(templateExercise.copy(notes = updated.toSerializedString()))
-                                }
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text(g, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isSelected) Color.White else SlateMutedText)
-                        }
-                    }
-                }
-
-                // Inline Rest editor for expanded mode
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("REST GUIDE", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SlateMutedText)
-                    
+                    // Goal chip options: Premium athletic capsule shapes with distinct icons
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        IconButton(
-                            onClick = {
-                                val r = (templateExercise.restSeconds - 15).coerceAtLeast(0)
-                                onUpdate(templateExercise.copy(restSeconds = r))
-                            },
-                            modifier = Modifier.size(32.dp).background(SlateBackground, CircleShape)
-                        ) {
-                            Icon(Icons.Default.Remove, null, modifier = Modifier.size(14.dp), tint = Color.White)
-                        }
-
-                        Text("${templateExercise.restSeconds}s", fontWeight = FontWeight.Black, fontSize = 14.sp, color = Color.White)
-
-                        IconButton(
-                            onClick = {
-                                val r = templateExercise.restSeconds + 15
-                                onUpdate(templateExercise.copy(restSeconds = r))
-                            },
-                            modifier = Modifier.size(32.dp).background(SlateBackground, CircleShape)
-                        ) {
-                            Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp), tint = Color.White)
+                        val goals = listOf(
+                            "Strength" to Icons.Default.FitnessCenter,
+                            "Hypertrophy" to Icons.Default.TrendingUp,
+                            "Endurance" to Icons.Default.DirectionsRun,
+                            "Technique" to Icons.Default.Star,
+                            "Custom" to Icons.Default.Edit
+                        )
+                        goals.forEach { (g, icon) ->
+                            val isSelected = intention.goal == g
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        if (isSelected) {
+                                            if (isGrouped) KineticAccent else HumanPrimaryAccent
+                                        } else SlateBackground,
+                                        RoundedCornerShape(20.dp)
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) Color.Transparent else SlateBorderColor,
+                                        RoundedCornerShape(20.dp)
+                                    )
+                                    .clickable {
+                                        val updated = intention.copy(goal = g)
+                                        onUpdate(templateExercise.copy(notes = updated.toSerializedString()))
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(12.dp),
+                                        tint = if (isSelected) Color.Black else SlateMutedText
+                                    )
+                                    Text(
+                                        text = g,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) Color.Black else SlateMutedText
+                                    )
+                                }
+                            }
                         }
                     }
-                }
 
-                // Strategy Notes field
-                OutlinedTextField(
-                    value = intention.userNotes,
-                    onValueChange = {
-                        val updated = intention.copy(userNotes = it)
-                        onUpdate(templateExercise.copy(notes = updated.toSerializedString()))
-                    },
-                    label = { Text("Performance & Setup Strategy Notes", color = SlateMutedText) },
-                    textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = HumanPrimaryAccent,
-                        unfocusedBorderColor = SlateBorderColor,
-                        focusedContainerColor = SlateBackground,
-                        unfocusedContainerColor = SlateBackground
-                    ),
-                    singleLine = true
-                )
+                    // Inline Rest editor for expanded mode
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "REST GUIDE", 
+                            fontSize = 11.sp, 
+                            fontWeight = FontWeight.Bold, 
+                            letterSpacing = 0.5.sp, 
+                            color = SlateMutedText
+                        )
+                        
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    val r = (templateExercise.restSeconds - 15).coerceAtLeast(0)
+                                    onUpdate(templateExercise.copy(restSeconds = r))
+                                },
+                                modifier = Modifier.size(32.dp).background(SlateBackground, CircleShape)
+                            ) {
+                                Icon(Icons.Default.Remove, null, modifier = Modifier.size(14.dp), tint = Color.White)
+                            }
+
+                            Text(
+                                text = "${templateExercise.restSeconds}s", 
+                                fontWeight = FontWeight.Black, 
+                                fontSize = 14.sp, 
+                                color = Color.White
+                            )
+
+                            IconButton(
+                                onClick = {
+                                    val r = templateExercise.restSeconds + 15
+                                    onUpdate(templateExercise.copy(restSeconds = r))
+                                },
+                                modifier = Modifier.size(32.dp).background(SlateBackground, CircleShape)
+                            ) {
+                                Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp), tint = Color.White)
+                            }
+                        }
+                    }
+
+                    // Strategy Notes field: Refined into an actual physical Coach Notes clipboard container
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(SlateBackground, RoundedCornerShape(8.dp))
+                            .border(1.dp, SlateBorderColor, RoundedCornerShape(8.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Assignment,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = if (isGrouped) KineticAccent else HumanPrimaryAccent
+                            )
+                            Text(
+                                text = "COACH SETUP & PERFORMANCE NOTES",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.8.sp
+                                ),
+                                color = SlateMutedText
+                            )
+                        }
+                        
+                        BasicTextField(
+                            value = intention.userNotes,
+                            onValueChange = {
+                                val updated = intention.copy(userNotes = it)
+                                onUpdate(templateExercise.copy(notes = updated.toSerializedString()))
+                            },
+                            textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            cursorBrush = SolidColor(if (isGrouped) KineticAccent else HumanPrimaryAccent),
+                            decorationBox = { innerTextField ->
+                                if (intention.userNotes.isEmpty()) {
+                                    Text(
+                                        text = "Tap to add setup instructions (e.g. bench height, grip)...",
+                                        fontSize = 13.sp,
+                                        color = SlateMutedText.copy(alpha = 0.5f)
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        )
+                    }
+                }
             }
         }
     }
@@ -855,33 +1018,51 @@ fun ExerciseCardHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (!labelTag.isNullOrEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .background(KineticAccent.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-                            .border(1.dp, KineticAccent.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = labelTag,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Black,
-                            color = KineticAccent
-                        )
-                    }
-                }
+            // 1. Exercise Type Identity Label (Tracked and understated)
+            if (labelTag.isNullOrEmpty()) {
                 Text(
-                    text = exerciseName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White
+                    text = "STANDARD EXERCISE",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.2.sp
+                    ),
+                    color = SlateMutedText.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+            } else {
+                Text(
+                    text = "SUPERSET • $labelTag",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.2.sp
+                    ),
+                    color = KineticAccent.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(bottom = 2.dp)
                 )
             }
+
+            // 2. Exercise Name (Strongest visual element)
             Text(
-                text = category,
-                style = MaterialTheme.typography.bodySmall,
-                color = SlateMutedText
+                text = exerciseName,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold
+                ),
+                color = Color.White
+            )
+
+            // 3. Category (Understated uppercase subtitle)
+            Text(
+                text = category.uppercase(),
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp
+                ),
+                color = SlateMutedText.copy(alpha = 0.5f),
+                modifier = Modifier.padding(top = 2.dp)
             )
         }
 
@@ -890,7 +1071,7 @@ fun ExerciseCardHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            // Explicit Expand/Collapse Button for Accessibility & Regression Tests
+            // Explicit Expand/Collapse Button: Refined to reduce visual weight
             val cleanName = exerciseName.replace(" ", "_")
             val actionText = if (isExpanded) "Collapse" else "Expand"
             
@@ -902,22 +1083,27 @@ fun ExerciseCardHeader(
                         contentDescription = "$actionText $exerciseName"
                     },
                 colors = ButtonDefaults.textButtonColors(
-                    contentColor = if (isExpanded) KineticAccent else HumanPrimaryAccent
+                    contentColor = if (isExpanded) {
+                        if (!labelTag.isNullOrEmpty()) KineticAccent else HumanPrimaryAccent
+                    } else SlateMutedText.copy(alpha = 0.8f)
                 ),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
                         text = actionText,
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     )
                     Icon(
                         imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(14.dp)
                     )
                 }
             }
@@ -1272,12 +1458,12 @@ fun WorkoutGroupContainer(
             .fillMaxWidth()
             .padding(vertical = 4.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = SlateElevatedSurface),
-        border = BorderStroke(1.dp, KineticAccent.copy(alpha = 0.4f))
+        colors = CardDefaults.cardColors(containerColor = SlateBackground),
+        border = BorderStroke(1.dp, KineticAccent.copy(alpha = 0.25f))
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Group Header Section
             Row(
@@ -1291,22 +1477,25 @@ fun WorkoutGroupContainer(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(28.dp)
-                            .background(KineticAccent, CircleShape),
+                            .size(24.dp)
+                            .background(KineticAccent, RoundedCornerShape(6.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = groupLetter,
                             fontWeight = FontWeight.Black,
-                            fontSize = 14.sp,
+                            fontSize = 12.sp,
                             color = Color.Black
                         )
                     }
 
                     Text(
-                        text = if (isCircuit) "CIRCUIT GROUP" else "SUPERSET GROUP",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Black,
+                        text = if (isCircuit) "CIRCUIT CONTAINER" else "SUPERSET CONTAINER",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.2.sp
+                        ),
                         color = KineticAccent
                     )
                 }
@@ -1328,6 +1517,8 @@ fun WorkoutGroupContainer(
                 }
             }
 
+            HorizontalDivider(color = KineticAccent.copy(alpha = 0.12f), thickness = 1.dp)
+
             // Interactive group stats summary with Rounds Stepper
             val maxRounds = exercisesInGroup.maxOfOrNull { it.sets.size } ?: 3
             val commonRest = exercisesInGroup.firstOrNull()?.restSeconds ?: 90
@@ -1335,8 +1526,8 @@ fun WorkoutGroupContainer(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(SlateBackground, RoundedCornerShape(10.dp))
-                    .padding(8.dp),
+                    .background(SlateElevatedSurface, RoundedCornerShape(10.dp))
+                    .padding(10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1351,7 +1542,7 @@ fun WorkoutGroupContainer(
                             onClick = { if (maxRounds > 1) onUpdateRounds(maxRounds - 1) },
                             modifier = Modifier
                                 .size(28.dp)
-                                .background(SlateElevatedSurface, CircleShape)
+                                .background(SlateBackground, CircleShape)
                         ) {
                             Icon(Icons.Default.Remove, null, modifier = Modifier.size(12.dp), tint = Color.White)
                         }
@@ -1362,7 +1553,7 @@ fun WorkoutGroupContainer(
                             onClick = { onUpdateRounds(maxRounds + 1) },
                             modifier = Modifier
                                 .size(28.dp)
-                                .background(SlateElevatedSurface, CircleShape)
+                                .background(SlateBackground, CircleShape)
                         ) {
                             Icon(Icons.Default.Add, null, modifier = Modifier.size(12.dp), tint = Color.White)
                         }
