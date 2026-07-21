@@ -137,22 +137,22 @@ fun ActiveWorkoutScreen(
         currentActiveFlatSet?.let { flatSet ->
             // 1. Check active session value (entered weight on the set)
             if (flatSet.set.weight > 0f) {
-                return@remember flatSet.set.weight to "Active: ${flatSet.set.weight.toString().removeSuffix(".0")} kg"
+                return@remember flatSet.set.weight to "Entered"
             }
             
             // 2. Routine prescription (target weight defined in the builder)
             if (flatSet.set.targetWeight != null && flatSet.set.targetWeight > 0f) {
-                return@remember flatSet.set.targetWeight to "Routine: ${flatSet.set.targetWeight.toString().removeSuffix(".0")} kg"
+                return@remember flatSet.set.targetWeight to "From routine"
             }
             
             // 3. Previous session weight (most recent completed set for this exercise ID)
             val mostRecentCompletedSet = allLoggedSets.filter { it.exerciseId == flatSet.exercise.id && it.isCompleted }.maxByOrNull { it.createdAt }
             if (mostRecentCompletedSet != null && mostRecentCompletedSet.weight > 0f) {
-                return@remember mostRecentCompletedSet.weight to "History: ${mostRecentCompletedSet.weight.toString().removeSuffix(".0")} kg"
+                return@remember mostRecentCompletedSet.weight to "Last session: ${mostRecentCompletedSet.weight.toString().removeSuffix(".0")} kg"
             }
             
             // 4. Zero (only if no prescription or history exists)
-            return@remember 0f to "No prescription or history"
+            return@remember 0f to "Tap to type"
         } ?: (0f to "Tap to type")
     }
 
@@ -160,7 +160,7 @@ fun ActiveWorkoutScreen(
     var activeWeight by remember(resolvedWeightAndSource) {
         mutableStateOf(resolvedWeightAndSource.first)
     }
-    var activeReps by remember(currentActiveFlatSet?.exercise?.id, currentActiveFlatSet?.setIndex) {
+    var activeReps by remember(currentActiveFlatSet?.exercise?.id, currentActiveFlatSet?.setIndex, currentActiveFlatSet?.set?.reps) {
         mutableStateOf(
             currentActiveFlatSet?.let {
                 if (it.set.reps > 0) it.set.reps
@@ -168,7 +168,7 @@ fun ActiveWorkoutScreen(
             } ?: 8
         )
     }
-    var activeRpe by remember(currentActiveFlatSet?.exercise?.id, currentActiveFlatSet?.setIndex) {
+    var activeRpe by remember(currentActiveFlatSet?.exercise?.id, currentActiveFlatSet?.setIndex, currentActiveFlatSet?.set?.rpe) {
         mutableStateOf<Int?>(currentActiveFlatSet?.set?.rpe)
     }
 
@@ -416,11 +416,74 @@ fun ActiveWorkoutScreen(
                                     focusedSetIndexOverride = index
                                 },
                                 weight = activeWeight,
-                                onWeightChange = { activeWeight = it },
+                                onWeightChange = { newWeight ->
+                                    activeWeight = newWeight
+                                    viewModel.updateSet(
+                                        exerciseId = activeEx.id,
+                                        setIndex = currentSetIndex,
+                                        reps = activeReps,
+                                        weight = newWeight,
+                                        isCompleted = currentActiveFlatSet.set.isCompleted,
+                                        rpe = activeRpe,
+                                        actualDuration = currentActiveFlatSet.set.actualDuration,
+                                        actualDistance = currentActiveFlatSet.set.actualDistance,
+                                        setType = currentActiveFlatSet.set.setType,
+                                        targetRepsMin = currentActiveFlatSet.set.targetRepsMin,
+                                        targetRepsMax = currentActiveFlatSet.set.targetRepsMax,
+                                        targetWeight = currentActiveFlatSet.set.targetWeight,
+                                        targetRpe = currentActiveFlatSet.set.targetRpe,
+                                        targetDuration = currentActiveFlatSet.set.targetDuration,
+                                        targetDistance = currentActiveFlatSet.set.targetDistance,
+                                        tempo = currentActiveFlatSet.set.tempo,
+                                        notes = currentActiveFlatSet.set.notes
+                                    )
+                                },
                                 reps = activeReps,
-                                onRepsChange = { activeReps = it },
+                                onRepsChange = { newReps ->
+                                    activeReps = newReps
+                                    viewModel.updateSet(
+                                        exerciseId = activeEx.id,
+                                        setIndex = currentSetIndex,
+                                        reps = newReps,
+                                        weight = activeWeight,
+                                        isCompleted = currentActiveFlatSet.set.isCompleted,
+                                        rpe = activeRpe,
+                                        actualDuration = currentActiveFlatSet.set.actualDuration,
+                                        actualDistance = currentActiveFlatSet.set.actualDistance,
+                                        setType = currentActiveFlatSet.set.setType,
+                                        targetRepsMin = currentActiveFlatSet.set.targetRepsMin,
+                                        targetRepsMax = currentActiveFlatSet.set.targetRepsMax,
+                                        targetWeight = currentActiveFlatSet.set.targetWeight,
+                                        targetRpe = currentActiveFlatSet.set.targetRpe,
+                                        targetDuration = currentActiveFlatSet.set.targetDuration,
+                                        targetDistance = currentActiveFlatSet.set.targetDistance,
+                                        tempo = currentActiveFlatSet.set.tempo,
+                                        notes = currentActiveFlatSet.set.notes
+                                    )
+                                },
                                 rpe = activeRpe,
-                                onRpeChange = { activeRpe = it },
+                                onRpeChange = { newRpe ->
+                                    activeRpe = newRpe
+                                    viewModel.updateSet(
+                                        exerciseId = activeEx.id,
+                                        setIndex = currentSetIndex,
+                                        reps = activeReps,
+                                        weight = activeWeight,
+                                        isCompleted = currentActiveFlatSet.set.isCompleted,
+                                        rpe = newRpe,
+                                        actualDuration = currentActiveFlatSet.set.actualDuration,
+                                        actualDistance = currentActiveFlatSet.set.actualDistance,
+                                        setType = currentActiveFlatSet.set.setType,
+                                        targetRepsMin = currentActiveFlatSet.set.targetRepsMin,
+                                        targetRepsMax = currentActiveFlatSet.set.targetRepsMax,
+                                        targetWeight = currentActiveFlatSet.set.targetWeight,
+                                        targetRpe = currentActiveFlatSet.set.targetRpe,
+                                        targetDuration = currentActiveFlatSet.set.targetDuration,
+                                        targetDistance = currentActiveFlatSet.set.targetDistance,
+                                        tempo = currentActiveFlatSet.set.tempo,
+                                        notes = currentActiveFlatSet.set.notes
+                                    )
+                                },
                                 prevSummary = exProfile?.bestSet ?: "No prior history",
                                 daysAgoText = daysAgoText,
                                 coachingCues = currentActiveFlatSet.set.notes,
