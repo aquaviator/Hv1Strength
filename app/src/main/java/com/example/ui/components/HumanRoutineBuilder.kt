@@ -797,7 +797,7 @@ fun ExercisePrescriptionCard(
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Text(
-                                    text = "START: ${intention.startingWeight}kg",
+                                    text = "START: ${com.example.core.util.UnitConverter.formatWeight(intention.startingWeight!!.toDouble(), isMetric)}",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isGrouped) KineticAccent else HumanPrimaryAccent,
@@ -1317,7 +1317,7 @@ fun SetPrescriptionEditor(
                 Spacer(modifier = Modifier.height(4.dp))
                 val currentWeight = intention.startingWeight ?: 20f
                 Text(
-                    text = if (intention.startingWeight != null) "${currentWeight.toInt()}kg" else "--",
+                    text = if (intention.startingWeight != null) com.example.core.util.UnitConverter.formatWeight(currentWeight.toDouble(), isMetric) else "--",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Black,
                     color = Color.White
@@ -1417,7 +1417,7 @@ fun SetPrescriptionEditor(
                         
                         // Weight input display
                         Text(
-                            text = if (ts.targetWeight != null) "${ts.targetWeight} kg" else "No Weight",
+                            text = if (ts.targetWeight != null) com.example.core.util.UnitConverter.formatWeight(ts.targetWeight!!.toDouble(), isMetric) else "No Weight",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = KineticAccent

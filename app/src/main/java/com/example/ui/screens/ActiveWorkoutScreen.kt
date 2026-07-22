@@ -108,6 +108,7 @@ fun ActiveWorkoutScreen(
     val restTimeRemaining by viewModel.restTimeRemaining.collectAsState()
     val isRestTimerPaused by viewModel.isRestTimerPaused.collectAsState()
     val restTimerDuration by viewModel.restTimerDuration.collectAsState()
+    val isMetric by viewModel.isMetric.collectAsState()
 
     // Accordion expansion state
     var doneExpanded by remember { mutableStateOf(false) }
@@ -148,7 +149,7 @@ fun ActiveWorkoutScreen(
             // 3. Previous session weight (most recent completed set for this exercise ID)
             val mostRecentCompletedSet = allLoggedSets.filter { it.exerciseId == flatSet.exercise.id && it.isCompleted }.maxByOrNull { it.createdAt }
             if (mostRecentCompletedSet != null && mostRecentCompletedSet.weight > 0f) {
-                return@remember mostRecentCompletedSet.weight to "Last session: ${mostRecentCompletedSet.weight.toString().removeSuffix(".0")} kg"
+                return@remember mostRecentCompletedSet.weight to "Last session: ${com.example.core.util.UnitConverter.formatWeight(mostRecentCompletedSet.weight.toDouble(), isMetric)}"
             }
             
             // 4. Zero (only if no prescription or history exists)
@@ -182,9 +183,9 @@ fun ActiveWorkoutScreen(
             ExerciseIntelligence.getRecommendation(flatSet.exercise.id, allLoggedSets, defaultReps, defaultWeight)
         } ?: com.example.ui.viewmodel.TrainingRecommendation(40f, 8, "Baseline", "Medium")
     }
-    val exProfile = remember(currentActiveFlatSet?.exercise?.id, allLoggedSets) {
+    val exProfile = remember(currentActiveFlatSet?.exercise?.id, allLoggedSets, isMetric) {
         currentActiveFlatSet?.let { flatSet ->
-            ExerciseIntelligence.getProfile(flatSet.exercise.id, allLoggedSets)
+            ExerciseIntelligence.getProfile(flatSet.exercise.id, allLoggedSets, isMetric)
         }
     }
 
@@ -275,7 +276,7 @@ fun ActiveWorkoutScreen(
                         }
 
                         val nextPrescription = if (nextWeightVal > 0f) {
-                            "${nextWeightVal.toString().removeSuffix(".0")} kg × $nextRepsVal reps"
+                            "${com.example.core.util.UnitConverter.formatWeight(nextWeightVal.toDouble(), isMetric)} × $nextRepsVal reps"
                         } else {
                             "$nextRepsVal reps"
                         }
@@ -559,7 +560,7 @@ fun ActiveWorkoutScreen(
                     val nextStep = upcomingFlatSets.firstOrNull()
                     if (nextStep != null) {
                         item {
-                            val nextTargetPrescription = "${nextStep.set.targetWeight ?: nextStep.set.weight} kg × ${nextStep.set.targetRepsMin ?: nextStep.set.reps}"
+                            val nextTargetPrescription = "${com.example.core.util.UnitConverter.formatWeight((nextStep.set.targetWeight ?: nextStep.set.weight).toDouble(), isMetric)} × ${nextStep.set.targetRepsMin ?: nextStep.set.reps}"
                             NextStepPreview(
                                 nextExerciseName = nextStep.exercise.name,
                                 nextSetNumber = nextStep.setIndex + 1,
@@ -641,7 +642,7 @@ fun ActiveWorkoutScreen(
                                                     color = MaterialTheme.colorScheme.onSurface
                                                 )
                                                 Text(
-                                                    text = "${set.weight.toString().removeSuffix(".0")} kg × ${set.reps}$rpeText",
+                                                    text = "${com.example.core.util.UnitConverter.formatWeight(set.weight.toDouble(), isMetric)} × ${set.reps}$rpeText",
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )

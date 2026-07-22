@@ -48,6 +48,7 @@ fun ExerciseScreen(
     var selectedExerciseForHistory by remember { mutableStateOf<Exercise?>(null) }
 
     val userProfile by viewModel.activeUserProfile.collectAsState()
+    val isMetric by viewModel.isMetric.collectAsState()
 
     Scaffold(
         topBar = {
@@ -448,7 +449,7 @@ fun ExerciseScreen(
                                                 onClick = {},
                                                 label = {
                                                     Text(
-                                                        "${set.weight}kg × ${set.reps}",
+                                                        "${com.example.core.util.UnitConverter.formatWeight(set.weight.toDouble(), isMetric)} × ${set.reps}",
                                                         style = MaterialTheme.typography.bodySmall
                                                     )
                                                 }

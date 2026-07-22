@@ -39,6 +39,7 @@ fun RoutineCard(
     onDuplicate: () -> Unit,
     onDelete: () -> Unit,
     onExerciseClick: (Exercise) -> Unit,
+    isMetric: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -107,7 +108,7 @@ fun RoutineCard(
 
                     val targetSummary = templateEx?.sets?.firstOrNull()?.let { s ->
                         val rStr = if (s.targetRepsMin != null && s.targetRepsMax != null) "${s.targetRepsMin}-${s.targetRepsMax}" else s.targetRepsMin ?: s.targetRepsMax ?: "?"
-                        val wStr = if (s.targetWeight != null) " @ ${s.targetWeight.toString().removeSuffix(".0")} kg" else ""
+                        val wStr = if (s.targetWeight != null) " @ ${com.example.core.util.UnitConverter.formatWeight(s.targetWeight.toDouble(), isMetric)}" else ""
                         "${rStr}${wStr}"
                     } ?: ""
 

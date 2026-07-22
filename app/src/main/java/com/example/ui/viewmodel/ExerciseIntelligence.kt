@@ -27,7 +27,7 @@ data class TrainingRecommendation(
 )
 
 object ExerciseIntelligence {
-    fun getProfile(exerciseId: String, allLoggedSets: List<LoggedSet>): ExerciseProfile? {
+    fun getProfile(exerciseId: String, allLoggedSets: List<LoggedSet>, isMetric: Boolean = true): ExerciseProfile? {
         val completedSets = allLoggedSets.filter { it.exerciseId == exerciseId && it.isCompleted }
         if (completedSets.isEmpty()) return null
 
@@ -39,7 +39,7 @@ object ExerciseIntelligence {
         val bestReps = completedSets.filter { it.weight == bestWeight }.maxOfOrNull { it.reps } ?: 0
         
         val bestSetByVolume = completedSets.maxByOrNull { it.weight * it.reps }
-        val bestSetString = if (bestSetByVolume != null) "${bestSetByVolume.weight.toString().removeSuffix(".0")} kg × ${bestSetByVolume.reps}" else "—"
+        val bestSetString = if (bestSetByVolume != null) "${com.example.core.util.UnitConverter.formatWeight(bestSetByVolume.weight.toDouble(), isMetric)} × ${bestSetByVolume.reps}" else "—"
 
         val firstSets = completedSets.filter { it.setNumber == 1 }
         val typicalStartingWeight = if (firstSets.isNotEmpty()) firstSets.map { it.weight }.average().toFloat() else completedSets.map { it.weight }.firstOrNull() ?: 0f
@@ -66,11 +66,9 @@ object ExerciseIntelligence {
             val prevAvg = setsBySession[prevSessionId]?.map { it.weight }?.average() ?: 0.0
             val diff = lastAvg - prevAvg
             if (diff > 0) {
-                val formatted = String.format("%.1f", diff).removeSuffix(".0")
-                "+$formatted kg"
+                "+${com.example.core.util.UnitConverter.formatWeight(diff, isMetric)}"
             } else if (diff < 0) {
-                val formatted = String.format("%.1f", diff).removeSuffix(".0")
-                "$formatted kg"
+                com.example.core.util.UnitConverter.formatWeight(diff, isMetric)
             } else {
                 "Stable"
             }

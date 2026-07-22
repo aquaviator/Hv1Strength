@@ -40,6 +40,7 @@ fun WorkoutSummaryScreen(
     val enrichedSessionState by enrichedSessionFlow.collectAsState(initial = null)
     val allLoggedSets by viewModel.allLoggedSets.collectAsState()
     val exercises by viewModel.exercises.collectAsState()
+    val isMetric by viewModel.isMetric.collectAsState()
 
     // Keep track of check state to make sure loading is distinct from failure
     var checkComplete by remember { mutableStateOf(false) }
@@ -179,9 +180,9 @@ fun WorkoutSummaryScreen(
                     val weightDiff = todayMaxWeight - previousMaxWeight
 
                     if (isNewPersonalBest) {
-                        "${exercise.name}: New Personal Best of ${todayMaxWeight.toString().removeSuffix(".0")} kg!"
+                        "${exercise.name}: New Personal Best of ${com.example.core.util.UnitConverter.formatWeight(todayMaxWeight.toDouble(), isMetric)}!"
                     } else if (weightDiff > 0) {
-                        "${exercise.name}: Improved max weight by +${weightDiff.toString().removeSuffix(".0")} kg!"
+                        "${exercise.name}: Improved max weight by +${com.example.core.util.UnitConverter.formatWeight(weightDiff.toDouble(), isMetric)}!"
                     } else if (todayMaxReps > previousMaxReps && previousMaxReps > 0) {
                         "${exercise.name}: Improved max reps by +${todayMaxReps - previousMaxReps} reps!"
                     } else {
@@ -279,7 +280,7 @@ fun WorkoutSummaryScreen(
                             StatCard(
                                 modifier = Modifier.weight(1f),
                                 label = "Volume",
-                                value = "${enriched.totalVolume.toString().removeSuffix(".0")} kg",
+                                value = com.example.core.util.UnitConverter.formatWeight(enriched.totalVolume.toDouble(), isMetric),
                                 icon = Icons.Default.FitnessCenter,
                                 color = MaterialTheme.colorScheme.tertiary
                             )

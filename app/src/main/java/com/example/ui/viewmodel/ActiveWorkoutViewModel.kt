@@ -640,7 +640,7 @@ class ActiveWorkoutViewModel(
                             if (tSets.isNotEmpty()) {
                                 val activeSets = tSets.mapIndexed { index, ts ->
                                     val ps = prevSets.getOrNull(index)
-                                    val prevSum = if (ps != null) "${ps.weight} kg x ${ps.reps}" else ""
+                                    val prevSum = if (ps != null) "${com.example.core.util.UnitConverter.formatWeight(ps.weight.toDouble(), isMetric.value)} x ${ps.reps}" else ""
                                     ActiveSet(
                                         setNumber = ts.position,
                                         reps = ts.targetRepsMin ?: 10,
@@ -662,7 +662,7 @@ class ActiveWorkoutViewModel(
                             } else {
                                 val activeSets = (1..3).mapIndexed { index, setNum ->
                                     val ps = prevSets.getOrNull(index)
-                                    val prevSum = if (ps != null) "${ps.weight} kg x ${ps.reps}" else ""
+                                    val prevSum = if (ps != null) "${com.example.core.util.UnitConverter.formatWeight(ps.weight.toDouble(), isMetric.value)} x ${ps.reps}" else ""
                                     ActiveSet(
                                         setNumber = setNum,
                                         reps = 10,
@@ -689,7 +689,7 @@ class ActiveWorkoutViewModel(
                                         reps = ps.reps,
                                         weight = ps.weight,
                                         isCompleted = false,
-                                        prevSummary = "${ps.weight} kg x ${ps.reps}"
+                                        prevSummary = "${com.example.core.util.UnitConverter.formatWeight(ps.weight.toDouble(), isMetric.value)} x ${ps.reps}"
                                     )
                                 }
                                 activeSetsMap[id] = activeSets
@@ -742,7 +742,7 @@ class ActiveWorkoutViewModel(
                         reps = ps.reps,
                         weight = ps.weight,
                         isCompleted = false,
-                        prevSummary = "${ps.weight} kg x ${ps.reps}"
+                        prevSummary = "${com.example.core.util.UnitConverter.formatWeight(ps.weight.toDouble(), isMetric.value)} x ${ps.reps}"
                     )
                 }
             } else {

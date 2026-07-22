@@ -394,7 +394,8 @@ fun WorkoutScreen(
                         onDelete = { viewModel.deleteTemplate(template.id) },
                         onExerciseClick = { exercise ->
                             selectedExerciseForHistory = exercise
-                        }
+                        },
+                        isMetric = isMetric
                     )
                 }
             }

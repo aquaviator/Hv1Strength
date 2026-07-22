@@ -497,7 +497,8 @@ fun ActiveExerciseCard(
     totalSetsInExercise: Int,
     onRemoveExerciseClick: () -> Unit,
     modifier: Modifier = Modifier,
-    weightSource: String = "Tap to type"
+    weightSource: String = "Tap to type",
+    isMetric: Boolean = true
 ) {
     val isVibrationEnabled = com.example.core.util.LocalVibrationEnabled.current
     var isEditingWeight by remember(weight) { mutableStateOf(false) }
@@ -641,7 +642,7 @@ fun ActiveExerciseCard(
                 // Weight column
                 TrainingStepper(
                     label = "Weight",
-                    value = if (isEditingWeight) weightInputText else "${weight.toString().removeSuffix(".0")} kg",
+                    value = if (isEditingWeight) weightInputText else com.example.core.util.UnitConverter.formatWeight(weight.toDouble(), isMetric),
                     onValueChange = { input ->
                         weightInputText = input
                         val parsed = input.toFloatOrNull()
@@ -882,6 +883,7 @@ fun CurrentExerciseHero(
     prevSummary: String,
     coachingCues: String?,
     onCuesClick: () -> Unit,
+    isMetric: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -960,7 +962,7 @@ fun CurrentExerciseHero(
                 if (targetWeight != null && targetWeight > 0f || targetReps != null) {
                     val prescText = buildString {
                         append("Target: ")
-                        if (targetWeight != null && targetWeight > 0f) append("${targetWeight.toString().removeSuffix(".0")} kg")
+                        if (targetWeight != null && targetWeight > 0f) append(com.example.core.util.UnitConverter.formatWeight(targetWeight.toDouble(), isMetric))
                         if (targetReps != null) {
                             if (isNotEmpty()) append(" × ")
                             append("$targetReps")
