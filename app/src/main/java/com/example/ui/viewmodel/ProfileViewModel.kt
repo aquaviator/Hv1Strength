@@ -149,13 +149,15 @@ class ProfileViewModel(
         }
     }
 
-    fun updateUserProfileBio(dob: String, sex: String, experience: String) {
+    fun updateUserProfileBio(displayName: String? = null, dob: String, sex: String, experience: String) {
         viewModelScope.launch {
-            val currentProfile = (authViewModel.authState.value as? AuthState.Authenticated)?.profile ?: return@launch
+            val currentProfile = activeUserProfile.value ?: (authViewModel.authState.value as? AuthState.Authenticated)?.profile ?: return@launch
             val updated = currentProfile.copy(
+                displayName = if (!displayName.isNullOrBlank()) displayName else currentProfile.displayName,
                 dateOfBirth = dob,
                 sex = sex,
-                trainingExperience = experience
+                trainingExperience = experience,
+                updatedAt = System.currentTimeMillis()
             )
             repository.insertUserProfile(updated)
             authViewModel.authRepository.signInWithGoogle(

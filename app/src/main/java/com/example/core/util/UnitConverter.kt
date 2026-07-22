@@ -12,6 +12,9 @@ object UnitConverter {
     fun kgToLb(kg: Float): Float = (kg * KG_TO_LB).toFloat()
     fun lbToKg(lb: Float): Float = (lb * LB_TO_KG).toFloat()
 
+    fun formatWeight(weight: Float, isMetric: Boolean): String = formatWeight(weight.toDouble(), isMetric)
+    fun formatWeightValueOnly(weight: Float, isMetric: Boolean): String = formatWeightValueOnly(weight.toDouble(), isMetric)
+
     /**
      * Formats weight with a clean decimal policy.
      * If the value is a whole number (e.g. 100.0), it removes the decimal part.

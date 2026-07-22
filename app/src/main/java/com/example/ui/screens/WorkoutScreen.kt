@@ -55,6 +55,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.example.core.util.LocalVibrationEnabled
+import com.example.core.util.performIfEnabled
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -535,7 +537,7 @@ fun WorkoutScreen(
                                                 onClick = {},
                                                 label = {
                                                     Text(
-                                                        text = "${set.weight}kg × ${set.reps}",
+                                                        text = "${com.example.core.util.UnitConverter.formatWeight(set.weight.toDouble(), isMetric)} × ${set.reps}",
                                                         style = MaterialTheme.typography.bodySmall
                                                     )
                                                 }
@@ -601,6 +603,8 @@ fun TemplateEditorDialog(
     viewModel: StrengthViewModel,
     onDismiss: () -> Unit
 ) {
+    val isVibrationEnabled = com.example.core.util.LocalVibrationEnabled.current
+    
     val context = LocalContext.current
     var routineName by rememberSaveable(template?.id) { mutableStateOf(template?.name ?: "") }
     var routineNameError by rememberSaveable { mutableStateOf<String?>(null) }
@@ -820,7 +824,7 @@ fun TemplateEditorDialog(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .clickable {
-                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                             selectedType = option.name
                                                             if (option.id != "custom") {
                                                                 routineName = "${option.name} Day"
@@ -1010,7 +1014,7 @@ fun TemplateEditorDialog(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .clickable {
-                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                        haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                         // Tapping adds a new template exercise with default set
                                                         val defaultSet = TemplateSetState(
                                                             id = 0,
@@ -1043,7 +1047,7 @@ fun TemplateEditorDialog(
                                                     // Favorite Toggle
                                                     IconButton(
                                                         onClick = {
-                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                             viewModel.toggleFavoriteExercise(exercise.id)
                                                         }
                                                     ) {
@@ -1082,7 +1086,7 @@ fun TemplateEditorDialog(
                                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                                 IconButton(
                                                                     onClick = {
-                                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                        haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                                         val idx = selectedExercises.indexOfLast { it.exerciseId == exercise.id }
                                                                         if (idx >= 0) {
                                                                             selectedExercises.removeAt(idx)
@@ -1114,7 +1118,7 @@ fun TemplateEditorDialog(
                             // Continue button
                             Button(
                                 onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                     currentStep = 3
                                 },
                                 enabled = selectedExercises.isNotEmpty(),
@@ -1144,7 +1148,7 @@ fun TemplateEditorDialog(
                             onCancelClick = onDismiss,
                             onAddExerciseClick = { currentStep = 2 },
                             onSaveClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                 currentStep = 4
                             },
                             pairingDialogIndex = pairingDialogIndex,
@@ -1271,11 +1275,11 @@ fun TemplateEditorDialog(
                                         val trimmedName = routineName.trim()
                                         if (trimmedName.isEmpty()) {
                                             routineNameError = "Routine name cannot be blank."
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                         } else if (selectedExercises.isEmpty()) {
                                             Toast.makeText(context, "Please add at least one exercise.", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                             viewModel.saveTemplate(
                                                 templateId = template?.id,
                                                 name = trimmedName,
@@ -1296,11 +1300,11 @@ fun TemplateEditorDialog(
                                             val trimmedName = routineName.trim()
                                             if (trimmedName.isEmpty()) {
                                                 routineNameError = "Routine name cannot be blank."
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                             } else if (selectedExercises.isEmpty()) {
                                                 Toast.makeText(context, "Please add at least one exercise.", Toast.LENGTH_SHORT).show()
                                             } else {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                 viewModel.saveTemplate(
                                                     templateId = null, // Saves as a new copy
                                                     name = "$trimmedName (Copy)",
@@ -1599,6 +1603,8 @@ fun ExerciseEditorCard(
     onUpdate: (TemplateExerciseState) -> Unit,
     totalExercises: Int
 ) {
+    val isVibrationEnabled = com.example.core.util.LocalVibrationEnabled.current
+    
     var isExpanded by remember { mutableStateOf(true) }
     var showSetEditor by remember { mutableStateOf(false) }
     var editingSetIndex by remember { mutableStateOf<Int?>(null) }
@@ -1876,7 +1882,7 @@ fun ExerciseEditorCard(
                     val haptic = LocalHapticFeedback.current
                     Button(
                         onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                             val lastSet = templateExercise.sets.lastOrNull()
                             val newSet = TemplateSetState(
                                 setType = lastSet?.setType ?: "WORKING",
@@ -2156,6 +2162,8 @@ fun CompactSetRow(
     isFirst: Boolean,
     isLast: Boolean
 ) {
+    val isVibrationEnabled = com.example.core.util.LocalVibrationEnabled.current
+    
     val haptic = LocalHapticFeedback.current
     Card(
         modifier = Modifier
@@ -2221,7 +2229,7 @@ fun CompactSetRow(
             ) {
                 IconButton(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                         onMoveUp()
                     },
                     enabled = !isFirst,
@@ -2236,7 +2244,7 @@ fun CompactSetRow(
                 }
                 IconButton(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                         onMoveDown()
                     },
                     enabled = !isLast,
@@ -2251,7 +2259,7 @@ fun CompactSetRow(
                 }
                 IconButton(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                         onDuplicate()
                     },
                     modifier = Modifier.size(28.dp)
@@ -2265,7 +2273,7 @@ fun CompactSetRow(
                 }
                 IconButton(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                         onDelete()
                     },
                     modifier = Modifier.size(28.dp)
@@ -2851,6 +2859,8 @@ fun SupersetNestedExerciseCard(
     haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
     expandedStrategies: androidx.compose.runtime.snapshots.SnapshotStateMap<Int, Boolean>
 ) {
+    val isVibrationEnabled = com.example.core.util.LocalVibrationEnabled.current
+    
     val isFocusedEx = activeFocusedExerciseIndex == exIndex
     val shouldCollapseEx = isKeyboardVisible && !isFocusedEx
     val label = supersetLabels[exIndex]
@@ -2973,7 +2983,7 @@ fun SupersetNestedExerciseCard(
                                     leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp)) },
                                     onClick = {
                                         showCardMenu = false
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                         onDelete()
                                     }
                                 )
@@ -3056,7 +3066,7 @@ fun SupersetNestedExerciseCard(
                                     FilterChip(
                                         selected = isSelected,
                                         onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                             val updated = intention.copy(goal = goalId)
                                             onUpdate(templateExercise.copy(notes = updated.toSerializedString()))
                                         },
@@ -3087,7 +3097,7 @@ fun SupersetNestedExerciseCard(
                                     FilterChip(
                                         selected = isSelected,
                                         onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                             val updated = intention.copy(progression = style)
                                             onUpdate(templateExercise.copy(notes = updated.toSerializedString()))
                                         },
@@ -3147,7 +3157,7 @@ fun SupersetNestedExerciseCard(
                             ) {
                                 IconButton(
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                         val minReps = (intention.targetRepsMin - 1).coerceAtLeast(1)
                                         val updated = intention.copy(targetRepsMin = minReps)
                                         val setsList = templateExercise.sets.map { it.copy(targetRepsMin = minReps) }
@@ -3163,7 +3173,7 @@ fun SupersetNestedExerciseCard(
                                 Text("${intention.targetRepsMin}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Black)
                                 IconButton(
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                         val minReps = (intention.targetRepsMin + 1).coerceAtMost(intention.targetRepsMax)
                                         val updated = intention.copy(targetRepsMin = minReps)
                                         val setsList = templateExercise.sets.map { it.copy(targetRepsMin = minReps) }
@@ -3194,7 +3204,7 @@ fun SupersetNestedExerciseCard(
                             ) {
                                 IconButton(
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                         val maxReps = (intention.targetRepsMax - 1).coerceAtLeast(intention.targetRepsMin)
                                         val updated = intention.copy(targetRepsMax = maxReps)
                                         val setsList = templateExercise.sets.map { it.copy(targetRepsMax = maxReps) }
@@ -3210,7 +3220,7 @@ fun SupersetNestedExerciseCard(
                                 Text("${intention.targetRepsMax}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Black)
                                 IconButton(
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                         val maxReps = (intention.targetRepsMax + 1).coerceIn(1, 100)
                                         val updated = intention.copy(targetRepsMax = maxReps)
                                         val setsList = templateExercise.sets.map { it.copy(targetRepsMax = maxReps) }
@@ -3255,7 +3265,7 @@ fun SupersetNestedExerciseCard(
                         ) {
                             IconButton(
                                 onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                     val currentW = intention.startingWeight ?: 20f
                                     val delta = if (isMetric) 2.5f else (5f * com.example.core.util.UnitConverter.LB_TO_KG).toFloat()
                                     val newW = (currentW - delta).coerceAtLeast(0f)
@@ -3272,7 +3282,7 @@ fun SupersetNestedExerciseCard(
                             }
                             IconButton(
                                 onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                     val currentW = intention.startingWeight ?: 20f
                                     val delta = if (isMetric) 2.5f else (5f * com.example.core.util.UnitConverter.LB_TO_KG).toFloat()
                                     val newW = currentW + delta

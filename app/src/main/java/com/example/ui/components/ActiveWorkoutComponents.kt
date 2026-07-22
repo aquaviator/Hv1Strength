@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.example.core.util.LocalVibrationEnabled
+import com.example.core.util.performIfEnabled
 import com.example.ui.theme.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.text.BasicTextField
@@ -320,8 +322,10 @@ fun TrainingStepper(
     modifier: Modifier = Modifier,
     subtext: String = "Tap to type"
 ) {
+    val isVibrationEnabled = com.example.core.util.LocalVibrationEnabled.current
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
+    
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -350,7 +354,7 @@ fun TrainingStepper(
             // Minus Button (48dp x 48dp minimum touch target)
             IconButton(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                     onDecrement()
                 },
                 modifier = Modifier
@@ -431,7 +435,7 @@ fun TrainingStepper(
             // Plus Button (48dp x 48dp minimum touch target)
             IconButton(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                     onIncrement()
                 },
                 modifier = Modifier
@@ -495,6 +499,7 @@ fun ActiveExerciseCard(
     modifier: Modifier = Modifier,
     weightSource: String = "Tap to type"
 ) {
+    val isVibrationEnabled = com.example.core.util.LocalVibrationEnabled.current
     var isEditingWeight by remember(weight) { mutableStateOf(false) }
     var weightInputText by remember(weight) { mutableStateOf(weight.toString().removeSuffix(".0")) }
 
@@ -505,6 +510,7 @@ fun ActiveExerciseCard(
     var isCuesExpanded by remember { mutableStateOf(false) }
 
     val haptic = LocalHapticFeedback.current
+    
 
     Row(
         modifier = modifier
@@ -829,7 +835,7 @@ fun ActiveExerciseCard(
             // 7. Primary Call to Action: COMPLETE SET button
             Button(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                     onCompleteSetClick()
                 },
                 enabled = completeSetEnabled,
@@ -1137,7 +1143,9 @@ fun WeightControl(
     onWeightChange: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isVibrationEnabled = com.example.core.util.LocalVibrationEnabled.current
     val haptic = LocalHapticFeedback.current
+    
     var manualEdit by remember { mutableStateOf(false) }
     var manualText by remember { mutableStateOf(weight.toString().removeSuffix(".0")) }
     val focusManager = LocalFocusManager.current
@@ -1185,7 +1193,7 @@ fun WeightControl(
             // Big touch target minus button (56dp target)
             IconButton(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                     onWeightChange((weight - 2.5f).coerceAtLeast(0f))
                 },
                 modifier = Modifier
@@ -1252,7 +1260,7 @@ fun WeightControl(
             // Big touch target plus button (56dp target)
             IconButton(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                     onWeightChange(weight + 2.5f)
                 },
                 modifier = Modifier
@@ -1281,7 +1289,7 @@ fun WeightControl(
                     modifier = Modifier
                         .background(containerBg, shape = RoundedCornerShape(12.dp))
                         .clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                             onWeightChange((weight + plate).coerceAtLeast(0f))
                         }
                         .padding(horizontal = 12.dp, vertical = 8.dp)
@@ -1308,7 +1316,9 @@ fun RepControl(
     onRepsChange: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isVibrationEnabled = com.example.core.util.LocalVibrationEnabled.current
     val haptic = LocalHapticFeedback.current
+    
     var manualEdit by remember { mutableStateOf(false) }
     var manualText by remember { mutableStateOf(reps.toString()) }
     val focusManager = LocalFocusManager.current
@@ -1356,7 +1366,7 @@ fun RepControl(
             // Big touch target minus button (56dp target)
             IconButton(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                     onRepsChange((reps - 1).coerceAtLeast(1))
                 },
                 modifier = Modifier
@@ -1423,7 +1433,7 @@ fun RepControl(
             // Big touch target plus button (56dp target)
             IconButton(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                     onRepsChange(reps + 1)
                 },
                 modifier = Modifier
@@ -1452,7 +1462,7 @@ fun RepControl(
                             shape = RoundedCornerShape(12.dp)
                         )
                         .clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                             onRepsChange(target)
                         }
                         .padding(vertical = 10.dp),
@@ -1480,7 +1490,9 @@ fun EffortControl(
     onRpeChange: (Int?) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isVibrationEnabled = com.example.core.util.LocalVibrationEnabled.current
     val haptic = LocalHapticFeedback.current
+    
 
     Column(
         modifier = modifier
@@ -1528,7 +1540,7 @@ fun EffortControl(
                         shape = RoundedCornerShape(10.dp)
                     )
                     .clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                         onRpeChange(null)
                     }
                     .padding(vertical = 12.dp),
@@ -1552,7 +1564,7 @@ fun EffortControl(
                         .weight(1f)
                         .background(containerBg, shape = RoundedCornerShape(10.dp))
                         .clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                             onRpeChange(option)
                         }
                         .padding(vertical = 12.dp),
@@ -1597,11 +1609,13 @@ fun CompleteSetButton(
     enabled: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val isVibrationEnabled = com.example.core.util.LocalVibrationEnabled.current
     val haptic = LocalHapticFeedback.current
+    
 
     Button(
         onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
             onClick()
         },
         enabled = enabled,

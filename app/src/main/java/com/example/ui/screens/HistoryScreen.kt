@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.Exercise
 import com.example.data.LoggedSet
+import com.example.core.util.UnitConverter
 import com.example.ui.viewmodel.EnrichedSession
 import com.example.ui.viewmodel.StrengthViewModel
 import java.util.*
@@ -39,6 +40,7 @@ fun HistoryScreen(
     viewModel: StrengthViewModel,
     onNavigateToProfile: () -> Unit = {}
 ) {
+    val isMetric by viewModel.isMetric.collectAsState()
     val filteredSessions by viewModel.filteredSessions.collectAsState()
     val exercises by viewModel.exercises.collectAsState()
     val templates by viewModel.templates.collectAsState()
@@ -372,6 +374,7 @@ fun HistorySessionCard(
     allLoggedSets: List<LoggedSet>,
     onDeleteSession: () -> Unit
 ) {
+    val isMetric by viewModel.isMetric.collectAsState()
     var isExpanded by remember { mutableStateOf(false) }
 
     val formattedDate = remember(enriched.session.startTime) {
@@ -412,9 +415,9 @@ fun HistorySessionCard(
             val lastSessionId = priorSets.keys.maxOrNull()
             val previousSets = if (lastSessionId != null) priorSets[lastSessionId] ?: emptyList() else emptyList()
 
-            val todayWeightsStr = todaySets.map { it.weight.toString().removeSuffix(".0") }.joinToString(", ")
+            val todayWeightsStr = todaySets.map { UnitConverter.formatWeightValueOnly(it.weight.toDouble(), isMetric) }.joinToString(", ")
             val previousWeightsStr = if (previousSets.isNotEmpty()) {
-                previousSets.map { it.weight.toString().removeSuffix(".0") }.joinToString(", ")
+                previousSets.map { UnitConverter.formatWeightValueOnly(it.weight.toDouble(), isMetric) }.joinToString(", ")
             } else {
                 "None"
             }
@@ -431,8 +434,8 @@ fun HistorySessionCard(
             val progressStatus = when {
                 previousMaxWeight == 0f -> "Benchmark Set"
                 isNewPersonalBest -> "New Personal Best!"
-                weightDiff > 0 -> "+${weightDiff.toString().removeSuffix(".0")} kg Progress"
-                weightDiff < 0 -> "${weightDiff.toString().removeSuffix(".0")} kg Deload"
+                weightDiff > 0 -> "+${UnitConverter.formatWeight(weightDiff.toDouble(), isMetric)} Progress"
+                weightDiff < 0 -> "${UnitConverter.formatWeight(weightDiff.toDouble(), isMetric)} Deload"
                 todayMaxReps > previousMaxReps -> "+${todayMaxReps - previousMaxReps} Reps Progress"
                 else -> "Solid Consistency"
             }
@@ -497,7 +500,7 @@ fun HistorySessionCard(
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Icon(Icons.Default.FitnessCenter, contentDescription = "Volume", size = 12.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(
-                                "Volume: ${String.format("%.1f", enriched.totalVolume).removeSuffix(".0")} kg",
+                                "Volume: ${UnitConverter.formatWeight(enriched.totalVolume, isMetric)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = FontWeight.Bold
@@ -629,7 +632,8 @@ fun HistorySessionCard(
                     }
 
                     val suggestedProg = improvements.firstOrNull()?.let {
-                        "Next session: Increase ${it.exerciseName} by +2.5 kg to trigger further overload."
+                        val deltaStr = if (isMetric) "+2.5 kg" else "+5 lbs"
+                        "Next session: Increase ${it.exerciseName} by $deltaStr to trigger further overload."
                     } ?: "Next session: Focus on increasing target reps by +1 on the final sets."
                     
                     Row(
@@ -683,7 +687,7 @@ fun HistorySessionCard(
                             )
                         }
                         Text(
-                            if (maxWeight > 0) "${maxWeight.toString().removeSuffix(".0")} kg × ${maxRepsSet?.reps ?: 0}" else "Logged",
+                            if (maxWeight > 0) "${UnitConverter.formatWeight(maxWeight.toDouble(), isMetric)} × ${maxRepsSet?.reps ?: 0}" else "Logged",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -731,11 +735,11 @@ fun HistorySessionCard(
                                     val distanceStr = if (set.actualDistance != null) "${set.actualDistance} km" else ""
                                     listOf(durationStr, distanceStr).filter { it.isNotEmpty() }.joinToString(" • ")
                                 } else {
-                                    "${set.weight.toString().removeSuffix(".0")} kg  ×  ${set.reps} reps"
+                                    "${UnitConverter.formatWeight(set.weight.toDouble(), isMetric)}  ×  ${set.reps} reps"
                                 }
 
                                 val targetList = mutableListOf<String>()
-                                if (set.targetWeight != null && set.targetWeight > 0f) targetList.add("${set.targetWeight.toString().removeSuffix(".0")} kg")
+                                if (set.targetWeight != null && set.targetWeight > 0f) targetList.add(UnitConverter.formatWeight(set.targetWeight.toDouble(), isMetric))
                                 if (set.targetRepsMin != null) {
                                     val repsStr = if (set.targetRepsMax != null && set.targetRepsMax != set.targetRepsMin) "${set.targetRepsMin}-${set.targetRepsMax}" else "${set.targetRepsMin}"
                                     targetList.add("$repsStr reps")

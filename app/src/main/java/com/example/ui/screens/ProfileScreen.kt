@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -655,38 +656,133 @@ fun ProfileScreen(
     // Edit Profile details Dialog
     if (showEditProfileDialog) {
         if (userProfile != null) {
+            var name by remember { mutableStateOf(userProfile!!.displayName ?: "") }
             var dob by remember { mutableStateOf(userProfile!!.dateOfBirth ?: "") }
             var sex by remember { mutableStateOf(userProfile!!.sex ?: "unspecified") }
             var exp by remember { mutableStateOf(userProfile!!.trainingExperience ?: "beginner") }
 
             AlertDialog(
                 onDismissRequest = { showEditProfileDialog = false },
-                title = { Text("Edit Bio Details") },
+                title = { Text("Edit Profile Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            label = { Text("Display Name") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("profile_edit_name_input")
+                        )
+
                         OutlinedTextField(
                             value = dob,
                             onValueChange = { dob = it },
                             label = { Text("Date of Birth (YYYY-MM-DD)") },
-                            modifier = Modifier.fillMaxWidth()
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("profile_edit_dob_input")
                         )
 
-                        Text("Assigned Sex:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            listOf("Male", "Female", "Other").forEach { item ->
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    RadioButton(selected = sex.lowercase() == item.lowercase(), onClick = { sex = item.lowercase() })
-                                    Text(item)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "Assigned Sex:",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            @OptIn(ExperimentalLayoutApi::class)
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                listOf("Male", "Female", "Other").forEach { item ->
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (sex.lowercase() == item.lowercase()) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (sex.lowercase() == item.lowercase()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                        ),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable { sex = item.lowercase() }
+                                            .testTag("sex_option_${item.lowercase()}")
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            RadioButton(
+                                                selected = sex.lowercase() == item.lowercase(),
+                                                onClick = { sex = item.lowercase() }
+                                            )
+                                            Text(
+                                                text = item,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                modifier = Modifier.padding(end = 8.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
 
-                        Text("Training Experience:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("Beginner", "Intermediate", "Advanced").forEach { item ->
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    RadioButton(selected = exp.lowercase() == item.lowercase(), onClick = { exp = item.lowercase() })
-                                    Text(item, fontSize = 12.sp)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "Training Experience:",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            @OptIn(ExperimentalLayoutApi::class)
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                listOf("Beginner", "Intermediate", "Advanced").forEach { item ->
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (exp.lowercase() == item.lowercase()) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (exp.lowercase() == item.lowercase()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                        ),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable { exp = item.lowercase() }
+                                            .testTag("exp_option_${item.lowercase()}")
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            RadioButton(
+                                                selected = exp.lowercase() == item.lowercase(),
+                                                onClick = { exp = item.lowercase() }
+                                            )
+                                            Text(
+                                                text = item,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                modifier = Modifier.padding(end = 8.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -694,13 +790,14 @@ fun ProfileScreen(
                 },
                 confirmButton = {
                     Button(
+                        modifier = Modifier.testTag("save_profile_details_button"),
                         onClick = {
-                            viewModel.updateUserProfileBio(dob, sex, exp)
-                            Toast.makeText(context, "Profile bio updated!", Toast.LENGTH_SHORT).show()
+                            viewModel.updateUserProfileBio(name, dob, sex, exp)
+                            Toast.makeText(context, "Profile details saved!", Toast.LENGTH_SHORT).show()
                             showEditProfileDialog = false
                         }
                     ) {
-                        Text("Save Details")
+                        Text("Save Details", fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {

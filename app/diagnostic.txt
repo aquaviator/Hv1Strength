@@ -1,6 +1,6 @@
 STATE: error=false, loading=false, success=true
 ALL TAGS: [summary_hero_card, summary_done_button, summary_view_history_button]
-TEXTS: [Workout complete!, Custom Workout, Tuesday, Jul 21, 2026, Performance Metrics, Duration, 1 min, Volume, 0 kg, Exercises, 1, Sets Completed, 1, Done, View History, Workout Summary, Workout, History, Exercises, Progress, Settings]
+TEXTS: [Workout complete!, Custom Workout, Wednesday, Jul 22, 2026, Performance Metrics, Duration, 1 min, Volume, 0 kg, Exercises, 1, Sets Completed, 1, Done, View History, Workout Summary, Workout, History, Exercises, Progress, Settings]
 DESCS: [Success, Duration, Volume, Exercises, Sets Completed]
 BACKSTACK BEFORE TAB CLICK: [null, workout, history]
 BACKSTACK AFTER TAB CLICK: [null, workout]

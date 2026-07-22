@@ -17,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -174,47 +175,12 @@ fun SettingsScreen(
 
             // Workout Preferences Card
             SettingsSectionCard(title = "WORKOUT PREFERENCES") {
-                // Default Warmup Sets
-                var showWarmupDialog by remember { mutableStateOf(false) }
-                SettingsClickableRow(
+                // Default Warm-up Sets (Coming Soon)
+                SettingsComingSoonRow(
                     icon = Icons.Default.FitnessCenter,
                     title = "Default Warm-up Sets",
-                    subtitle = "Currently configured: $defaultWarmupSets sets",
-                    onClick = { showWarmupDialog = true }
+                    subtitle = "Automated warmup set generator coming soon"
                 )
-
-                if (showWarmupDialog) {
-                    var inputSets by remember { mutableStateOf(defaultWarmupSets.toString()) }
-                    AlertDialog(
-                        onDismissRequest = { showWarmupDialog = false },
-                        title = { Text("Set Default Warmup Sets") },
-                        text = {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Configure how many warm-up sets are automatically generated for exercises.", style = MaterialTheme.typography.bodyMedium)
-                                OutlinedTextField(
-                                    value = inputSets,
-                                    onValueChange = { inputSets = it.filter { char -> char.isDigit() } },
-                                    label = { Text("Number of sets") },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        },
-                        confirmButton = {
-                            Button(onClick = {
-                                val sets = inputSets.toIntOrNull() ?: 0
-                                viewModel.setDefaultWarmupSets(sets)
-                                showWarmupDialog = false
-                            }) {
-                                Text("Save")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showWarmupDialog = false }) {
-                                Text("Cancel")
-                            }
-                        }
-                    )
-                }
 
                 // Default Rest Timer Selection
                 var showRestTimerDialog by remember { mutableStateOf(false) }
@@ -280,24 +246,18 @@ fun SettingsScreen(
                     )
                 }
 
-                // Auto Complete Behavior Toggle
-                SettingsClickableRow(
+                // Auto Complete Behavior (Coming Soon)
+                SettingsComingSoonRow(
                     icon = Icons.Default.Check,
                     title = "Auto-Complete Active Sets",
-                    subtitle = "Coming soon (Candidate 4B)",
-                    onClick = {
-                        Toast.makeText(context, "Auto-Complete Active Sets is coming soon!", Toast.LENGTH_SHORT).show()
-                    }
+                    subtitle = "Automatic set completion coming soon"
                 )
 
-                // Auto Scroll Behavior Toggle
-                SettingsClickableRow(
+                // Auto Scroll Behavior (Coming Soon)
+                SettingsComingSoonRow(
                     icon = Icons.Default.SwapVert,
                     title = "Auto-Scroll list",
-                    subtitle = "Coming soon (Candidate 4B)",
-                    onClick = {
-                        Toast.makeText(context, "Auto-Scroll list is coming soon!", Toast.LENGTH_SHORT).show()
-                    }
+                    subtitle = "Auto-scrolling focused exercise row coming soon"
                 )
 
                 // Timer sound/vibration Preferences Selection
@@ -761,6 +721,48 @@ fun SettingsInfoRow(
                 Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                 Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
             }
+        }
+    }
+}
+
+@Composable
+fun SettingsComingSoonRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String = "Coming soon"
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(0.6f),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Column {
+                Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+            }
+        }
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text(
+                text = "Coming Soon",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
         }
     }
 }

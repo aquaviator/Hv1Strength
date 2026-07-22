@@ -154,10 +154,14 @@ fun MainAppScreen(
     navController: androidx.navigation.NavHostController = rememberNavController()
 ) {
     val authState by viewModel.authState.collectAsState()
+    val vibrationOn by viewModel.vibrationOn.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    val navigationItems = listOf(
+    CompositionLocalProvider(
+        com.example.core.util.LocalVibrationEnabled provides vibrationOn
+    ) {
+        val navigationItems = listOf(
         NavigationItem("workout", "Workout", Icons.Default.FitnessCenter),
         NavigationItem("history", "History", Icons.Default.History),
         NavigationItem("exercises", "Exercises", Icons.Default.List),
@@ -366,6 +370,7 @@ fun MainAppScreen(
             }
         }
     }
+}
 }
 
 data class NavigationItem(

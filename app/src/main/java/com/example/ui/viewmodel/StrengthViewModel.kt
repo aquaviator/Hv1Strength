@@ -275,8 +275,8 @@ class StrengthViewModel(
     fun setAutoScroll(value: Boolean) = profileViewModel.setAutoScroll(value)
     fun setTimerPreferences(value: String) = profileViewModel.setTimerPreferences(value)
 
-    fun updateUserProfileBio(dob: String, sex: String, experience: String) =
-        profileViewModel.updateUserProfileBio(dob, sex, experience)
+    fun updateUserProfileBio(displayName: String? = null, dob: String, sex: String, experience: String) =
+        profileViewModel.updateUserProfileBio(displayName, dob, sex, experience)
 
     fun logBodyWeight(weight: Float, bodyFat: Float?, timestamp: Long = System.currentTimeMillis()) {
         profileViewModel.logBodyWeight(weight, bodyFat, timestamp) {

@@ -35,6 +35,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.example.core.util.LocalVibrationEnabled
+import com.example.core.util.performIfEnabled
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -95,7 +97,9 @@ fun HumanRoutineBuilderScreen(
     onShowRestConfigGroupIndexChange: (String?) -> Unit,
     isEditing: Boolean
 ) {
+    val isVibrationEnabled = com.example.core.util.LocalVibrationEnabled.current
     val haptic = LocalHapticFeedback.current
+    
     val listState = rememberLazyListState()
     val isKeyboardVisible = WindowInsets.isImeVisible
     val focusManager = LocalFocusManager.current
@@ -136,11 +140,11 @@ fun HumanRoutineBuilderScreen(
                 routineNameError = routineNameError,
                 isEditing = isEditing,
                 onBackClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                     onBackClick()
                 },
                 onCancelClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                     onCancelClick()
                 }
             )
@@ -223,7 +227,7 @@ fun HumanRoutineBuilderScreen(
                                             exercises = exercises,
                                             isMetric = isMetric,
                                             onUpdateRounds = { newRounds ->
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                 // Sync sets count for all exercises in this superset
                                                 selectedExercises.forEachIndexed { sIdx, se ->
                                                     if (se.supersetGroupId == groupId) {
@@ -247,7 +251,7 @@ fun HumanRoutineBuilderScreen(
                                                 }
                                             },
                                             onDissolveGroup = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                 selectedExercises.forEachIndexed { sIdx, se ->
                                                     if (se.supersetGroupId == groupId) {
                                                         selectedExercises[sIdx] = se.copy(supersetGroupId = null)
@@ -255,13 +259,13 @@ fun HumanRoutineBuilderScreen(
                                                 }
                                             },
                                             onConfigureGroupRest = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                 onShowRestConfigGroupIndexChange(groupId)
                                             },
                                             onMoveUp = { innerIdx ->
                                                 val listIdx = groupIndices.getOrNull(innerIdx) ?: -1
                                                 if (listIdx > 0) {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                     val temp = selectedExercises[listIdx]
                                                     selectedExercises[listIdx] = selectedExercises[listIdx - 1]
                                                     selectedExercises[listIdx - 1] = temp
@@ -270,7 +274,7 @@ fun HumanRoutineBuilderScreen(
                                             onMoveDown = { innerIdx ->
                                                 val listIdx = groupIndices.getOrNull(innerIdx) ?: -1
                                                 if (listIdx >= 0 && listIdx < selectedExercises.size - 1) {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                     val temp = selectedExercises[listIdx]
                                                     selectedExercises[listIdx] = selectedExercises[listIdx + 1]
                                                     selectedExercises[listIdx + 1] = temp
@@ -279,14 +283,14 @@ fun HumanRoutineBuilderScreen(
                                             onRemoveFromGroup = { innerIdx ->
                                                 val listIdx = groupIndices.getOrNull(innerIdx) ?: -1
                                                 if (listIdx >= 0) {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                     selectedExercises[listIdx] = selectedExercises[listIdx].copy(supersetGroupId = null)
                                                 }
                                             },
                                             onDeleteExercise = { innerIdx ->
                                                 val listIdx = groupIndices.getOrNull(innerIdx) ?: -1
                                                 if (listIdx >= 0) {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                     selectedExercises.removeAt(listIdx)
                                                 }
                                             },
@@ -330,12 +334,12 @@ fun HumanRoutineBuilderScreen(
                                                 selectedExercises[exIndex] = updated
                                             },
                                             onDelete = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                 selectedExercises.removeAt(exIndex)
                                             },
                                             onMoveUp = {
                                                 if (exIndex > 0) {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                     val temp = selectedExercises[exIndex]
                                                     selectedExercises[exIndex] = selectedExercises[exIndex - 1]
                                                     selectedExercises[exIndex - 1] = temp
@@ -343,7 +347,7 @@ fun HumanRoutineBuilderScreen(
                                             },
                                             onMoveDown = {
                                                 if (exIndex < selectedExercises.size - 1) {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
                                                     val temp = selectedExercises[exIndex]
                                                     selectedExercises[exIndex] = selectedExercises[exIndex + 1]
                                                     selectedExercises[exIndex + 1] = temp

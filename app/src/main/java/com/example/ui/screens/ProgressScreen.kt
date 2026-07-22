@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.border
 import androidx.compose.ui.window.Dialog
+import com.example.core.util.UnitConverter
 import com.example.data.*
 import com.example.ui.viewmodel.StrengthViewModel
 import kotlinx.coroutines.flow.*
@@ -44,6 +45,7 @@ fun ProgressScreen(
     viewModel: StrengthViewModel,
     onNavigateToProfile: () -> Unit = {}
 ) {
+    val isMetric by viewModel.isMetric.collectAsState()
     val bodyWeights by viewModel.bodyWeights.collectAsState()
     val tapeMeasurements by viewModel.tapeMeasurements.collectAsState()
     val exercises by viewModel.exercises.collectAsState()
@@ -294,9 +296,10 @@ fun ProgressScreen(
                         weightInput = weightInput,
                         onWeightInputChange = { weightInput = it },
                         onLogWeight = { w, bf ->
-                            viewModel.logBodyWeight(w, bf)
+                            viewModel.logBodyWeight(if (isMetric) w else UnitConverter.lbToKg(w), bf)
                         },
-                        onDeleteWeight = { id -> viewModel.deleteBodyWeight(id) }
+                        onDeleteWeight = { id -> viewModel.deleteBodyWeight(id) },
+                        isMetric = isMetric
                     )
                 }
                 "Tape" -> {
@@ -350,7 +353,8 @@ fun ProgressScreen(
                             selectedExercise = selectedExerciseForChart!!,
                             completedSets = completedSets,
                             sessions = sessions,
-                            onSelectExerciseClick = { showExerciseSelectionDialog = true }
+                            onSelectExerciseClick = { showExerciseSelectionDialog = true },
+                            isMetric = isMetric
                         )
                     }
                 }
@@ -430,7 +434,8 @@ fun WeightProgressTab(
     weightInput: String,
     onWeightInputChange: (String) -> Unit,
     onLogWeight: (weight: Float, bodyFat: Float?) -> Unit,
-    onDeleteWeight: (Int) -> Unit
+    onDeleteWeight: (Int) -> Unit,
+    isMetric: Boolean = true
 ) {
     var bodyFatInput by remember { mutableStateOf("") }
     var selectedMetricToPlot by remember { mutableStateOf("Weight") } // "Weight", "Body Fat", "BMI"
@@ -480,7 +485,7 @@ fun WeightProgressTab(
                             value = weightInput,
                             onValueChange = onWeightInputChange,
                             label = { Text("Weight") },
-                            suffix = { Text("kg") },
+                            suffix = { Text(if (isMetric) "kg" else "lbs") },
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("weight_progress_input"),
@@ -638,7 +643,7 @@ fun WeightProgressTab(
                         ) {
                             Column {
                                 Text(
-                                    "Weight: ${entry.weight} kg",
+                                    "Weight: ${UnitConverter.formatWeight(entry.weight.toDouble(), isMetric)}",
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.primary
@@ -671,13 +676,13 @@ fun WeightProgressTab(
                                 entry.leanMass?.let { lm ->
                                     Column {
                                         Text("Lean Mass", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text("${String.format("%.1f", lm)} kg", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        Text(UnitConverter.formatWeight(lm, isMetric), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 entry.fatMass?.let { fm ->
                                     Column {
                                         Text("Fat Mass", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text("${String.format("%.1f", fm)} kg", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        Text(UnitConverter.formatWeight(fm, isMetric), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -1002,7 +1007,8 @@ fun StrengthProgressTab(
     selectedExercise: Exercise,
     completedSets: List<LoggedSet>,
     sessions: List<com.example.data.WorkoutSession>,
-    onSelectExerciseClick: () -> Unit
+    onSelectExerciseClick: () -> Unit,
+    isMetric: Boolean = true
 ) {
     // Generate progression points: max weight lifted per session over time
     val strengthDataPoints = remember(completedSets, sessions) {
@@ -1081,7 +1087,7 @@ fun StrengthProgressTab(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            if (personalRecord > 0) "$personalRecord kg" else "—",
+                            if (personalRecord > 0) UnitConverter.formatWeight(personalRecord.toDouble(), isMetric) else "—",
                             style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.Black
                         )

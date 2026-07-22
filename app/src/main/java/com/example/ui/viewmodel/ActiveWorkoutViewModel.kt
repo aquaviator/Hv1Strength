@@ -32,6 +32,10 @@ class ActiveWorkoutViewModel(
         .map { it.defaultRestTimerDuration }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 90)
 
+    val isMetric: StateFlow<Boolean> = preferencesRepository.userPreferencesFlow
+        .map { it.isMetric }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     // Active Workout State
     private val _activeWorkoutState = MutableStateFlow<ActiveWorkoutState?>(null)
     val activeWorkoutState: StateFlow<ActiveWorkoutState?> = _activeWorkoutState.asStateFlow()
