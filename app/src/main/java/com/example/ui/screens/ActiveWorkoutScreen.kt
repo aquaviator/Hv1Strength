@@ -235,6 +235,129 @@ fun ActiveWorkoutScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(vertical = 12.dp)
             ) {
+                // Pending Superset Suggestion Banner
+                val pendingSuperset = activeWorkout.pendingSupersetSuggestion
+                if (pendingSuperset != null) {
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .testTag("superset_suggestion_card"),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .padding(16.dp)
+                                    .fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.MergeType,
+                                        contentDescription = "Superset",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "Possible Superset Detected",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                                Text(
+                                    text = "You've been alternating sets between ${pendingSuperset.exerciseNameA} and ${pendingSuperset.exerciseNameB}. Group them as a superset?",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            viewModel.confirmCasualSuperset(pendingSuperset.exerciseIdA, pendingSuperset.exerciseIdB)
+                                        },
+                                        modifier = Modifier.weight(1f).testTag("confirm_superset_button")
+                                    ) {
+                                        Text("Group as Superset")
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            viewModel.dismissCasualSuperset(pendingSuperset.exerciseIdA, pendingSuperset.exerciseIdB)
+                                        },
+                                        modifier = Modifier.weight(1f).testTag("dismiss_superset_button")
+                                    ) {
+                                        Text("Not a Superset")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Empty Exercises State for casual mode / empty workout
+                if (activeWorkout.exercises.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("casual_empty_exercises_card")
+                                .padding(vertical = 16.dp),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .padding(28.dp)
+                                    .fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FitnessCenter,
+                                    contentDescription = "Add Exercise",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(56.dp)
+                                )
+                                Text(
+                                    text = "No Exercises Logged Yet",
+                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "What did you do today? Tap below to select an exercise and start logging your sets.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                                Button(
+                                    onClick = { showAddExerciseDialog = true },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(50.dp)
+                                        .testTag("empty_state_add_exercise_button"),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Add Exercise", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // If rest timer is active -> Rest State Panel Dominates
                 if (restTimeRemaining != null && activeFlatSet != null) {
                     item {
@@ -301,7 +424,7 @@ fun ActiveWorkoutScreen(
                 }
 
                 // If no active sets left -> Workout complete card
-                if (activeFlatSet == null) {
+                if (activeFlatSet == null && activeWorkout.exercises.isNotEmpty()) {
                     item {
                         Card(
                             modifier = Modifier

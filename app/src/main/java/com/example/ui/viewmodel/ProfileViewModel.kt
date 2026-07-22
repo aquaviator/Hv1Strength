@@ -154,18 +154,12 @@ class ProfileViewModel(
             val currentProfile = activeUserProfile.value ?: (authViewModel.authState.value as? AuthState.Authenticated)?.profile ?: return@launch
             val updated = currentProfile.copy(
                 displayName = if (!displayName.isNullOrBlank()) displayName else currentProfile.displayName,
-                dateOfBirth = dob,
-                sex = sex,
-                trainingExperience = experience,
+                dateOfBirth = dob.ifBlank { null },
+                sex = sex.ifBlank { null },
+                trainingExperience = experience.ifBlank { null },
                 updatedAt = System.currentTimeMillis()
             )
             repository.insertUserProfile(updated)
-            authViewModel.authRepository.signInWithGoogle(
-                idToken = updated.id,
-                displayName = updated.displayName,
-                email = updated.email,
-                photoUrl = updated.photoUrl
-            )
         }
     }
 

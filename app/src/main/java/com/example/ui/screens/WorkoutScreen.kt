@@ -308,7 +308,7 @@ fun WorkoutScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Button(
-                                onClick = { viewModel.startWorkout(null) },
+                                onClick = { viewModel.startCasualWorkout() },
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(48.dp)
@@ -321,7 +321,7 @@ fun WorkoutScreen(
                             ) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = "Start")
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Start Empty Workout", fontWeight = FontWeight.Bold)
+                                Text("Log a Workout", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -651,6 +651,7 @@ fun TemplateEditorDialog(
     val favoriteExercises by viewModel.favoriteExercises.collectAsState()
     val allLoggedSets by viewModel.allLoggedSets.collectAsState()
     val isMetric by viewModel.isMetric.collectAsState()
+    val defaultRestTimerDuration by viewModel.defaultRestTimerDuration.collectAsState()
     val haptic = LocalHapticFeedback.current
 
     // Register BackHandler to intercept back gestures when editing/creating a routine
@@ -1026,7 +1027,7 @@ fun TemplateEditorDialog(
                                                         )
                                                         val newEx = TemplateExerciseState(
                                                             exerciseId = exercise.id,
-                                                            restSeconds = 90,
+                                                            restSeconds = defaultRestTimerDuration,
                                                             sets = listOf(defaultSet)
                                                         )
                                                         selectedExercises.add(newEx)

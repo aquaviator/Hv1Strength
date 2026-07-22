@@ -164,6 +164,7 @@ class AuthRepository(
             }
 
             val finalDisplayName = displayName ?: email?.substringBefore("@") ?: "Google User"
+            val existingProfile = strengthRepository.getUserProfile(userId)
             val profile = UserProfile(
                 id = userId,
                 googleUserId = userId,
@@ -174,7 +175,13 @@ class AuthRepository(
                 lastLoginAt = System.currentTimeMillis(),
                 humanUserId = HumanUserIdGenerator.mapUserIdToHumanUserId(userId),
                 firebaseUid = fUid,
-                isOfflineUser = false
+                isOfflineUser = false,
+                dateOfBirth = existingProfile?.dateOfBirth,
+                sex = existingProfile?.sex,
+                trainingExperience = existingProfile?.trainingExperience,
+                heightCm = existingProfile?.heightCm,
+                preferredUnits = existingProfile?.preferredUnits ?: "metric",
+                createdAt = existingProfile?.createdAt ?: System.currentTimeMillis()
             )
 
             // Save to room

@@ -612,6 +612,22 @@ class ActiveWorkoutViewModel(
     }
 
     // Active Workout Operations
+    fun startCasualWorkout() {
+        viewModelScope.launch {
+            val startTime = System.currentTimeMillis()
+            _activeWorkoutState.value = ActiveWorkoutState(
+                templateId = null,
+                templateName = "Log a Workout",
+                startTime = startTime,
+                exercises = emptyList(),
+                sets = emptyMap(),
+                exerciseMetadata = emptyMap(),
+                workoutSource = "CASUAL"
+            )
+            _navigateToActiveWorkoutEvent.emit(Unit)
+        }
+    }
+
     fun startWorkout(template: WorkoutTemplate?) {
         viewModelScope.launch {
             val startTime = System.currentTimeMillis()
@@ -731,7 +747,31 @@ class ActiveWorkoutViewModel(
     fun addExerciseToActiveWorkout(exercise: Exercise) {
         viewModelScope.launch {
             val currentState = _activeWorkoutState.value ?: return@launch
-            if (currentState.exercises.any { it.id == exercise.id }) return@launch
+            val existingIndex = currentState.exercises.indexOfFirst { it.id == exercise.id }
+            if (existingIndex >= 0) {
+                // Repeated exercise selected: group as a new set under the existing exercise!
+                val currentSets = currentState.sets[exercise.id] ?: emptyList()
+                val lastSet = currentSets.lastOrNull()
+                val prevSets = repository.getPreviousSetsForExercise(exercise.id)
+                val ps = prevSets.getOrNull(currentSets.size)
+                val prevSum = if (ps != null) "${com.example.core.util.UnitConverter.formatWeight(ps.weight.toDouble(), isMetric.value)} x ${ps.reps}" else ""
+
+                val newSet = ActiveSet(
+                    setNumber = currentSets.size + 1,
+                    reps = lastSet?.reps ?: 10,
+                    weight = lastSet?.weight ?: 0f,
+                    isCompleted = false,
+                    prevSummary = prevSum,
+                    setType = lastSet?.setType ?: "WORKING",
+                    targetRepsMin = lastSet?.targetRepsMin,
+                    targetRepsMax = lastSet?.targetRepsMax,
+                    targetWeight = lastSet?.targetWeight
+                )
+                val updatedSetsMap = currentState.sets.toMutableMap()
+                updatedSetsMap[exercise.id] = currentSets + newSet
+                _activeWorkoutState.value = currentState.copy(sets = updatedSetsMap)
+                return@launch
+            }
 
             val updatedExercises = currentState.exercises + exercise
             val prevSets = repository.getPreviousSetsForExercise(exercise.id)
@@ -892,6 +932,8 @@ class ActiveWorkoutViewModel(
         if (setIndex !in currentSets.indices) return
 
         val oldSet = currentSets[setIndex]
+        val completionTime = if (isCompleted && oldSet.completedAt == null) System.currentTimeMillis() else if (isCompleted) oldSet.completedAt else null
+
         val updatedSetsList = currentSets.toMutableList()
         updatedSetsList[setIndex] = updatedSetsList[setIndex].copy(
             reps = reps,
@@ -908,35 +950,130 @@ class ActiveWorkoutViewModel(
             targetDuration = targetDuration,
             targetDistance = targetDistance,
             tempo = tempo,
-            notes = notes
+            notes = notes,
+            completedAt = completionTime
         )
 
         val updatedSetsMap = currentState.sets.toMutableMap()
         updatedSetsMap[exerciseId] = updatedSetsList
 
-        _activeWorkoutState.value = currentState.copy(sets = updatedSetsMap)
+        val updatedState = currentState.copy(sets = updatedSetsMap)
+        _activeWorkoutState.value = updatedState
 
         if (isCompleted && !oldSet.isCompleted) {
-            val groupId = currentState.exerciseMetadata[exerciseId]?.supersetGroupId
-            if (!groupId.isNullOrEmpty()) {
-                val groupExercises = currentState.exercises.filter { currentState.exerciseMetadata[it.id]?.supersetGroupId == groupId }
-                val currentInGroupIdx = groupExercises.indexOfFirst { it.id == exerciseId }
-                
-                // If it is the final exercise of the round in the group
-                val isFinalExerciseInRound = currentInGroupIdx == groupExercises.size - 1
-                
-                val restDuration = if (isFinalExerciseInRound) {
-                    // Rest after round: use the exercise's restSeconds (group's designated round rest)
-                    currentState.exerciseMetadata[exerciseId]?.restSeconds ?: defaultRestTimerDuration.value
+            if (currentState.workoutSource != "CASUAL") {
+                val groupId = currentState.exerciseMetadata[exerciseId]?.supersetGroupId
+                if (!groupId.isNullOrEmpty()) {
+                    val groupExercises = currentState.exercises.filter { currentState.exerciseMetadata[it.id]?.supersetGroupId == groupId }
+                    val currentInGroupIdx = groupExercises.indexOfFirst { it.id == exerciseId }
+                    val isFinalExerciseInRound = currentInGroupIdx == groupExercises.size - 1
+                    val restDuration = if (isFinalExerciseInRound) {
+                        currentState.exerciseMetadata[exerciseId]?.restSeconds ?: defaultRestTimerDuration.value
+                    } else {
+                        45
+                    }
+                    startRestTimer(restDuration)
                 } else {
-                    // Rest between exercises: use 45 seconds as standard interval between exercises in a group
-                    45
+                    val customRest = currentState.exerciseMetadata[exerciseId]?.restSeconds
+                    startRestTimer(customRest ?: defaultRestTimerDuration.value)
                 }
-                startRestTimer(restDuration)
-            } else {
-                // Single exercise: use its own rest seconds
-                val customRest = currentState.exerciseMetadata[exerciseId]?.restSeconds
-                startRestTimer(customRest ?: defaultRestTimerDuration.value)
+            }
+            evaluateCasualSupersets(updatedState)
+        }
+    }
+
+    fun confirmCasualSuperset(exIdA: String, exIdB: String) {
+        val currentState = _activeWorkoutState.value ?: return
+        val newSuperset = CasualSuperset(
+            exerciseIds = listOf(exIdA, exIdB),
+            isConfirmed = true
+        )
+        val updatedSupersets = currentState.casualSupersets + newSuperset
+        _activeWorkoutState.value = currentState.copy(
+            casualSupersets = updatedSupersets,
+            pendingSupersetSuggestion = null
+        )
+    }
+
+    fun dismissCasualSuperset(exIdA: String, exIdB: String) {
+        val currentState = _activeWorkoutState.value ?: return
+        val key1 = "$exIdA:$exIdB"
+        val key2 = "$exIdB:$exIdA"
+        val updatedDismissed = currentState.dismissedSupersets + key1 + key2
+        _activeWorkoutState.value = currentState.copy(
+            dismissedSupersets = updatedDismissed,
+            pendingSupersetSuggestion = null
+        )
+    }
+
+    private fun evaluateCasualSupersets(state: ActiveWorkoutState) {
+        if (state.workoutSource != "CASUAL") return
+        if (state.pendingSupersetSuggestion != null) return
+
+        data class CompletedSetInfo(val exerciseId: String, val setNumber: Int, val completedAt: Long)
+        val completedSets = mutableListOf<CompletedSetInfo>()
+
+        for (ex in state.exercises) {
+            val sets = state.sets[ex.id] ?: continue
+            for (s in sets) {
+                if (s.isCompleted && s.completedAt != null) {
+                    completedSets.add(CompletedSetInfo(ex.id, s.setNumber, s.completedAt))
+                }
+            }
+        }
+
+        if (completedSets.size < 4) return
+        completedSets.sortBy { it.completedAt }
+
+        val exercisesWithMultipleSets = completedSets.groupBy { it.exerciseId }.filter { it.value.size >= 2 }.keys.toList()
+        if (exercisesWithMultipleSets.size < 2) return
+
+        for (i in 0 until exercisesWithMultipleSets.size) {
+            for (j in i + 1 until exercisesWithMultipleSets.size) {
+                val exIdA = exercisesWithMultipleSets[i]
+                val exIdB = exercisesWithMultipleSets[j]
+
+                val pairKey1 = "$exIdA:$exIdB"
+                val pairKey2 = "$exIdB:$exIdA"
+
+                val alreadyGrouped = state.casualSupersets.any { cs -> cs.exerciseIds.contains(exIdA) && cs.exerciseIds.contains(exIdB) }
+                val alreadyDismissed = state.dismissedSupersets.contains(pairKey1) || state.dismissedSupersets.contains(pairKey2)
+
+                if (alreadyGrouped || alreadyDismissed) continue
+
+                val subList = completedSets.filter { it.exerciseId == exIdA || it.exerciseId == exIdB }
+                if (subList.size >= 4) {
+                    var isAlternating = true
+                    for (idx in 0 until subList.size - 1) {
+                        if (subList[idx].exerciseId == subList[idx + 1].exerciseId) {
+                            isAlternating = false
+                            break
+                        }
+                    }
+                    if (isAlternating) {
+                        val startTime = subList.first().completedAt
+                        val endTime = subList.last().completedAt
+                        val interruptedByThird = completedSets.any {
+                            it.exerciseId != exIdA && it.exerciseId != exIdB && it.completedAt in startTime..endTime
+                        }
+
+                        if (!interruptedByThird) {
+                            val exA = state.exercises.find { it.id == exIdA }
+                            val exB = state.exercises.find { it.id == exIdB }
+                            if (exA != null && exB != null) {
+                                _activeWorkoutState.value = state.copy(
+                                    pendingSupersetSuggestion = PendingSupersetSuggestion(
+                                        exerciseIdA = exIdA,
+                                        exerciseNameA = exA.name,
+                                        exerciseIdB = exIdB,
+                                        exerciseNameB = exB.name
+                                    )
+                                )
+                                return
+                            }
+                        }
+                    }
+                }
             }
         }
     }

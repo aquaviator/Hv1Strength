@@ -106,11 +106,16 @@ class MainActivity : ComponentActivity() {
         android.util.Log.i("MainActivity", "Background sync scheduled successfully.")
 
         setContent {
-          MyApplicationTheme {
-            android.util.Log.i("MainActivity", "Setting content in Compose...")
-            val viewModel: StrengthViewModel = viewModel(
-              factory = StrengthViewModelFactory(repository, applicationContext)
-            )
+          val viewModel: StrengthViewModel = viewModel(
+            factory = StrengthViewModelFactory(repository, applicationContext)
+          )
+          val themeMode by viewModel.theme.collectAsState()
+          val isDark = when (themeMode.lowercase()) {
+              "light" -> false
+              "dark" -> true
+              else -> androidx.compose.foundation.isSystemInDarkTheme()
+          }
+          MyApplicationTheme(darkTheme = isDark) {
             MainAppScreen(viewModel)
           }
         }

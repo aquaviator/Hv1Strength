@@ -25,6 +25,19 @@ sealed interface WorkoutRecoveryState {
     data class Failed(val reason: String) : WorkoutRecoveryState
 }
 
+data class CasualSuperset(
+    val groupId: String = java.util.UUID.randomUUID().toString(),
+    val exerciseIds: List<String>,
+    val isConfirmed: Boolean = true
+)
+
+data class PendingSupersetSuggestion(
+    val exerciseIdA: String,
+    val exerciseNameA: String,
+    val exerciseIdB: String,
+    val exerciseNameB: String
+)
+
 data class ActiveWorkoutState(
     val templateId: Int? = null,
     val templateName: String,
@@ -39,7 +52,11 @@ data class ActiveWorkoutState(
     val restTimerDuration: Int? = null,
     val isRestTimerPaused: Boolean = false,
     val isMetric: Boolean = true,
-    val stateVersion: Int = 1
+    val stateVersion: Int = 1,
+    val workoutSource: String = "ROUTINE",
+    val casualSupersets: List<CasualSuperset> = emptyList(),
+    val dismissedSupersets: Set<String> = emptySet(),
+    val pendingSupersetSuggestion: PendingSupersetSuggestion? = null
 )
 
 data class ActiveSet(
@@ -60,7 +77,8 @@ data class ActiveSet(
     val targetDuration: Int? = null,
     val targetDistance: Float? = null,
     val tempo: String? = null,
-    val notes: String? = null
+    val notes: String? = null,
+    val completedAt: Long? = null
 )
 
 sealed interface ActiveWorkoutEvent {
@@ -380,6 +398,9 @@ class StrengthViewModel(
     fun discardWorkoutBackup() = activeWorkoutViewModel.discardWorkoutBackup()
 
     fun startWorkout(template: WorkoutTemplate?) = activeWorkoutViewModel.startWorkout(template)
+    fun startCasualWorkout() = activeWorkoutViewModel.startCasualWorkout()
+    fun confirmCasualSuperset(exIdA: String, exIdB: String) = activeWorkoutViewModel.confirmCasualSuperset(exIdA, exIdB)
+    fun dismissCasualSuperset(exIdA: String, exIdB: String) = activeWorkoutViewModel.dismissCasualSuperset(exIdA, exIdB)
     fun renameActiveWorkout(newName: String) = activeWorkoutViewModel.renameActiveWorkout(newName)
     fun addExerciseToActiveWorkout(exercise: Exercise) = activeWorkoutViewModel.addExerciseToActiveWorkout(exercise)
     

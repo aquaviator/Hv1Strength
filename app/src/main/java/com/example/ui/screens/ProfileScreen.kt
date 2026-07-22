@@ -287,7 +287,12 @@ fun ProfileScreen(
                     ProfileInfoRow(
                         icon = Icons.Default.TrendingUp,
                         label = "Experience level",
-                        value = if (!userProfile?.trainingExperience.isNullOrBlank()) userProfile!!.trainingExperience!!.replaceFirstChar { it.uppercase() } else "Not set"
+                        value = when (userProfile?.trainingExperience?.lowercase()) {
+                            "beginner" -> "Beginner"
+                            "intermediate" -> "Intermediate"
+                            "advanced" -> "Advanced"
+                            else -> if (!userProfile?.trainingExperience.isNullOrBlank()) userProfile!!.trainingExperience!!.replaceFirstChar { it.uppercase() } else "Not set"
+                        }
                     )
 
                     ProfileInfoRow(
@@ -299,7 +304,13 @@ fun ProfileScreen(
                     ProfileInfoRow(
                         icon = Icons.Default.Person,
                         label = "Assigned sex",
-                        value = if (!userProfile?.sex.isNullOrBlank()) userProfile!!.sex!!.replaceFirstChar { it.uppercase() } else "Not set"
+                        value = when (userProfile?.sex?.lowercase()) {
+                            "male" -> "Male"
+                            "female" -> "Female"
+                            "other" -> "Other"
+                            "prefer_not_to_say" -> "Prefer not to say"
+                            else -> if (!userProfile?.sex.isNullOrBlank()) userProfile!!.sex!!.replaceFirstChar { it.uppercase() } else "Not set"
+                        }
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
@@ -658,8 +669,56 @@ fun ProfileScreen(
         if (userProfile != null) {
             var name by remember { mutableStateOf(userProfile!!.displayName ?: "") }
             var dob by remember { mutableStateOf(userProfile!!.dateOfBirth ?: "") }
-            var sex by remember { mutableStateOf(userProfile!!.sex ?: "unspecified") }
-            var exp by remember { mutableStateOf(userProfile!!.trainingExperience ?: "beginner") }
+            var sex by remember { mutableStateOf(userProfile!!.sex ?: "") }
+            var exp by remember { mutableStateOf(userProfile!!.trainingExperience ?: "") }
+            var showDatePicker by remember { mutableStateOf(false) }
+
+            if (showDatePicker) {
+                val initialEpochMillis = remember(dob) {
+                    try {
+                        if (dob.isNotBlank()) {
+                            val parts = dob.split("-")
+                            if (parts.size == 3) {
+                                val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+                                cal.set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt(), 12, 0, 0)
+                                cal.timeInMillis
+                            } else System.currentTimeMillis()
+                        } else System.currentTimeMillis()
+                    } catch (e: Exception) {
+                        System.currentTimeMillis()
+                    }
+                }
+                val datePickerState = rememberDatePickerState(
+                    initialSelectedDateMillis = initialEpochMillis,
+                    initialDisplayMode = DisplayMode.Picker
+                )
+                DatePickerDialog(
+                    onDismissRequest = { showDatePicker = false },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                datePickerState.selectedDateMillis?.let { millis ->
+                                    val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+                                    cal.timeInMillis = millis
+                                    val y = cal.get(java.util.Calendar.YEAR)
+                                    val m = cal.get(java.util.Calendar.MONTH) + 1
+                                    val d = cal.get(java.util.Calendar.DAY_OF_MONTH)
+                                    dob = String.format(java.util.Locale.US, "%04d-%02d-%02d", y, m, d)
+                                }
+                                showDatePicker = false
+                            }
+                        ) { Text("OK") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+                    }
+                ) {
+                    DatePicker(
+                        state = datePickerState,
+                        showModeToggle = true
+                    )
+                }
+            }
 
             AlertDialog(
                 onDismissRequest = { showEditProfileDialog = false },
@@ -681,15 +740,31 @@ fun ProfileScreen(
                                 .testTag("profile_edit_name_input")
                         )
 
-                        OutlinedTextField(
-                            value = dob,
-                            onValueChange = { dob = it },
-                            label = { Text("Date of Birth (YYYY-MM-DD)") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("profile_edit_dob_input")
-                        )
+                        Box(modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }) {
+                            OutlinedTextField(
+                                value = dob,
+                                onValueChange = {},
+                                readOnly = true,
+                                enabled = false,
+                                label = { Text("Date of Birth") },
+                                placeholder = { Text("YYYY-MM-DD") },
+                                trailingIcon = {
+                                    IconButton(onClick = { showDatePicker = true }) {
+                                        Icon(Icons.Default.Cake, contentDescription = "Select Date")
+                                    }
+                                },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                    disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                    disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    disabledTrailingIconColor = MaterialTheme.colorScheme.primary
+                                ),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("profile_edit_dob_input")
+                            )
+                        }
 
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
@@ -704,29 +779,35 @@ fun ProfileScreen(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                listOf("Male", "Female", "Other").forEach { item ->
+                                listOf(
+                                    "Male" to "male",
+                                    "Female" to "female",
+                                    "Other" to "other",
+                                    "Prefer not to say" to "prefer_not_to_say"
+                                ).forEach { (label, key) ->
+                                    val isSelected = sex.lowercase() == key.lowercase()
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
-                                        color = if (sex.lowercase() == item.lowercase()) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                         border = BorderStroke(
                                             1.dp,
-                                            if (sex.lowercase() == item.lowercase()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                                         ),
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(12.dp))
-                                            .clickable { sex = item.lowercase() }
-                                            .testTag("sex_option_${item.lowercase()}")
+                                            .clickable { sex = key }
+                                            .testTag("sex_option_$key")
                                     ) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                         ) {
                                             RadioButton(
-                                                selected = sex.lowercase() == item.lowercase(),
-                                                onClick = { sex = item.lowercase() }
+                                                selected = isSelected,
+                                                onClick = { sex = key }
                                             )
                                             Text(
-                                                text = item,
+                                                text = label,
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.SemiBold,
                                                 maxLines = 1,
@@ -753,12 +834,13 @@ fun ProfileScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 listOf("Beginner", "Intermediate", "Advanced").forEach { item ->
+                                    val isSelected = exp.lowercase() == item.lowercase()
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
-                                        color = if (exp.lowercase() == item.lowercase()) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                         border = BorderStroke(
                                             1.dp,
-                                            if (exp.lowercase() == item.lowercase()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                                         ),
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(12.dp))
@@ -770,7 +852,7 @@ fun ProfileScreen(
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                         ) {
                                             RadioButton(
-                                                selected = exp.lowercase() == item.lowercase(),
+                                                selected = isSelected,
                                                 onClick = { exp = item.lowercase() }
                                             )
                                             Text(
