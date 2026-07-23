@@ -279,6 +279,16 @@ class CatalogueV2ValidationTests(unittest.TestCase):
         findings, _ = self.validate_rows([row])
         self.assertIn("AI_TASKS_REQUIRED", self.codes(findings))
 
+    def test_ai_generated_draft_coaching_can_await_review(self):
+        row = self.valid_row(
+            content_origin="AI Generated — Review Pending",
+            ai_assistance_tasks="Coaching Draft",
+            execution_cues="Press with controlled intent.",
+            coaching_review_status="Required",
+        )
+        findings, _ = self.validate_rows([row])
+        self.assertNotIn("AI_COACHING_REVIEW", self.codes(findings))
+
     def test_approved_record_with_outstanding_ai_review_flag(self):
         row = self.valid_row(review_status="Approved", ai_review_flags="Anatomy Review Required")
         findings, _ = self.validate_rows([row])

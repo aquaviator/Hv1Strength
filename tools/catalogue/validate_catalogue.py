@@ -541,8 +541,12 @@ def validate_v2(manifest: Path, references: Path) -> tuple[list[Finding], int]:
             add(findings, "ERROR", "AI_TASKS_REQUIRED", row_number, "ai_assistance_tasks", "AI-assisted content must declare assistance tasks.")
         if review_status == "Approved" and split_values(row.get("ai_review_flags") or ""):
             add(findings, "ERROR", "AI_REVIEW_FLAGS", row_number, "review_status", "Outstanding AI review flags prevent approval.")
-        if origin in AI_ORIGINS and any((row.get(field) or "").strip() for field in COACHING_FIELDS) and coaching_status != "Completed":
-            add(findings, "ERROR", "AI_COACHING_REVIEW", row_number, "coaching_review_status", "AI-generated coaching text requires completed coaching review.")
+        if (
+            origin in AI_ORIGINS
+            and any((row.get(field) or "").strip() for field in COACHING_FIELDS)
+            and coaching_status not in {"Required", "In Review", "Completed"}
+        ):
+            add(findings, "ERROR", "AI_COACHING_REVIEW", row_number, "coaching_review_status", "AI-generated coaching text must declare coaching review.")
         if contraindications:
             if not source:
                 add(findings, "ERROR", "CLINICAL_PROVENANCE", row_number, "source_provenance", "Contraindication claims require source provenance.")
