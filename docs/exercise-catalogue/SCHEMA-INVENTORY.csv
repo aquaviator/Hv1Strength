@@ -1,0 +1,34 @@
+source_file,symbol,field_name,field_type,nullable_or_required,default_value,database_annotation,firestore_name,room_column,purpose,manifest_field,alignment_status
+app/src/main/java/com/example/data/Entities.kt,Exercise,id,String,Required,None,@PrimaryKey,id,id,Local exercise identity,catalogue_key,Requires Human Decision
+app/src/main/java/com/example/data/Entities.kt,Exercise,name,String,Required,None,None,name,name,Display and search name,canonical_name,Direct Match
+app/src/main/java/com/example/data/Entities.kt,Exercise,category,String,Required,None,None,category,category,Six-value UI grouping,exercise_family,Compatible With Transformation
+app/src/main/java/com/example/data/Entities.kt,Exercise,isCustom,Boolean,Required,false,None,isCustom,isCustom,Distinguishes bundled and user-created exercises,,Existing Schema More Detailed
+app/src/main/java/com/example/data/Entities.kt,Exercise,globalId,String,Required,empty string,VersionedEntity,globalId,globalId,Sync and Firestore document identity,,Existing Schema More Detailed
+app/src/main/java/com/example/data/Entities.kt,Exercise,humanUserId,String,Required,empty string,VersionedEntity,humanUserId,humanUserId,Ownership/global marker,,Existing Schema More Detailed
+app/src/main/java/com/example/data/Entities.kt,Exercise,createdAt,Long,Required,System.currentTimeMillis(),VersionedEntity,createdAt,createdAt,Creation timestamp,,Existing Schema More Detailed
+app/src/main/java/com/example/data/Entities.kt,Exercise,updatedAt,Long,Required,System.currentTimeMillis(),VersionedEntity,updatedAt,updatedAt,Last update timestamp,,Existing Schema More Detailed
+app/src/main/java/com/example/data/Entities.kt,Exercise,deletedAt,Long?,Nullable,null,VersionedEntity,deletedAt,deletedAt,Soft deletion timestamp,,Existing Schema More Detailed
+app/src/main/java/com/example/data/Entities.kt,Exercise,revision,Long,Required,1,VersionedEntity,revision,revision,Sync revision,,Existing Schema More Detailed
+app/src/main/java/com/example/data/Entities.kt,Exercise,syncStatus,String,Required,LOCAL_ONLY,VersionedEntity,Not uploaded,syncStatus,Local sync state,,Existing Schema More Detailed
+app/src/main/java/com/example/data/Entities.kt,Exercise,lastSyncedAt,Long?,Nullable,null,VersionedEntity,Not uploaded,lastSyncedAt,Local sync timestamp,,Existing Schema More Detailed
+app/src/main/java/com/example/data/Entities.kt,Exercise,conflictState,String?,Nullable,null,VersionedEntity,Not uploaded,conflictState,Local conflict marker,,Existing Schema More Detailed
+app/src/main/java/com/example/data/Entities.kt,Exercise,originDeviceId,String,Required,empty string,VersionedEntity,originDeviceId,originDeviceId,Originating device,,Existing Schema More Detailed
+No production field,Catalogue manifest,parent_exercise,String,Planning,empty,None,None,None,Conceptual ancestry,parent_exercise,Missing From Production Schema
+No production field,Catalogue manifest,variation_type,String,Required by manifest,None,None,None,None,Variation classification,variation_type,Missing From Production Schema
+No production field,Catalogue manifest,equipment,String list,Required by manifest,None,None,None,None,Equipment taxonomy,equipment,Missing From Production Schema
+No production field,Catalogue manifest,primary_movement_pattern,String,Required by manifest,None,None,None,None,Movement taxonomy,primary_movement_pattern,Missing From Production Schema
+No production field,Catalogue manifest,secondary_movement_pattern,String,Optional,empty,None,None,None,Secondary movement taxonomy,secondary_movement_pattern,Missing From Production Schema
+No production field,Catalogue manifest,primary_muscle_group,String,Required by manifest,None,None,None,None,Primary anatomy,primary_muscle_group,Missing From Production Schema
+No production field,Catalogue manifest,secondary_muscle_groups,String list,Required by manifest,None,None,None,None,Secondary anatomy,secondary_muscle_groups,Missing From Production Schema
+No production field,Catalogue manifest,difficulty,String,Required by manifest,None,None,None,None,Exercise readiness,difficulty,Naming Conflict
+No production field,Catalogue manifest,technical_complexity,String,Required by manifest,None,None,None,None,Execution/coaching demand,technical_complexity,Missing From Production Schema
+No production field,Catalogue manifest,facility_tier,String,Required by manifest,None,None,None,None,Facility planning,facility_tier,Planning Only
+No production field,Catalogue manifest,commercial_importance,String,Required by manifest,None,None,None,None,Business prioritisation,commercial_importance,Planning Only
+No production field,Catalogue manifest,launch_priority,String,Required by manifest,None,None,None,None,Release prioritisation,launch_priority,Planning Only
+No production field,Catalogue manifest,search_aliases,String list,Optional,empty,None,None,None,Search discovery,search_aliases,Missing From Production Schema
+No production field,Catalogue manifest,manufacturer_aliases,String list,Optional,empty,None,None,None,Brand-neutral discovery,manufacturer_aliases,Planning Only
+No production field,Catalogue manifest,regional_aliases,String list,Optional,empty,None,None,None,Regional discovery,regional_aliases,Planning Only
+No production field,Catalogue manifest,future_module_tags,String list,Optional,empty,None,None,None,Cross-module planning,future_module_tags,Planning Only
+No production field,Catalogue manifest,substitution_group,String,Optional,empty,None,None,None,Substitution planning,substitution_group,Missing From Production Schema
+No production field,Catalogue manifest,review_status,String,Required by manifest,None,None,None,None,Editorial workflow,review_status,Planning Only
+No production field,Catalogue manifest,review_notes,String,Required by manifest,None,None,None,None,Review evidence,review_notes,Planning Only

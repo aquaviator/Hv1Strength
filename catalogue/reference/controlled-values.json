@@ -1,0 +1,36 @@
+{
+  "launch_priority": ["Essential", "Recommended", "Extended", "Future"],
+  "commercial_importance": ["Foundation", "Popular", "Specialist", "Sport Specific", "Clinical", "Legacy"],
+  "difficulty": ["Beginner", "Intermediate", "Advanced", "Expert"],
+  "technical_complexity": ["Low", "Moderate", "High", "Very High"],
+  "facility_tier": ["No Equipment", "Home Gym", "Commercial Gym", "Strength Gym", "Olympic Facility", "Strongman Facility", "Clinic"],
+  "future_module_tags": ["Strength", "Running", "HIIT", "Mobility", "Recovery", "Nutrition", "Coach", "Wearables"],
+  "review_status": ["Draft", "Architecture Reviewed", "Coaching Reviewed", "Clinical Review Required", "Approved", "Rejected", "Merged as Duplicate"],
+  "variation_type": ["Base", "Meaningful Variation", "Equipment Variation", "Progression", "Regression"],
+  "exercise_family": [
+    "Chest and Horizontal Pressing",
+    "Back and Pulling",
+    "Shoulders",
+    "Arms and Grip",
+    "Squat and Knee-Dominant Legs",
+    "Hinge and Posterior Chain",
+    "Glutes, Adductors and Abductors",
+    "Calves",
+    "Core and Carries",
+    "Olympic Weightlifting",
+    "Strongman",
+    "Conditioning",
+    "Strength-Relevant Mobility"
+  ],
+  "movement_pattern": [
+    "Horizontal Push", "Horizontal Pull", "Vertical Push", "Vertical Pull",
+    "Squat", "Hinge", "Lunge", "Locomotion", "Carry", "Rotation",
+    "Anti-Rotation", "Flexion", "Extension", "Lateral Flexion",
+    "Olympic Lift", "Loaded Event", "Cyclical Conditioning", "Mobility"
+  ],
+  "muscle_group": [
+    "Chest", "Back", "Shoulders", "Biceps", "Triceps", "Forearms and Grip",
+    "Quadriceps", "Hamstrings", "Glutes", "Adductors", "Abductors", "Calves",
+    "Core", "Spinal Erectors", "Full Body", "Hip Flexors"
+  ]
+}
