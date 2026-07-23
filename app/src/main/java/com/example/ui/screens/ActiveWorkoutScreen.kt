@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -113,6 +114,29 @@ fun ActiveWorkoutScreen(
     // Accordion expansion state
     var doneExpanded by remember { mutableStateOf(false) }
     var nextExpanded by remember { mutableStateOf(false) }
+
+    val isCasual = activeWorkout.workoutSource == "CASUAL" || activeWorkout.templateId == null
+
+    if (isCasual) {
+        CasualWorkoutJournalScreen(
+            viewModel = viewModel,
+            activeWorkout = activeWorkout,
+            isCompletingWorkout = isCompletingWorkout,
+            onNavigateBack = onNavigateBack,
+            onNavigateToSummary = onNavigateToSummary
+        )
+        return
+    }
+
+    BackHandler {
+        if (showAddExerciseDialog) {
+            showAddExerciseDialog = false
+        } else if (showFinishWorkoutDialog) {
+            showFinishWorkoutDialog = false
+        } else {
+            showCancelConfirmDialog = true
+        }
+    }
 
     // Flat queue representation
     val flatSets by viewModel.executionQueue.collectAsState()
@@ -423,64 +447,152 @@ fun ActiveWorkoutScreen(
                     }
                 }
 
-                // If no active sets left -> Workout complete card
+                // If no active sets left
                 if (activeFlatSet == null && activeWorkout.exercises.isNotEmpty()) {
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("workout_complete_card")
-                                .padding(vertical = 12.dp),
-                            shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = SlateElevatedSurface
-                            ),
-                            border = BorderStroke(2.dp, HumanPrimaryAccent)
-                        ) {
-                            Column(
+                    if (!isCasual) {
+                        item {
+                            Card(
                                 modifier = Modifier
-                                    .padding(28.dp)
-                                    .fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                                    .fillMaxWidth()
+                                    .testTag("workout_complete_card")
+                                    .padding(vertical = 12.dp),
+                                shape = RoundedCornerShape(24.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = SlateElevatedSurface
+                                ),
+                                border = BorderStroke(2.dp, HumanPrimaryAccent)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = "Workout Complete",
-                                    tint = SlateSuccess,
-                                    modifier = Modifier.size(64.dp)
-                                )
-                                Text(
-                                    text = "ALL SETS COMPLETED!",
-                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
-                                    color = SlateSuccess
-                                )
-                                Text(
-                                    text = "Phenomenal effort today. Ready to log your session?",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White,
-                                    textAlign = TextAlign.Center
-                                )
-                                Button(
-                                    onClick = { showFinishWorkoutDialog = true },
+                                Column(
+                                    modifier = Modifier
+                                        .padding(28.dp)
+                                        .fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Workout Complete",
+                                        tint = SlateSuccess,
+                                        modifier = Modifier.size(64.dp)
+                                    )
+                                    Text(
+                                        text = "ALL SETS COMPLETED!",
+                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
+                                        color = SlateSuccess
+                                    )
+                                    Text(
+                                        text = "Phenomenal effort today. Ready to log your session?",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Button(
+                                        onClick = { showFinishWorkoutDialog = true },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(56.dp)
+                                            .testTag("finish_workout_button_card"),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = HumanPrimaryAccent,
+                                            contentColor = Color.White
+                                        ),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text("FINISH WORKOUT", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black))
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Casual workout: display logged exercises with Add Another Set options
+                        activeWorkout.exercises.forEach { exercise ->
+                            val setsForEx = activeWorkout.sets[exercise.id] ?: emptyList()
+                            item(key = "casual_ex_summary_${exercise.id}") {
+                                Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(56.dp)
-                                        .testTag("finish_workout_button_card"),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = HumanPrimaryAccent,
-                                        contentColor = Color.White
-                                    ),
-                                    shape = RoundedCornerShape(12.dp)
+                                        .padding(vertical = 6.dp)
+                                        .testTag("casual_exercise_card_${exercise.id}"),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = SlateElevatedSurface),
+                                    border = BorderStroke(1.dp, HumanPrimaryAccent.copy(alpha = 0.3f))
                                 ) {
-                                    Text("FINISH WORKOUT", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black))
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    text = exercise.name,
+                                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                                                    color = Color.White
+                                                )
+                                                Text(
+                                                    text = "${setsForEx.size} Set${if (setsForEx.size != 1) "s" else ""}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = HumanPrimaryAccent,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+
+                                        HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
+
+                                        setsForEx.forEachIndexed { sIdx, set ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .background(
+                                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
+                                                        shape = RoundedCornerShape(8.dp)
+                                                    )
+                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "Set ${sIdx + 1}",
+                                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                                    color = Color.White
+                                                )
+                                                Text(
+                                                    text = "${com.example.core.util.UnitConverter.formatWeight(set.weight.toDouble(), isMetric)} × ${set.reps}",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.End
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    viewModel.addSetToExercise(exercise.id)
+                                                },
+                                                modifier = Modifier.testTag("add_set_button"),
+                                                shape = RoundedCornerShape(10.dp),
+                                                border = BorderStroke(1.dp, HumanPrimaryAccent)
+                                            ) {
+                                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = HumanPrimaryAccent)
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Add Another Set", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = HumanPrimaryAccent)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-                } else if (restTimeRemaining == null) {
+                } else if (restTimeRemaining == null && currentActiveFlatSet != null) {
                     // Main execution panels (when not actively resting)
-                    val activeEx = currentActiveFlatSet!!.exercise
+                    val activeEx = currentActiveFlatSet.exercise
 
                     item {
                         val groupId = activeWorkout.exerciseMetadata[activeEx.id]?.supersetGroupId
@@ -797,11 +909,12 @@ fun ActiveWorkoutScreen(
                 }
 
                 // Collapsible NEXT Accordion
-                item {
-                    val upcomingFlatSets = if (activeFlatSet != null) flatSets.dropWhile { it != activeFlatSet }.drop(1) else emptyList()
-                    val totalRemainingCount = upcomingFlatSets.size
+                val upcomingFlatSets = if (activeFlatSet != null) flatSets.dropWhile { it != activeFlatSet }.drop(1) else emptyList()
+                val totalRemainingCount = upcomingFlatSets.size
 
-                    val upcomingGroups = upcomingFlatSets.groupBy { it.exercise.id }
+                if (totalRemainingCount > 0 && !isCasual) {
+                    item {
+                        val upcomingGroups = upcomingFlatSets.groupBy { it.exercise.id }
                     val upcomingExercisesList = mutableListOf<UpcomingItem>()
                     val processedExerciseIds = mutableSetOf<String>()
                     val processedGroupIds = mutableSetOf<String>()
@@ -962,6 +1075,49 @@ fun ActiveWorkoutScreen(
                     }
                 }
             }
+
+            if (isCasual) {
+                    item(key = "casual_bottom_actions") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = { showAddExerciseDialog = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp)
+                                    .testTag("add_exercise_button"),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = HumanPrimaryAccent,
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Add Exercise", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                            }
+
+                            OutlinedButton(
+                                onClick = { showFinishWorkoutDialog = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("finish_workout_button"),
+                                border = BorderStroke(1.dp, SlateMutedText.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Finish Workout", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium), color = SlateMutedText)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Add Exercise Dialog
@@ -1110,19 +1266,49 @@ fun ActiveWorkoutScreen(
 
         // Premium Finish Workout Summary Sheet
         if (showFinishWorkoutDialog) {
-            FinishWorkoutSheet(
-                workoutName = activeWorkout.templateName,
-                durationText = elapsedTime,
-                completedSets = completedSetsCount,
-                totalSets = totalSetsCount,
-                onConfirmFinish = {
-                    if (!isCompletingWorkout) {
-                        viewModel.finishActiveWorkout()
-                        showFinishWorkoutDialog = false
-                    }
-                },
-                onDismiss = { showFinishWorkoutDialog = false }
-            )
+            if (completedSetsCount == 0) {
+                AlertDialog(
+                    onDismissRequest = { showFinishWorkoutDialog = false },
+                    title = { Text("No exercises logged", fontWeight = FontWeight.Black) },
+                    text = { Text("Add an exercise before finishing, or discard this workout.") },
+                    confirmButton = {
+                        OutlinedButton(
+                            onClick = { showFinishWorkoutDialog = false },
+                            modifier = Modifier.testTag("keep_training_button")
+                        ) {
+                            Text("Keep Training", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        Button(
+                            onClick = {
+                                viewModel.cancelActiveWorkout()
+                                showFinishWorkoutDialog = false
+                                onNavigateBack()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.testTag("discard_workout_button")
+                        ) {
+                            Text("Discard Workout", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    modifier = Modifier.testTag("empty_workout_dialog")
+                )
+            } else {
+                FinishWorkoutSheet(
+                    workoutName = activeWorkout.templateName,
+                    durationText = elapsedTime,
+                    completedSets = completedSetsCount,
+                    totalSets = totalSetsCount,
+                    onConfirmFinish = {
+                        if (!isCompletingWorkout) {
+                            viewModel.finishActiveWorkout()
+                            showFinishWorkoutDialog = false
+                        }
+                    },
+                    onDismiss = { showFinishWorkoutDialog = false }
+                )
+            }
         }
 
         // Exercise Coaching Cues Sheet

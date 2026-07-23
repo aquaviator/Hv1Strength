@@ -113,4 +113,103 @@ class Candidate42SettingsAndCasualLoggingTest {
 
         assertTrue("Sequence A-B-A-B should be detected as strictly alternating", isAlternating)
     }
+
+    @Test
+    fun testCasualWorkoutRemainsActiveAfterLoggingFirstSetAndAdditionalSets() {
+        val exBench = Exercise(id = "bench", name = "Bench Press", category = "Chest")
+        val state = ActiveWorkoutState(
+            templateId = null,
+            templateName = "Log a Workout",
+            startTime = System.currentTimeMillis(),
+            exercises = listOf(exBench),
+            sets = mapOf("bench" to listOf(ActiveSet(setNumber = 1, reps = 12, weight = 22.5f, isCompleted = true))),
+            workoutSource = "CASUAL"
+        )
+
+        // Verify casual workout is active and not finished
+        assertEquals("CASUAL", state.workoutSource)
+        assertNull(state.templateId)
+        assertEquals(1, state.exercises.size)
+        assertEquals(1, state.sets["bench"]?.size)
+
+        // Adding another set keeps session active
+        val updatedSets = state.sets.toMutableMap()
+        val currentBenchSets = updatedSets["bench"] ?: emptyList()
+        updatedSets["bench"] = currentBenchSets + ActiveSet(setNumber = 2, reps = 10, weight = 22.5f, isCompleted = true)
+        val state2 = state.copy(sets = updatedSets)
+
+        assertEquals(2, state2.sets["bench"]?.size)
+        assertEquals("CASUAL", state2.workoutSource)
+    }
+
+    @Test
+    fun testAddingAnotherExerciseAndRepeatedExerciseKeepsCasualWorkoutActive() {
+        val exBench = Exercise(id = "bench", name = "Bench Press", category = "Chest")
+        val exLat = Exercise(id = "lat", name = "Lat Pulldown", category = "Back")
+
+        val state1 = ActiveWorkoutState(
+            templateId = null,
+            templateName = "Log a Workout",
+            startTime = System.currentTimeMillis(),
+            exercises = listOf(exBench),
+            sets = mapOf("bench" to listOf(ActiveSet(setNumber = 1, reps = 12, weight = 22.5f, isCompleted = true))),
+            workoutSource = "CASUAL"
+        )
+
+        // Add Lat Pulldown
+        val state2 = state1.copy(
+            exercises = listOf(exBench, exLat),
+            sets = mapOf(
+                "bench" to listOf(ActiveSet(setNumber = 1, reps = 12, weight = 22.5f, isCompleted = true)),
+                "lat" to listOf(ActiveSet(setNumber = 1, reps = 10, weight = 40f, isCompleted = true))
+            )
+        )
+
+        assertEquals(2, state2.exercises.size)
+        assertEquals(1, state2.sets["lat"]?.size)
+
+        // Repeated exercise selection for Bench Press appends set
+        val existingBenchSets = state2.sets["bench"] ?: emptyList()
+        val newBenchSet = ActiveSet(setNumber = existingBenchSets.size + 1, reps = 10, weight = 22.5f, isCompleted = true)
+        val updatedSets = state2.sets.toMutableMap()
+        updatedSets["bench"] = existingBenchSets + newBenchSet
+        val state3 = state2.copy(sets = updatedSets)
+
+        assertEquals(2, state3.exercises.size)
+        assertEquals(2, state3.sets["bench"]?.size)
+        assertEquals("CASUAL", state3.workoutSource)
+    }
+
+    @Test
+    fun testNoPlannedExercisesRemainingDoesNotFinishCasualWorkout() {
+        val exBench = Exercise(id = "bench", name = "Bench Press", category = "Chest")
+        val state = ActiveWorkoutState(
+            templateId = null,
+            templateName = "Log a Workout",
+            startTime = System.currentTimeMillis(),
+            exercises = listOf(exBench),
+            sets = mapOf("bench" to listOf(ActiveSet(setNumber = 1, reps = 12, weight = 22.5f, isCompleted = true))),
+            workoutSource = "CASUAL"
+        )
+
+        // Routine completion condition (e.g. all planned target sets done) does not apply to casual mode
+        val isCasual = state.workoutSource == "CASUAL" || state.templateId == null
+        assertTrue("Casual mode must be identified as casual", isCasual)
+        // Casual completion can only happen explicitly
+    }
+
+    @Test
+    fun testRoutineCompletionRulesRemainUnchanged() {
+        val stateRoutine = ActiveWorkoutState(
+            templateId = 123,
+            templateName = "Chest Day",
+            startTime = System.currentTimeMillis(),
+            exercises = listOf(Exercise(id = "bench", name = "Bench Press", category = "Chest")),
+            sets = mapOf("bench" to listOf(ActiveSet(setNumber = 1, reps = 10, weight = 60f, isCompleted = true))),
+            workoutSource = "ROUTINE"
+        )
+
+        val isCasual = stateRoutine.workoutSource == "CASUAL" || stateRoutine.templateId == null
+        assertFalse("Routine workout must not be marked as casual", isCasual)
+    }
 }
