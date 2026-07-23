@@ -1,6 +1,11 @@
 package com.example.ui.screens
 
 import androidx.activity.compose.BackHandler
+import com.example.core.util.UnitConverter
+import com.example.ui.components.HumanNumericPickerSheet
+import com.example.ui.components.HumanNumericStepper
+import com.example.ui.components.NumericPickerConfiguration
+import com.example.ui.components.NumericPickerPresets
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -830,6 +835,12 @@ private fun CurrentExerciseFocusCard(
     onRemoveSet: (setIndex: Int) -> Unit,
     onRemoveExercise: () -> Unit
 ) {
+    var activeSetIndex by remember(sets.size) {
+        mutableIntStateOf(
+            sets.indexOfFirst { !it.isCompleted }.let { if (it == -1) (sets.size - 1).coerceAtLeast(0) else it }
+        )
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -841,8 +852,8 @@ private fun CurrentExerciseFocusCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Exercise Header
             Row(
@@ -902,13 +913,35 @@ private fun CurrentExerciseFocusCard(
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     sets.forEachIndexed { setIndex, activeSet ->
-                        CasualSetRow(
-                            setIndex = setIndex,
-                            activeSet = activeSet,
-                            isMetric = isMetric,
-                            onUpdateSet = { w, r, rpe, c -> onUpdateSet(setIndex, w, r, rpe, c) },
-                            onRemoveSet = { onRemoveSet(setIndex) }
-                        )
+                        if (setIndex == activeSetIndex) {
+                            CasualActiveSetCard(
+                                setIndex = setIndex,
+                                activeSet = activeSet,
+                                isMetric = isMetric,
+                                onUpdateSet = { w, r, rpe, c ->
+                                    onUpdateSet(setIndex, w, r, rpe, c)
+                                },
+                                onRemoveSet = {
+                                    onRemoveSet(setIndex)
+                                    if (activeSetIndex >= sets.size - 1) {
+                                        activeSetIndex = (sets.size - 2).coerceAtLeast(0)
+                                    }
+                                }
+                            )
+                        } else {
+                            CasualCompactSetRow(
+                                setIndex = setIndex,
+                                activeSet = activeSet,
+                                isMetric = isMetric,
+                                onSelect = { activeSetIndex = setIndex },
+                                onRemoveSet = {
+                                    onRemoveSet(setIndex)
+                                    if (activeSetIndex >= sets.size - 1) {
+                                        activeSetIndex = (sets.size - 2).coerceAtLeast(0)
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -921,7 +954,10 @@ private fun CurrentExerciseFocusCard(
                 horizontalArrangement = Arrangement.Center
             ) {
                 TextButton(
-                    onClick = onAddSet,
+                    onClick = {
+                        onAddSet()
+                        activeSetIndex = sets.size
+                    },
                     modifier = Modifier.testTag("add_set_button")
                 ) {
                     Icon(
@@ -1012,119 +1048,496 @@ private fun TimelineCompactCard(
     }
 }
 
+private enum class CasualSetPickerType { WEIGHT, REPS }
+
 @Composable
-private fun CasualSetRow(
+private fun CasualCompactSetRow(
+    setIndex: Int,
+    activeSet: ActiveSet,
+    isMetric: Boolean,
+    onSelect: () -> Unit,
+    onRemoveSet: () -> Unit
+) {
+    val unitLabel = if (isMetric) "kg" else "lbs"
+    val displayWeight = if (isMetric) activeSet.weight.toDouble() else UnitConverter.kgToLb(activeSet.weight.toDouble())
+    val formattedWeight = remember(displayWeight, isMetric) {
+        if (displayWeight % 1.0 == 0.0) displayWeight.toInt().toString()
+        else String.format(Locale.US, "%.1f", displayWeight)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(CasualTheme.CardSurfaceElevated)
+            .clickable { onSelect() }
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = CasualTheme.CardSurface
+            ) {
+                Text(
+                    text = "SET ${setIndex + 1}",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = CasualTheme.TextSecondary,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
+
+            Text(
+                text = "$formattedWeight $unitLabel  ×  ${activeSet.reps} reps",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = CasualTheme.TextPrimary,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            if (activeSet.isCompleted) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(CasualTheme.SecondaryAccent.copy(alpha = 0.15f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CheckCircle,
+                        contentDescription = "Completed set",
+                        tint = CasualTheme.SecondaryAccent,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Logged",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = CasualTheme.SecondaryAccent
+                    )
+                }
+            } else {
+                Text(
+                    text = "Tap to edit",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CasualTheme.PrimaryAccent
+                )
+            }
+
+            IconButton(onClick = onRemoveSet, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Delete set",
+                    tint = CasualTheme.TextSecondary.copy(alpha = 0.5f),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CasualActiveSetCard(
     setIndex: Int,
     activeSet: ActiveSet,
     isMetric: Boolean,
     onUpdateSet: (weight: Float, reps: Int, rpe: Int?, isCompleted: Boolean) -> Unit,
     onRemoveSet: () -> Unit
 ) {
-    val focusManager = LocalFocusManager.current
-    var weightText by remember(activeSet.weight) { mutableStateOf(if (activeSet.weight > 0f) activeSet.weight.toString() else "") }
-    var repsText by remember(activeSet.reps) { mutableStateOf(if (activeSet.reps > 0) activeSet.reps.toString() else "10") }
+    var activePickerType by remember { mutableStateOf<CasualSetPickerType?>(null) }
 
-    Row(
+    val displayWeight = if (isMetric) activeSet.weight.toDouble() else UnitConverter.kgToLb(activeSet.weight.toDouble())
+    val weightConfig = remember(isMetric, activeSet.weight) {
+        NumericPickerPresets.weightConfig(isMetric, activeSet.weight.toDouble())
+    }
+    val repsConfig = remember(activeSet.reps) {
+        NumericPickerPresets.repsConfig(activeSet.reps)
+    }
+
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(CasualTheme.CardSurfaceElevated)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+            .clip(RoundedCornerShape(16.dp)),
+        colors = CardDefaults.cardColors(containerColor = CasualTheme.CardSurfaceElevated),
+        border = BorderStroke(1.dp, CasualTheme.PrimaryAccent.copy(alpha = 0.5f))
     ) {
-        // Set Badge
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = CasualTheme.CardSurface
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Header: SET Badge & Delete Control top-right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = CasualTheme.PrimaryAccent.copy(alpha = 0.2f),
+                    border = BorderStroke(1.dp, CasualTheme.PrimaryAccent.copy(alpha = 0.4f))
+                ) {
+                    Text(
+                        text = "SET ${setIndex + 1}",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
+                        color = CasualTheme.PrimaryAccent,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                }
+
+                IconButton(
+                    onClick = onRemoveSet,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Delete set",
+                        tint = CasualTheme.TextSecondary.copy(alpha = 0.7f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            // Adaptive Layout for Weight and Reps panels
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val isWide = maxWidth >= 380.dp
+
+                if (isWide) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        WeightControlPanel(
+                            displayWeight = displayWeight,
+                            weightConfig = weightConfig,
+                            isMetric = isMetric,
+                            onValueChange = { newDisplayWeight ->
+                                val canonicalKg = if (isMetric) newDisplayWeight.toFloat() else UnitConverter.lbToKg(newDisplayWeight).toFloat()
+                                onUpdateSet(canonicalKg, activeSet.reps, activeSet.rpe, activeSet.isCompleted)
+                            },
+                            onOpenPicker = { activePickerType = CasualSetPickerType.WEIGHT },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        RepsControlPanel(
+                            reps = activeSet.reps,
+                            repsConfig = repsConfig,
+                            onValueChange = { newReps ->
+                                onUpdateSet(activeSet.weight, newReps.toInt(), activeSet.rpe, activeSet.isCompleted)
+                            },
+                            onOpenPicker = { activePickerType = CasualSetPickerType.REPS },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        WeightControlPanel(
+                            displayWeight = displayWeight,
+                            weightConfig = weightConfig,
+                            isMetric = isMetric,
+                            onValueChange = { newDisplayWeight ->
+                                val canonicalKg = if (isMetric) newDisplayWeight.toFloat() else UnitConverter.lbToKg(newDisplayWeight).toFloat()
+                                onUpdateSet(canonicalKg, activeSet.reps, activeSet.rpe, activeSet.isCompleted)
+                            },
+                            onOpenPicker = { activePickerType = CasualSetPickerType.WEIGHT },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        RepsControlPanel(
+                            reps = activeSet.reps,
+                            repsConfig = repsConfig,
+                            onValueChange = { newReps ->
+                                onUpdateSet(activeSet.weight, newReps.toInt(), activeSet.rpe, activeSet.isCompleted)
+                            },
+                            onOpenPicker = { activePickerType = CasualSetPickerType.REPS },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+
+            // Completion Control Button
+            Button(
+                onClick = {
+                    onUpdateSet(activeSet.weight, activeSet.reps, activeSet.rpe, !activeSet.isCompleted)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testTag("log_set_button"),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (activeSet.isCompleted) CasualTheme.SecondaryAccent else CasualTheme.PrimaryAccent,
+                    contentColor = Color.White
+                )
+            ) {
+                Icon(
+                    imageVector = if (activeSet.isCompleted) Icons.Outlined.CheckCircle else Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (activeSet.isCompleted) "✓ Logged" else "Log Set",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            }
+        }
+    }
+
+    // Modal Bottom Sheet Picker
+    when (activePickerType) {
+        CasualSetPickerType.WEIGHT -> {
+            HumanNumericPickerSheet(
+                config = weightConfig,
+                initialValue = displayWeight,
+                onConfirm = { selectedDisplay ->
+                    val canonicalKg = if (isMetric) selectedDisplay.toFloat() else UnitConverter.lbToKg(selectedDisplay).toFloat()
+                    onUpdateSet(canonicalKg, activeSet.reps, activeSet.rpe, activeSet.isCompleted)
+                },
+                onDismiss = { activePickerType = null }
+            )
+        }
+        CasualSetPickerType.REPS -> {
+            HumanNumericPickerSheet(
+                config = repsConfig,
+                initialValue = activeSet.reps.toDouble(),
+                onConfirm = { selectedReps ->
+                    onUpdateSet(activeSet.weight, selectedReps.toInt(), activeSet.rpe, activeSet.isCompleted)
+                },
+                onDismiss = { activePickerType = null }
+            )
+        }
+        null -> {}
+    }
+}
+
+@Composable
+private fun WeightControlPanel(
+    displayWeight: Double,
+    weightConfig: NumericPickerConfiguration,
+    isMetric: Boolean,
+    onValueChange: (Double) -> Unit,
+    onOpenPicker: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val formattedValue = remember(displayWeight, weightConfig) { weightConfig.formatValue(displayWeight) }
+    val unitLabel = if (isMetric) "kg" else "lbs"
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(CasualTheme.CardSurface)
+            .border(BorderStroke(1.dp, CasualTheme.Divider), RoundedCornerShape(12.dp))
+            .padding(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = "WEIGHT",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                fontSize = 11.sp
+            ),
+            color = CasualTheme.TextSecondary
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onOpenPicker() }
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.Bottom
         ) {
             Text(
-                text = "${setIndex + 1}",
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                text = formattedValue,
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Black,
+                    fontSize = 24.sp
+                ),
+                color = CasualTheme.PrimaryAccent,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.testTag("weight_value_text")
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = unitLabel,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                ),
                 color = CasualTheme.TextSecondary,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.padding(bottom = 2.dp)
             )
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // Weight Input Field
-        OutlinedTextField(
-            value = weightText,
-            onValueChange = { input ->
-                weightText = input
-                val parsed = input.toFloatOrNull() ?: 0f
-                onUpdateSet(parsed, repsText.toIntOrNull() ?: 10, activeSet.rpe, activeSet.isCompleted)
-            },
-            placeholder = { Text("0", color = CasualTheme.TextSecondary, fontSize = 14.sp) },
-            suffix = { Text(if (isMetric) "kg" else "lbs", color = CasualTheme.TextSecondary, fontSize = 12.sp) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = CasualTheme.PrimaryAccent,
-                unfocusedBorderColor = CasualTheme.Divider,
-                focusedTextColor = CasualTheme.TextPrimary,
-                unfocusedTextColor = CasualTheme.TextPrimary,
-                focusedContainerColor = CasualTheme.CardSurface,
-                unfocusedContainerColor = CasualTheme.CardSurface
-            ),
-            modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(10.dp)
-        )
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // Reps Input Field
-        OutlinedTextField(
-            value = repsText,
-            onValueChange = { input ->
-                repsText = input
-                val parsedReps = input.toIntOrNull() ?: 0
-                val parsedWeight = weightText.toFloatOrNull() ?: 0f
-                onUpdateSet(parsedWeight, parsedReps, activeSet.rpe, activeSet.isCompleted)
-            },
-            placeholder = { Text("10", color = CasualTheme.TextSecondary, fontSize = 14.sp) },
-            suffix = { Text("reps", color = CasualTheme.TextSecondary, fontSize = 12.sp) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = CasualTheme.PrimaryAccent,
-                unfocusedBorderColor = CasualTheme.Divider,
-                focusedTextColor = CasualTheme.TextPrimary,
-                unfocusedTextColor = CasualTheme.TextPrimary,
-                focusedContainerColor = CasualTheme.CardSurface,
-                unfocusedContainerColor = CasualTheme.CardSurface
-            ),
-            modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(10.dp)
-        )
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // Toggle Complete Checkbox Icon
-        IconButton(
-            onClick = {
-                val parsedWeight = weightText.toFloatOrNull() ?: activeSet.weight
-                val parsedReps = repsText.toIntOrNull() ?: activeSet.reps
-                onUpdateSet(parsedWeight, parsedReps, activeSet.rpe, !activeSet.isCompleted)
-            }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = if (activeSet.isCompleted) Icons.Outlined.CheckCircle else Icons.Outlined.Circle,
-                contentDescription = if (activeSet.isCompleted) "Completed" else "Incomplete",
-                tint = if (activeSet.isCompleted) CasualTheme.SecondaryAccent else CasualTheme.TextSecondary
+            IconButton(
+                onClick = {
+                    val newValue = (displayWeight - weightConfig.step).coerceAtLeast(weightConfig.minimum)
+                    if (newValue != displayWeight) {
+                        onValueChange(newValue)
+                    }
+                },
+                enabled = displayWeight > weightConfig.minimum,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(CasualTheme.CardSurfaceElevated)
+                    .testTag("weight_decrement_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Remove,
+                    contentDescription = "Decrease Weight",
+                    tint = if (displayWeight > weightConfig.minimum) CasualTheme.TextPrimary else CasualTheme.TextSecondary.copy(alpha = 0.3f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            IconButton(
+                onClick = {
+                    val newValue = (displayWeight + weightConfig.step).coerceAtMost(weightConfig.maximum)
+                    if (newValue != displayWeight) {
+                        onValueChange(newValue)
+                    }
+                },
+                enabled = displayWeight < weightConfig.maximum,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(CasualTheme.CardSurfaceElevated)
+                    .testTag("weight_increment_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Increase Weight",
+                    tint = if (displayWeight < weightConfig.maximum) CasualTheme.TextPrimary else CasualTheme.TextSecondary.copy(alpha = 0.3f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RepsControlPanel(
+    reps: Int,
+    repsConfig: NumericPickerConfiguration,
+    onValueChange: (Double) -> Unit,
+    onOpenPicker: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(CasualTheme.CardSurface)
+            .border(BorderStroke(1.dp, CasualTheme.Divider), RoundedCornerShape(12.dp))
+            .padding(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = "REPS",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                fontSize = 11.sp
+            ),
+            color = CasualTheme.TextSecondary
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onOpenPicker() }
+                .padding(vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = reps.toString(),
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Black,
+                    fontSize = 24.sp
+                ),
+                color = CasualTheme.TextPrimary,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.testTag("reps_value_text")
             )
         }
 
-        // Remove Set Icon
-        IconButton(onClick = onRemoveSet, modifier = Modifier.size(32.dp)) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "Delete set",
-                tint = CasualTheme.TextSecondary.copy(alpha = 0.5f),
-                modifier = Modifier.size(16.dp)
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = {
+                    val newValue = (reps.toDouble() - repsConfig.step).coerceAtLeast(repsConfig.minimum)
+                    if (newValue != reps.toDouble()) {
+                        onValueChange(newValue)
+                    }
+                },
+                enabled = reps.toDouble() > repsConfig.minimum,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(CasualTheme.CardSurfaceElevated)
+                    .testTag("reps_decrement_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Remove,
+                    contentDescription = "Decrease Reps",
+                    tint = if (reps.toDouble() > repsConfig.minimum) CasualTheme.TextPrimary else CasualTheme.TextSecondary.copy(alpha = 0.3f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            IconButton(
+                onClick = {
+                    val newValue = (reps.toDouble() + repsConfig.step).coerceAtMost(repsConfig.maximum)
+                    if (newValue != reps.toDouble()) {
+                        onValueChange(newValue)
+                    }
+                },
+                enabled = reps.toDouble() < repsConfig.maximum,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(CasualTheme.CardSurfaceElevated)
+                    .testTag("reps_increment_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Increase Reps",
+                    tint = if (reps.toDouble() < repsConfig.maximum) CasualTheme.TextPrimary else CasualTheme.TextSecondary.copy(alpha = 0.3f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }

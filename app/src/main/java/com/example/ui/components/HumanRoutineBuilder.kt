@@ -888,6 +888,8 @@ fun ExercisePrescriptionCard(
                     }
 
                     // Inline Rest editor for expanded mode
+                    var activePickerType by remember { mutableStateOf<String?>(null) }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -919,7 +921,11 @@ fun ExercisePrescriptionCard(
                                 text = "${templateExercise.restSeconds}s", 
                                 fontWeight = FontWeight.Black, 
                                 fontSize = 14.sp, 
-                                color = Color.White
+                                color = Color.White,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { activePickerType = "REST" }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
                             )
 
                             IconButton(
@@ -932,6 +938,20 @@ fun ExercisePrescriptionCard(
                                 Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp), tint = Color.White)
                             }
                         }
+                    }
+
+                    if (activePickerType == "REST") {
+                        val restConfig = remember(templateExercise.restSeconds) {
+                            NumericPickerPresets.restConfig(templateExercise.restSeconds)
+                        }
+                        HumanNumericPickerSheet(
+                            config = restConfig,
+                            initialValue = templateExercise.restSeconds.toDouble(),
+                            onConfirm = { selectedSec ->
+                                onUpdate(templateExercise.copy(restSeconds = selectedSec.toInt()))
+                            },
+                            onDismiss = { activePickerType = null }
+                        )
                     }
 
                     // Strategy Notes field: Refined into an actual physical Coach Notes clipboard container
@@ -1178,6 +1198,8 @@ fun SetPrescriptionEditor(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // Main set/rep parameters using compact steppers suitable for one-handed use
+        var activeCardPicker by remember { mutableStateOf<String?>(null) }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1192,7 +1214,16 @@ fun SetPrescriptionEditor(
             ) {
                 Text("SETS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SlateMutedText)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("${templateExercise.sets.size}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = Color.White)
+                Text(
+                    text = "${templateExercise.sets.size}",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { activeCardPicker = "SETS" }
+                        .padding(horizontal = 6.dp)
+                )
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     IconButton(
@@ -1238,7 +1269,16 @@ fun SetPrescriptionEditor(
             ) {
                 Text("REPS TARGET", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SlateMutedText)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("${intention.targetRepsMin} - ${intention.targetRepsMax}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = Color.White)
+                Text(
+                    text = "${intention.targetRepsMin} - ${intention.targetRepsMax}",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { activeCardPicker = "REPS" }
+                        .padding(horizontal = 4.dp)
+                )
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1320,7 +1360,11 @@ fun SetPrescriptionEditor(
                     text = if (intention.startingWeight != null) com.example.core.util.UnitConverter.formatWeight(currentWeight.toDouble(), isMetric) else "--",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Black,
-                    color = Color.White
+                    color = Color.White,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { activeCardPicker = "WEIGHT" }
+                        .padding(horizontal = 4.dp)
                 )
                 Spacer(modifier = Modifier.height(18.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1348,6 +1392,71 @@ fun SetPrescriptionEditor(
                         Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp), tint = Color.White)
                     }
                 }
+            }
+        }
+
+        when (activeCardPicker) {
+            "SETS" -> {
+                val setsConfig = remember(templateExercise.sets.size) {
+                    NumericPickerPresets.setsConfig(templateExercise.sets.size)
+                }
+                HumanNumericPickerSheet(
+                    config = setsConfig,
+                    initialValue = templateExercise.sets.size.toDouble(),
+                    onConfirm = { selectedSets ->
+                        val targetCount = selectedSets.toInt().coerceIn(1, 20)
+                        val setsList = templateExercise.sets.toMutableList()
+                        while (setsList.size < targetCount) {
+                            val lastSet = setsList.lastOrNull()
+                            setsList.add(TemplateSetState(
+                                setType = lastSet?.setType ?: "WORKING",
+                                targetRepsMin = intention.targetRepsMin,
+                                targetRepsMax = intention.targetRepsMax,
+                                targetWeight = intention.startingWeight ?: lastSet?.targetWeight
+                            ))
+                        }
+                        while (setsList.size > targetCount) {
+                            setsList.removeAt(setsList.size - 1)
+                        }
+                        onUpdate(templateExercise.copy(sets = setsList))
+                    },
+                    onDismiss = { activeCardPicker = null }
+                )
+            }
+            "REPS" -> {
+                val repsConfig = remember(intention.targetRepsMax) {
+                    NumericPickerPresets.repsConfig(intention.targetRepsMax)
+                }
+                HumanNumericPickerSheet(
+                    config = repsConfig,
+                    initialValue = intention.targetRepsMax.toDouble(),
+                    onConfirm = { selectedReps ->
+                        val targetReps = selectedReps.toInt()
+                        val minReps = targetReps.coerceAtMost(intention.targetRepsMin)
+                        val updated = intention.copy(targetRepsMin = minReps, targetRepsMax = targetReps)
+                        val setsList = templateExercise.sets.map { it.copy(targetRepsMin = minReps, targetRepsMax = targetReps) }
+                        onUpdate(templateExercise.copy(notes = updated.toSerializedString(), sets = setsList))
+                    },
+                    onDismiss = { activeCardPicker = null }
+                )
+            }
+            "WEIGHT" -> {
+                val currentKg = (intention.startingWeight ?: 20f).toDouble()
+                val weightConfig = remember(isMetric, currentKg) {
+                    NumericPickerPresets.weightConfig(isMetric, currentKg)
+                }
+                val initialDisplay = if (isMetric) currentKg else com.example.core.util.UnitConverter.kgToLb(currentKg)
+                HumanNumericPickerSheet(
+                    config = weightConfig,
+                    initialValue = initialDisplay,
+                    onConfirm = { selectedDisplay ->
+                        val canonicalKg = if (isMetric) selectedDisplay.toFloat() else com.example.core.util.UnitConverter.lbToKg(selectedDisplay).toFloat()
+                        val updated = intention.copy(startingWeight = canonicalKg)
+                        val setsList = templateExercise.sets.map { it.copy(targetWeight = canonicalKg) }
+                        onUpdate(templateExercise.copy(notes = updated.toSerializedString(), sets = setsList))
+                    },
+                    onDismiss = { activeCardPicker = null }
+                )
             }
         }
         

@@ -378,57 +378,53 @@ fun TrainingStepper(
                     .padding(horizontal = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                if (isEditing) {
-                    BasicTextField(
-                        value = value,
-                        onValueChange = onValueChange,
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = keyboardType,
-                            imeAction = ImeAction.Done
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Black
                         ),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                onEditToggle(false)
-                                focusManager.clearFocus()
-                            }
-                        ),
-                        textStyle = MaterialTheme.typography.titleMedium.copy(
-                            textAlign = TextAlign.Center,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White,
-                            fontSize = 16.sp
-                        ),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(SlateElevatedSurface, RoundedCornerShape(8.dp))
-                            .border(BorderStroke(1.dp, SlateBorderColor), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 4.dp, vertical = 6.dp)
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                } else {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = value,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Black
-                            ),
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = subtext,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color = SlateMutedText.copy(alpha = 0.6f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    Text(
+                        text = if (subtext == "Tap to type") "Tap to pick" else subtext,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = SlateMutedText.copy(alpha = 0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (isEditing) {
+                    val numVal = value.filter { it.isDigit() || it == '.' }.toDoubleOrNull() ?: 0.0
+                    val isWeight = label.contains("weight", ignoreCase = true)
+                    val isKg = value.contains("kg", ignoreCase = true)
+                    val config = if (isWeight) {
+                        NumericPickerPresets.weightConfig(isMetric = isKg || !value.contains("lb", ignoreCase = true), currentKg = numVal)
+                    } else {
+                        NumericPickerPresets.repsConfig(currentReps = numVal.toInt().coerceAtLeast(1))
                     }
+
+                    HumanNumericPickerSheet(
+                        config = config,
+                        initialValue = numVal,
+                        onConfirm = { selected ->
+                            val formatted = if (isWeight) {
+                                selected.toString().removeSuffix(".0")
+                            } else {
+                                selected.toInt().toString()
+                            }
+                            onValueChange(formatted)
+                            onEditToggle(false)
+                        },
+                        onDismiss = { onEditToggle(false) }
+                    )
                 }
             }
 
@@ -1209,53 +1205,39 @@ fun WeightControl(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable { manualEdit = !manualEdit },
+                    .clickable { manualEdit = true },
                 contentAlignment = Alignment.Center
             ) {
-                if (manualEdit) {
-                    OutlinedTextField(
-                        value = manualText,
-                        onValueChange = {
-                            manualText = it
-                            val parsed = it.toFloatOrNull()
-                            if (parsed != null && parsed >= 0f) {
-                                onWeightChange(parsed)
-                            }
-                        },
-                        singleLine = true,
-                        modifier = Modifier
-                            .width(120.dp)
-                            .height(56.dp),
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Decimal,
-                            imeAction = ImeAction.Done
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                manualEdit = false
-                                focusManager.clearFocus()
-                            }
-                        ),
-                        textStyle = MaterialTheme.typography.headlineMedium.copy(
-                            textAlign = TextAlign.Center,
-                            fontWeight = FontWeight.Black,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${weight.toString().removeSuffix(".0")} ${if (isMetric) "kg" else "lbs"}",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                } else {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "${weight.toString().removeSuffix(".0")} ${if (isMetric) "kg" else "lbs"}",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Black,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            "Tap to type",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
+                    Text(
+                        "Tap to pick",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
+
+                if (manualEdit) {
+                    val currentKg = if (isMetric) weight.toDouble() else com.example.core.util.UnitConverter.lbToKg(weight.toDouble())
+                    val config = remember(isMetric, currentKg) {
+                        NumericPickerPresets.weightConfig(isMetric, currentKg)
                     }
+                    val initialDisplay = if (isMetric) weight.toDouble() else com.example.core.util.UnitConverter.kgToLb(weight.toDouble())
+                    HumanNumericPickerSheet(
+                        config = config,
+                        initialValue = initialDisplay,
+                        onConfirm = { selected ->
+                            val finalCanonicalKg = if (isMetric) selected.toFloat() else com.example.core.util.UnitConverter.lbToKg(selected).toFloat()
+                            onWeightChange(finalCanonicalKg)
+                            manualEdit = false
+                        },
+                        onDismiss = { manualEdit = false }
+                    )
                 }
             }
 
@@ -1382,53 +1364,36 @@ fun RepControl(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable { manualEdit = !manualEdit },
+                    .clickable { manualEdit = true },
                 contentAlignment = Alignment.Center
             ) {
-                if (manualEdit) {
-                    OutlinedTextField(
-                        value = manualText,
-                        onValueChange = {
-                            manualText = it
-                            val parsed = it.toIntOrNull()
-                            if (parsed != null && parsed >= 1) {
-                                onRepsChange(parsed)
-                            }
-                        },
-                        singleLine = true,
-                        modifier = Modifier
-                            .width(120.dp)
-                            .height(56.dp),
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number,
-                            imeAction = ImeAction.Done
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                manualEdit = false
-                                focusManager.clearFocus()
-                            }
-                        ),
-                        textStyle = MaterialTheme.typography.headlineMedium.copy(
-                            textAlign = TextAlign.Center,
-                            fontWeight = FontWeight.Black,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "$reps reps",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                } else {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "$reps reps",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Black,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            "Tap to type",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
+                    Text(
+                        "Tap to pick",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
+
+                if (manualEdit) {
+                    val config = remember(reps) {
+                        NumericPickerPresets.repsConfig(reps)
                     }
+                    HumanNumericPickerSheet(
+                        config = config,
+                        initialValue = reps.toDouble(),
+                        onConfirm = { selected ->
+                            onRepsChange(selected.toInt())
+                            manualEdit = false
+                        },
+                        onDismiss = { manualEdit = false }
+                    )
                 }
             }
 
