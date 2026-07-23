@@ -11,44 +11,50 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme = darkColorScheme(
+val HumanDarkColorScheme = darkColorScheme(
     primary = HumanElectricBlue,
     onPrimary = Color.White,
-    secondary = HumanElectricBlueLight,
-    onSecondary = HumanElectricBlueDark,
-    tertiary = HumanElectricBlueDark,
+    primaryContainer = HumanElectricBlueContainer,
+    onPrimaryContainer = Color.White,
+    secondary = HumanElectricBluePressed,
+    onSecondary = Color.White,
+    tertiary = HumanElectricBlueMuted,
     onTertiary = Color.White,
     background = HumanDarkBackground,
     onBackground = HumanDarkOnBackground,
     surface = HumanDarkSurface,
     onSurface = HumanDarkOnSurface,
-    surfaceVariant = HumanDarkSurfaceVariant,
+    surfaceVariant = HumanDarkSurfaceElevated,
     onSurfaceVariant = HumanDarkOnSurfaceVariant,
     outline = HumanDarkOutline,
-    error = AlertRed,
-    onError = Color.White
+    error = HumanError,
+    onError = Color.White,
+    errorContainer = HumanErrorContainer,
+    onErrorContainer = Color.White
 )
 
-private val LightColorScheme = lightColorScheme(
+val HumanLightColorScheme = lightColorScheme(
     primary = HumanElectricBlue,
     onPrimary = Color.White,
-    secondary = HumanElectricBlueLight,
-    onSecondary = HumanElectricBlueDark,
-    tertiary = HumanElectricBlueLight,
-    onTertiary = HumanElectricBlueDark,
+    primaryContainer = Color(0xFFE0EBFF),
+    onPrimaryContainer = HumanElectricBlueMuted,
+    secondary = HumanElectricBluePressed,
+    onSecondary = Color.White,
+    tertiary = Color(0xFFD6E4FF),
+    onTertiary = HumanElectricBlueMuted,
     background = HumanLightBackground,
     onBackground = HumanLightOnBackground,
     surface = HumanLightSurface,
     onSurface = HumanLightOnSurface,
-    surfaceVariant = HumanLightSurfaceVariant,
+    surfaceVariant = HumanLightSurfaceElevated,
     onSurfaceVariant = HumanLightOnSurfaceVariant,
     outline = HumanLightOutline,
-    error = AlertRed,
+    error = HumanError,
     onError = Color.White
 )
 
 @Composable
-fun MyApplicationTheme(
+fun HumanV1Theme(
     darkTheme: Boolean = true,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
@@ -58,13 +64,29 @@ fun MyApplicationTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        darkTheme -> HumanDarkColorScheme
+        else -> HumanLightColorScheme
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
+        content = content
+    )
+}
+
+/**
+ * Legacy theme entry point forwarding directly to HumanV1Theme.
+ */
+@Composable
+fun MyApplicationTheme(
+    darkTheme: Boolean = true,
+    dynamicColor: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    HumanV1Theme(
+        darkTheme = darkTheme,
+        dynamicColor = dynamicColor,
         content = content
     )
 }

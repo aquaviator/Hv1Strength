@@ -382,10 +382,10 @@ fun EmptyRoutineState(
                 modifier = Modifier.size(64.dp)
             )
             Text(
-                text = "No Routines Built",
+                text = "Create your first routine.",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center
             )
             Text(

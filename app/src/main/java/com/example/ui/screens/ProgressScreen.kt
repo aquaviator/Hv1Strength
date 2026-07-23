@@ -1141,7 +1141,7 @@ fun StrengthProgressTab(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                "Add completed sessions of this exercise to view trend.",
+                                if (sessions.isEmpty()) "Complete your first workout to unlock analytics." else "Add completed sessions of this exercise to view trend.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center

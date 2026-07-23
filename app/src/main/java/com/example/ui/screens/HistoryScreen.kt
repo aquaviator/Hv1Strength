@@ -305,6 +305,8 @@ fun HistoryScreen(
                 }
             }
 
+            val totalSessions by viewModel.sessions.collectAsState()
+
             if (filteredSessions.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -318,18 +320,18 @@ fun HistoryScreen(
                         modifier = Modifier.padding(32.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.SearchOff,
-                            contentDescription = "No results found",
+                            imageVector = if (totalSessions.isEmpty()) Icons.Default.FitnessCenter else Icons.Default.SearchOff,
+                            contentDescription = "Empty history",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                             modifier = Modifier.size(72.dp)
                         )
                         Text(
-                            "No matching coaching insights",
+                            if (totalSessions.isEmpty()) "No workouts logged yet." else "No matching coaching insights",
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleLarge
                         )
                         Text(
-                            "We couldn't find any workouts with those filter constraints. Try resetting filters.",
+                            if (totalSessions.isEmpty()) "Complete your first workout session to unlock your coaching timeline and analytics." else "We couldn't find any workouts with those filter constraints. Try resetting filters.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 16.dp),

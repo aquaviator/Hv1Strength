@@ -45,8 +45,8 @@ class Candidate52AWorkoutNumericPresentationTest {
 
     @Test
     fun testActiveSetVsCompletedSetState() {
-        val activeSet1 = ActiveSet(weight = 27.5f, reps = 10, isCompleted = false)
-        val completedSet2 = ActiveSet(weight = 30.0f, reps = 8, isCompleted = true)
+        val activeSet1 = ActiveSet(setNumber = 1, weight = 27.5f, reps = 10, isCompleted = false)
+        val completedSet2 = ActiveSet(setNumber = 2, weight = 30.0f, reps = 8, isCompleted = true)
 
         assertFalse(activeSet1.isCompleted)
         assertTrue(completedSet2.isCompleted)

@@ -4,58 +4,83 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    
-    <!-- Outer Premium Ring -->
-    <path
-        android:fillColor="#0D1B2A"
-        android:pathData="M54,2C25.28,2 2,25.28 2,54s23.28,52 52,52s52,-23.28 52,-52S82.72,2 54,2z" />
 
-    <!-- Inner Blue Glow Ring -->
-    <path
-        android:fillColor="#1B263B"
-        android:pathData="M54,12C30.8,12 12,30.8 12,54s18.8,42 42,42s42,-18.8 42,-42S77.2,12 54,12z" />
+    <group
+        android:scaleX="0.66"
+        android:scaleY="0.66"
+        android:translateX="17"
+        android:translateY="17">
+        <!-- Outer Circular Badge Ring (White) -->
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="4"
+            android:pathData="M50,10 A40,40 0 1,1 49.99,10 Z" />
 
-    <!-- Stylized Modern Athlete (Upper Body & Arms Flexing with Barbell) -->
-    <path
-        android:fillColor="#00E5FF"
-        android:pathData="M54,32c2.76,0 5,-2.24 5,-5s-2.24,-5 -5,-5s-5,2.24 -5,5 2.24,5 5,5z" />
+        <!-- Head (White) -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M50,37.5 A5.5,5.5 0 1,1 49.99,37.5 Z" />
 
-    <!-- Left side of barbell -->
-    <path
-        android:fillColor="#0072FF"
-        android:pathData="M24,38h15v4H24z" />
-    <path
-        android:fillColor="#0052D4"
-        android:pathData="M20,34h4v12h-4z" />
+        <!-- Torso (White) -->
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="5"
+            android:strokeLineCap="round"
+            android:pathData="M50,49 L50,68" />
 
-    <!-- Right side of barbell -->
-    <path
-        android:fillColor="#0072FF"
-        android:pathData="M69,38h15v4H69z" />
-    <path
-        android:fillColor="#0052D4"
-        android:pathData="M84,34h4v12h-4z" />
+        <!-- Legs (White) -->
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:pathData="M50,68 L41,84" />
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:pathData="M50,68 L59,84" />
 
-    <!-- Shaft connecting barbell and athlete torso -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M39,39h30v2H39z" />
+        <!-- Arms (White) -->
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:pathData="M50,52 L32,32" />
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:pathData="M50,52 L68,32" />
 
-    <!-- Athletic Torso & Core lifting -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,40c-6.63,0 -12,5.37 -12,12v12c0,3.31 2.69,6 6,6h12c3.31,0 6,-2.69 6,-6V52C66,45.37 60.63,40 54,40z" />
+        <!-- Barbell Bar (Electric Blue Accent) -->
+        <path
+            android:strokeColor="#0066FF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:pathData="M18,32 L82,32" />
 
-    <!-- Flexed Arms -->
-    <path
-        android:fillColor="#00E5FF"
-        android:pathData="M38,40c0,0 -4,12 4,14s12,-2 12,-2V48c0,0 -8,-1 -10,-8z" />
-    <path
-        android:fillColor="#00E5FF"
-        android:pathData="M70,40c0,0 4,12 -4,14s-12,-2 -12,-2V48c0,0 8,-1 10,-8z" />
+        <!-- Barbell Weight Plates - Inner (Electric Blue Accent) -->
+        <path
+            android:strokeColor="#0066FF"
+            android:strokeWidth="5.5"
+            android:strokeLineCap="round"
+            android:pathData="M26,20 L26,44" />
+        <path
+            android:strokeColor="#0066FF"
+            android:strokeWidth="5.5"
+            android:strokeLineCap="round"
+            android:pathData="M74,20 L74,44" />
 
-    <!-- Strong Base -->
-    <path
-        android:fillColor="#0072FF"
-        android:pathData="M48,70h12v16H48z" />
+        <!-- Barbell Weight Plates - Outer (Electric Blue Accent) -->
+        <path
+            android:strokeColor="#0066FF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:pathData="M20,24 L20,40" />
+        <path
+            android:strokeColor="#0066FF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:pathData="M80,24 L80,40" />
+    </group>
 </vector>

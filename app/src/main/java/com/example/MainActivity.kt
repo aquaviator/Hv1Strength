@@ -29,6 +29,7 @@ import com.example.data.AuthState
 import com.example.data.StrengthDatabase
 import com.example.data.StrengthRepository
 import com.example.ui.screens.*
+import com.example.ui.theme.HumanV1Theme
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.StrengthViewModel
 import com.example.ui.viewmodel.StrengthViewModelFactory
@@ -115,7 +116,7 @@ class MainActivity : ComponentActivity() {
               "dark" -> true
               else -> androidx.compose.foundation.isSystemInDarkTheme()
           }
-          MyApplicationTheme(darkTheme = isDark) {
+          HumanV1Theme(darkTheme = isDark) {
             MainAppScreen(viewModel)
           }
         }

@@ -141,7 +141,7 @@ fun ExerciseScreen(
                             modifier = Modifier.size(64.dp)
                         )
                         Text(
-                            "No Exercises Found",
+                            "No matching exercises.",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )

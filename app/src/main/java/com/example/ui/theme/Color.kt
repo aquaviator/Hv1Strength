@@ -3,46 +3,54 @@ package com.example.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // ============================================================================
-// Human Platform Design System - Color Tokens
+// Human V1 Platform Brand Design System - Color Tokens
 // ============================================================================
 
-// Brand Colors
-val HumanElectricBlue = Color(0xFF0066FF)       // Primary Accent (Vibrant, athletic, focused)
-val HumanElectricBlueLight = Color(0xFFE0EBFF)  // Light background variant for active states
-val HumanElectricBlueDark = Color(0xFF003399)   // Dark accent variant
+// Brand Core Accent
+val HumanElectricBlue = Color(0xFF0066FF)          // Electric royal blue from SVG master & banner
+val HumanElectricBluePressed = Color(0xFF0052D4)   // Pressed / Active state
+val HumanElectricBlueMuted = Color(0xFF003399)     // Secondary subtle state
+val HumanElectricBlueContainer = Color(0xFF1A3B70) // Dark container accent background
 
-// Dark Theme Palette - Deep Graphite & Slate
-val HumanDarkBackground = Color(0xFF000000)      // Sleek deepest Pure Black
-val HumanDarkSurface = Color(0xFF121212)         // Elevated container card background (Very Dark Grey)
-val HumanDarkSurfaceVariant = Color(0xFF1C1C1E)  // Interactive elements, lighter container
-val HumanDarkOnBackground = Color(0xFFFFFFFF)    // Pure White text
-val HumanDarkOnSurface = Color(0xFFFFFFFF)       // Card text
-val HumanDarkOnSurfaceVariant = Color(0xFF8E8E93) // Soft grey secondary text
-val HumanDarkOutline = Color(0xFF2C2C2E)         // Elegant subtle borders with low opacity
+// Dark Theme Palette - Deep Charcoal & Graphite Canvas
+val HumanDarkBackground = Color(0xFF0A0D10)         // Near-black graphite canvas (from SVG master #0A0D10)
+val HumanDarkSurface = Color(0xFF121519)            // Elevated card surface container
+val HumanDarkSurfaceElevated = Color(0xFF1C2026)    // Lighter interactive container
+val HumanDarkOnBackground = Color(0xFFF4F5F7)       // Primary crisp text
+val HumanDarkOnSurface = Color(0xFFF4F5F7)          // Surface card text
+val HumanDarkOnSurfaceVariant = Color(0xFF8E95A0)   // Muted slate gray secondary text
+val HumanDarkOutline = Color(0xFF262A30)            // Subtle graphite border outline
 
-// Light Theme Palette - Minimal Pure White & Light Slate
-val HumanLightBackground = Color(0xFFF6F8FA)     // Clean, modern off-white
-val HumanLightSurface = Color(0xFFFFFFFF)        // Card background
-val HumanLightSurfaceVariant = Color(0xFFEFF1F4)  // Segmented control or textfield surface
-val HumanLightOnBackground = Color(0xFF12161A)   // Deep graphite text
-val HumanLightOnSurface = Color(0xFF12161A)      // Card text
-val HumanLightOnSurfaceVariant = Color(0xFF5E6B7A) // Muted slate gray text
-val HumanLightOutline = Color(0xFFE1E5EA)        // Soft gray border
+// Light Theme Palette - Minimal Cool Neutral Canvas
+val HumanLightBackground = Color(0xFFF4F6F8)        // Off-white neutral background
+val HumanLightSurface = Color(0xFFFFFFFF)           // Pure white card background
+val HumanLightSurfaceElevated = Color(0xFFEAEFF5)   // Segmented control / textfield surface
+val HumanLightOnBackground = Color(0xFF0F141A)      // Deep graphite text
+val HumanLightOnSurface = Color(0xFF0F141A)         // Card text
+val HumanLightOnSurfaceVariant = Color(0xFF5A6573)  // Muted slate gray text
+val HumanLightOutline = Color(0xFFD5DDE5)           // Soft gray border outline
 
-// System States
-val AlertRed = Color(0xFFEF4444)
+// System Semantic States
+val HumanSuccess = Color(0xFF10B981)               // Controlled emerald green
+val HumanSuccessDim = Color(0xFF064E3B)
+val HumanWarning = Color(0xFFF59E0B)               // Amber caution
+val HumanError = Color(0xFFEF4444)                 // Accessible red
+val HumanErrorContainer = Color(0xFF450A0A)
+
+// Backward compatibility / legacy alias tokens
+val AlertRed = HumanError
 val AlertRedDim = Color(0xFF7F1D1D)
-val SuccessGreen = Color(0xFF10B981)
-val SuccessGreenDim = Color(0xFF064E3B)
+val SuccessGreen = HumanSuccess
+val SuccessGreenDim = HumanSuccessDim
+val KineticAccent = Color(0xFF00E5FF)               // Legacy cyan token (preserved)
+val HumanPrimaryAccent = HumanElectricBlue
+val HumanDarkSurfaceVariant = HumanDarkSurfaceElevated
+val HumanElectricBlueDark = HumanElectricBlueMuted
+val HumanElectricBlueLight = Color(0xFFE0EBFF)
+val SlateBackground = HumanDarkBackground
+val SlateElevatedSurface = HumanDarkSurfaceElevated
+val SlateBorderColor = HumanDarkOutline
+val SlateMutedText = HumanDarkOnSurfaceVariant
+val SlateSuccess = HumanSuccess
 
-// ============================================================================
-// KINETIK SLATE DESIGN TOKENS (Unified Theme Tokens)
-// ============================================================================
-val KineticAccent = Color(0xFF00E5FF)       // Cyan for supersets/circuits
-val HumanPrimaryAccent = Color(0xFF0066FF)  // Vibrant athletic blue
-val SlateBackground = Color(0xFF0A0A0B)     // Deep near-black background
-val SlateElevatedSurface = Color(0xFF141416)// Elevated surface container
-val SlateBorderColor = Color(0xFF2C2D31)    // Subtle outline
-val SlateMutedText = Color(0xFF8E8E93)      // Grey labels
-val SlateSuccess = Color(0xFF10B981)        // Emerald green
 
