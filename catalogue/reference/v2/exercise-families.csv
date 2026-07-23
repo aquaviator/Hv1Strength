@@ -1,0 +1,14 @@
+value,slug,status,description,notes,sort_order
+Chest and Horizontal Pressing,chest_and_horizontal_pressing,Active,Chest-dominant and horizontal pressing workstream,,10
+Back and Pulling,back_and_pulling,Active,Back-dominant horizontal and vertical pulling workstream,,20
+Shoulders,shoulders,Active,Shoulder-dominant pressing raising and accessory workstream,,30
+Arms and Grip,arms_and_grip,Active,Elbow wrist forearm and grip workstream,,40
+Squat and Knee-Dominant Legs,squat_and_knee_dominant_legs,Active,Squat lunge and knee-extension dominant workstream,,50
+Hinge and Posterior Chain,hinge_and_posterior_chain,Active,Hip-hinge and posterior-chain workstream,,60
+"Glutes, Adductors and Abductors",glutes_adductors_and_abductors,Active,Hip extension abduction and adduction workstream,,70
+Calves,calves,Active,Plantarflexion and calf-focused workstream,,80
+Core and Carries,core_and_carries,Active,Trunk training and loaded-carry workstream,,90
+Olympic Weightlifting,olympic_weightlifting,Active,Olympic lifts and closely related derivatives,,100
+Strongman,strongman,Active,Strongman events and specialist implements,,110
+Conditioning,conditioning,Active,Cyclical and work-capacity conditioning workstream,,120
+Strength-Relevant Mobility,strength_relevant_mobility,Active,Mobility work relevant to strength preparation and access,,130

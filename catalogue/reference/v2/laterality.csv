@@ -1,0 +1,6 @@
+value,slug,status,description,notes,sort_order
+Bilateral,bilateral,Active,Both sides act together in substantially equivalent roles,,10
+Unilateral,unilateral,Active,One side performs the principal action at a time,,20
+Alternating,alternating,Active,Sides alternate repetitions or phases,,30
+Asymmetrical,asymmetrical,Caution,Both sides act simultaneously in materially different roles,Requires review notes describing the asymmetry,40
+Not Applicable,not_applicable,Caution,Laterality has no meaningful application,Do not use as a substitute for uncertainty,50

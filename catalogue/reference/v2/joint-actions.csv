@@ -1,0 +1,38 @@
+value,slug,status,description,notes,sort_order
+Shoulder Flexion,shoulder_flexion,Active,Movement of the upper arm forward or overhead,,10
+Shoulder Extension,shoulder_extension,Active,Movement of the upper arm rearward,,20
+Shoulder Abduction,shoulder_abduction,Active,Movement of the upper arm away from the torso in the frontal plane,,30
+Shoulder Adduction,shoulder_adduction,Active,Movement of the upper arm toward the torso in the frontal plane,,40
+Shoulder Internal Rotation,shoulder_internal_rotation,Active,Internal rotation of the humerus at the shoulder,,50
+Shoulder External Rotation,shoulder_external_rotation,Active,External rotation of the humerus at the shoulder,,60
+Horizontal Abduction,horizontal_abduction,Active,Movement of the upper arm away from the midline in the transverse plane,,70
+Horizontal Adduction,horizontal_adduction,Active,Movement of the upper arm toward the midline in the transverse plane,,80
+Scapular Protraction,scapular_protraction,Active,Movement of the scapula away from the spine,,90
+Scapular Retraction,scapular_retraction,Active,Movement of the scapula toward the spine,,100
+Scapular Elevation,scapular_elevation,Active,Upward translation of the scapula,,110
+Scapular Depression,scapular_depression,Active,Downward translation of the scapula,,120
+Scapular Upward Rotation,scapular_upward_rotation,Active,Rotation supporting upward arm elevation,,130
+Scapular Downward Rotation,scapular_downward_rotation,Active,Rotation returning the scapula from upward rotation,,140
+Elbow Flexion,elbow_flexion,Active,Reduction of the angle at the elbow,,150
+Elbow Extension,elbow_extension,Active,Increase of the angle at the elbow,,160
+Forearm Pronation,forearm_pronation,Active,Rotation of the forearm toward palm-down orientation,,170
+Forearm Supination,forearm_supination,Active,Rotation of the forearm toward palm-up orientation,,180
+Wrist Flexion,wrist_flexion,Active,Flexion at the wrist,,190
+Wrist Extension,wrist_extension,Active,Extension at the wrist,,200
+Wrist Radial Deviation,wrist_radial_deviation,Active,Movement of the wrist toward the thumb side,,210
+Wrist Ulnar Deviation,wrist_ulnar_deviation,Active,Movement of the wrist toward the little-finger side,,220
+Hip Flexion,hip_flexion,Active,Reduction of the angle between torso and thigh,,230
+Hip Extension,hip_extension,Active,Increase of the angle between torso and thigh,,240
+Hip Abduction,hip_abduction,Active,Movement of the thigh away from the midline,,250
+Hip Adduction,hip_adduction,Active,Movement of the thigh toward the midline,,260
+Hip Internal Rotation,hip_internal_rotation,Active,Internal rotation of the femur at the hip,,270
+Hip External Rotation,hip_external_rotation,Active,External rotation of the femur at the hip,,280
+Knee Flexion,knee_flexion,Active,Reduction of the angle at the knee,,290
+Knee Extension,knee_extension,Active,Increase of the angle at the knee,,300
+Plantarflexion,plantarflexion,Active,Movement of the foot away from the shin,,310
+Dorsiflexion,dorsiflexion,Active,Movement of the foot toward the shin,,320
+Trunk Flexion,trunk_flexion,Active,Forward flexion of the trunk,,330
+Trunk Extension,trunk_extension,Active,Extension of the trunk,,340
+Trunk Lateral Flexion,trunk_lateral_flexion,Active,Lateral bending of the trunk,Must not be used for shoulder abduction,350
+Trunk Rotation,trunk_rotation,Active,Rotation of the trunk,,360
+Spinal Stabilisation,spinal_stabilisation,Active,Maintaining spinal position against external demand,Use when stabilisation is a material exercise action rather than a generic cue,370

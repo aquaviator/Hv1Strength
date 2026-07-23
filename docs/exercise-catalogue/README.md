@@ -24,11 +24,12 @@ This repository workspace supports the deterministic design, review, and audit o
 From the Android repository root:
 
 ```text
-python tools/catalogue/validate_catalogue.py
-python -m unittest discover -s tests -p "test_validate_catalogue.py" -v
+python tools/catalogue/validate_catalogue.py --schema-version 1
+python tools/catalogue/validate_catalogue.py --schema-version 2
+python -m unittest discover -s tests -p "test_validate_catalogue*.py" -v
 ```
 
-The validator reads the default manifest and reference directory and writes `catalogue/catalogue-audit.md`. A non-zero exit code means one or more errors were found. Warnings require review but do not by themselves fail validation.
+Schema selection is explicit: v1 reads the frozen demonstration manifest and original references, while v2 reads the empty v2 authority and versioned references. The validator writes `catalogue/catalogue-audit.md` unless `--report` selects another destination. A non-zero exit code means one or more errors were found. Warnings require review but do not by themselves fail validation.
 
 ## Authoring conventions
 

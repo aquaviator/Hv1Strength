@@ -1,0 +1,8 @@
+value,slug,status,description,notes,sort_order
+No Equipment,no_equipment,Active,Can be performed without meaningful equipment,,10
+Home Gym,home_gym,Active,Uses equipment commonly available in a basic home gym,,20
+Commercial Gym,commercial_gym,Active,Uses equipment commonly available in a commercial gym,,30
+Strength Gym,strength_gym,Active,Uses specialist strength-training equipment or space,,40
+Olympic Facility,olympic_facility,Active,Requires Olympic lifting equipment or an appropriate facility,,50
+Strongman Facility,strongman_facility,Active,Requires strongman implements or an appropriate facility,,60
+Clinic,clinic,Active,Requires or is primarily associated with a clinical environment,Does not imply clinical approval,70

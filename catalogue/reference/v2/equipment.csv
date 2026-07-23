@@ -1,0 +1,33 @@
+value,slug,status,description,notes,sort_order
+None,none,Active,No meaningful equipment or external load,Cannot be combined with another equipment value,10
+Bodyweight,bodyweight,Active,The participant body provides the principal resistance,,20
+Barbell,barbell,Active,Straight free-weight bar loaded directly or with plates,,30
+Dumbbell,dumbbell,Active,Hand-held free weight for unilateral or bilateral loading,,40
+Kettlebell,kettlebell,Active,Hand-held offset free weight with an integral handle,,50
+Cable Machine,cable_machine,Active,Pulley-based machine providing cable resistance,,60
+Selectorized Machine,selectorized_machine,Active,Machine loaded through an integrated selectable weight stack,,70
+Plate Loaded Machine,plate_loaded_machine,Active,Machine loaded directly with weight plates,,80
+Pull-Up Bar,pull_up_bar,Active,Fixed overhead bar used for hanging and pulling,,90
+Bench,bench,Active,Stable exercise bench used as principal support,,100
+Resistance Band,resistance_band,Active,Elastic band or tube providing progressive resistance,,110
+Medicine Ball,medicine_ball,Active,Weighted ball intended for controlled or ballistic exercise,,120
+Sled,sled,Active,Loadable platform pushed or pulled across a surface,,130
+Farmer Handles,farmer_handles,Active,Paired loadable handles designed for carries,,140
+Trap Bar,trap_bar,Active,Hexagonal or open-frame bar enclosing the lifter,,150
+Landmine,landmine,Active,Anchored barbell sleeve allowing arcing movement,Barbell must also be declared when a barbell is used,160
+Rowing Ergometer,rowing_ergometer,Active,Stationary flywheel rowing device,,170
+Stationary Bike,stationary_bike,Active,Stationary cycle ergometer,,180
+Ski Ergometer,ski_ergometer,Active,Stationary double-pole ski ergometer,,190
+Olympic Lifting Platform,olympic_lifting_platform,Active,Stable platform intended for Olympic lifts and dropped loads,,200
+Strongman Log,strongman_log,Active,Large neutral-grip implement used for strongman pressing,,210
+Safety Squat Bar,safety_squat_bar,Active,Cambered speciality bar with shoulder pads and forward handles,,220
+Smith Machine,smith_machine,Active,Guided barbell machine constrained to a fixed or near-fixed path,,230
+Leg Press Machine,leg_press_machine,Active,Machine designed for loaded leg pressing,,240
+Hack Squat Machine,hack_squat_machine,Active,Guided machine designed for hack-squat mechanics,,250
+Pec Deck Machine,pec_deck_machine,Active,Machine designed for chest fly or reverse-fly mechanics,,260
+Dip Bars,dip_bars,Active,Parallel supports used for dips and supported bodyweight work,,270
+Suspension Trainer,suspension_trainer,Active,Adjustable suspended straps used for bodyweight resistance,,280
+Stability Ball,stability_ball,Active,Inflatable ball used as support or instability implement,,290
+Exercise Mat,exercise_mat,Active,Floor mat used as a meaningful exercise support,,300
+Box or Step,box_or_step,Active,Rigid raised platform used for stepping support or range control,,310
+Weight Plate,weight_plate,Active,Removable plate used directly as an exercise implement,,320

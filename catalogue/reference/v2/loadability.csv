@@ -1,0 +1,6 @@
+value,slug,status,description,notes,sort_order
+Very Low,very_low,Active,Exercise has very limited practical external loading potential,,10
+Low,low,Active,Exercise supports limited external loading,,20
+Moderate,moderate,Active,Exercise supports moderate progressive loading,,30
+High,high,Active,Exercise supports substantial progressive loading,,40
+Very High,very_high,Active,Exercise is commonly suited to very high absolute loading,,50

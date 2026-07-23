@@ -1,0 +1,6 @@
+value,slug,status,description,notes,sort_order
+Clinical Review Required,clinical_review_required,Caution,Record contains a potential contraindication requiring qualified review,Flag is not a diagnosis or universal contraindication,10
+Load Tolerance Review,load_tolerance_review,Caution,Loading tolerance requires individual assessment,Requires source provenance when accompanied by a claim,20
+Range of Motion Review,range_of_motion_review,Caution,Range of motion requires individual assessment,Requires source provenance when accompanied by a claim,30
+Balance or Fall Risk Review,balance_or_fall_risk_review,Caution,Balance demand may require individual assessment,Requires qualified review for vulnerable populations,40
+No Catalogue Flag,no_catalogue_flag,Caution,No catalogue-level contraindication flag is recorded,Does not mean universally safe or clinically approved,50

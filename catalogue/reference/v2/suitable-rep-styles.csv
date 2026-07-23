@@ -1,0 +1,8 @@
+value,slug,status,description,notes,sort_order
+Low Repetition,low_repetition,Active,Typically suitable for low repetition loading,,10
+Moderate Repetition,moderate_repetition,Active,Typically suitable for moderate repetition loading,,20
+High Repetition,high_repetition,Active,Typically suitable for high repetition loading,,30
+Timed,timed,Active,Typically measured or prescribed by duration,,40
+Distance,distance,Active,Typically measured or prescribed by distance,,50
+Isometric Hold,isometric_hold,Active,Typically prescribed as a held position or contraction,,60
+Skill Practice,skill_practice,Active,Typically prescribed by quality-focused technical repetitions,,70

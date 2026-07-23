@@ -1,0 +1,7 @@
+value,slug,status,description,notes,sort_order
+Search Expansion,search_expansion,Active,Record may support reviewed search expansion,Does not authorise unreviewed aliases,10
+Exercise Comparison,exercise_comparison,Active,Record may support structured exercise comparison,,20
+Substitution Suggestions,substitution_suggestions,Caution,Record may support reviewed substitution suggestions,Does not prove interchangeability or safety,30
+Programme Assistance,programme_assistance,Caution,Record may support human-supervised programme assistance,Not autonomous programming authority,40
+Coaching Assistance,coaching_assistance,Caution,Record may support human-supervised coaching assistance,Requires reviewed coaching content,50
+Analytics Classification,analytics_classification,Active,Record may support aggregate taxonomy classification,,60

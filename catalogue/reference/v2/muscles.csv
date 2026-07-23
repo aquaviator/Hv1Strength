@@ -1,0 +1,37 @@
+value,slug,status,description,notes,sort_order
+Pectoralis Major,pectoralis_major,Active,Primary superficial chest muscle,,10
+Pectoralis Minor,pectoralis_minor,Active,Deep chest muscle acting on the scapula,,20
+Deltoid — Anterior,deltoid_anterior,Active,Anterior portion of the deltoid,,30
+Deltoid — Lateral,deltoid_lateral,Active,Lateral portion of the deltoid,,40
+Deltoid — Posterior,deltoid_posterior,Active,Posterior portion of the deltoid,,50
+Serratus Anterior,serratus_anterior,Active,Scapular protraction and upward-rotation muscle,,60
+Rotator Cuff,rotator_cuff,Active,Functional group stabilising and rotating the shoulder,,70
+Latissimus Dorsi,latissimus_dorsi,Active,Large back muscle acting on the shoulder,,80
+Trapezius — Upper,trapezius_upper,Active,Upper portion of the trapezius,,90
+Trapezius — Middle,trapezius_middle,Active,Middle portion of the trapezius,,100
+Trapezius — Lower,trapezius_lower,Active,Lower portion of the trapezius,,110
+Rhomboids,rhomboids,Active,Scapular retractors between the spine and scapula,,120
+Teres Major,teres_major,Active,Shoulder adductor and extensor of the posterior shoulder,,130
+Spinal Erectors,spinal_erectors,Active,Muscle group extending and stabilising the spine,,140
+Multifidus,multifidus,Active,Deep spinal stabilising muscle group,,150
+Biceps Brachii,biceps_brachii,Active,Two-headed elbow flexor and forearm supinator,,160
+Brachialis,brachialis,Active,Primary elbow flexor beneath the biceps,,170
+Brachioradialis,brachioradialis,Active,Elbow flexor prominent in neutral grip,,180
+Triceps Brachii,triceps_brachii,Active,Primary elbow extensor,,190
+Forearm Flexors,forearm_flexors,Active,Functional group flexing wrist and fingers,,200
+Forearm Extensors,forearm_extensors,Active,Functional group extending wrist and fingers,,210
+Rectus Abdominis,rectus_abdominis,Active,Anterior trunk flexor,,220
+External Obliques,external_obliques,Active,Superficial trunk rotation and lateral-flexion muscles,,230
+Internal Obliques,internal_obliques,Active,Deep trunk rotation and lateral-flexion muscles,,240
+Transverse Abdominis,transverse_abdominis,Active,Deep abdominal wall stabiliser,,250
+Quadratus Lumborum,quadratus_lumborum,Active,Posterior abdominal wall muscle supporting lateral stability,,260
+Gluteus Maximus,gluteus_maximus,Active,Primary hip extensor,,270
+Gluteus Medius,gluteus_medius,Active,Hip abductor and pelvic stabiliser,,280
+Gluteus Minimus,gluteus_minimus,Active,Hip abductor and stabiliser,,290
+Hip Flexors,hip_flexors,Active,Functional group producing hip flexion,,300
+Hip Adductors,hip_adductors,Active,Functional group producing hip adduction,,310
+Quadriceps,quadriceps,Active,Functional group producing knee extension,,320
+Hamstrings,hamstrings,Active,Functional group producing knee flexion and hip extension,,330
+Gastrocnemius,gastrocnemius,Active,Superficial calf muscle crossing knee and ankle,,340
+Soleus,soleus,Active,Deep plantarflexor of the ankle,,350
+Tibialis Anterior,tibialis_anterior,Active,Primary dorsiflexor of the ankle,,360

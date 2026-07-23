@@ -1,0 +1,8 @@
+value,slug,status,description,notes,sort_order
+Flat,flat,Active,Bench is substantially horizontal,,10
+Low Incline,low_incline,Active,Bench is set to a shallow incline,,20
+Incline,incline,Active,Bench is set to a material incline below upright,,30
+Upright,upright,Active,Bench back is substantially upright,,40
+Decline,decline,Active,Bench supports the torso below horizontal toward the head,,50
+Adjustable,adjustable,Caution,Bench angle intentionally changes or is not fixed,Use only when variable angle is intrinsic to the canonical exercise,60
+Not Applicable,not_applicable,Caution,No bench angle applies,Required when Bench is not used,70

@@ -1,0 +1,9 @@
+value,slug,status,description,notes,sort_order
+Pronated,pronated,Active,Palms are oriented generally away from the participant or downward,,10
+Supinated,supinated,Active,Palms are oriented generally toward the participant or upward,,20
+Neutral,neutral,Active,Palms face each other or remain in a neutral orientation,,30
+Mixed,mixed,Caution,Hands use different grip orientations,Requires laterality or setup review,40
+Hook,hook,Active,Thumb is trapped beneath fingers around the implement,,50
+False,false,Active,Thumb remains on the same side of the implement as the fingers,,60
+Open,open,Active,Hand supports or contacts without a closed wraparound grip,,70
+Not Applicable,not_applicable,Caution,No meaningful load-bearing grip applies,Do not use when gripped equipment bears load,80

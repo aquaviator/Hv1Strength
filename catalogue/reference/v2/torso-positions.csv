@@ -1,0 +1,15 @@
+value,slug,status,description,notes,sort_order
+Standing Upright,standing_upright,Active,Torso remains substantially upright while standing,,10
+Standing Hinged,standing_hinged,Active,Torso is intentionally inclined through a hip hinge while standing,,20
+Seated Upright,seated_upright,Active,Torso remains substantially upright while seated,,30
+Seated Reclined,seated_reclined,Active,Torso is supported or held in a reclined seated position,,40
+Supine,supine,Active,Lying face upward,,50
+Prone,prone,Active,Lying face downward,,60
+Side-Lying,side_lying,Active,Lying on one side,,70
+Kneeling,kneeling,Active,Supported on both knees,,80
+Half-Kneeling,half_kneeling,Active,Supported on one knee with the opposite foot planted,,90
+Quadruped,quadruped,Active,Supported on hands and knees,,100
+Hanging,hanging,Active,Suspended from an overhead support,,110
+Inverted,inverted,Active,Torso is materially inverted,,120
+Dynamic,dynamic,Caution,Torso position changes materially throughout the exercise,Use only when no stable primary position adequately describes the exercise,130
+Not Applicable,not_applicable,Caution,Torso position is genuinely inapplicable,Do not use as a substitute for uncertainty,140

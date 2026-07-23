@@ -1,0 +1,5 @@
+value,slug,status,description,notes,sort_order
+Beginner,beginner,Active,Generally accessible to a novice with basic instruction,,10
+Intermediate,intermediate,Active,Usually benefits from established movement and loading experience,,20
+Advanced,advanced,Active,Requires substantial readiness technique or physical capacity,,30
+Expert,expert,Active,Requires specialist coaching or exceptional readiness,,40

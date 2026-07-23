@@ -1,0 +1,10 @@
+value,slug,status,description,notes,sort_order
+Maximal Strength,maximal_strength,Active,Developing maximal force production,,10
+Hypertrophy,hypertrophy,Active,Developing muscular size,,20
+Muscular Endurance,muscular_endurance,Active,Sustaining repeated muscular effort,,30
+Power,power,Active,Developing rapid force production,,40
+Work Capacity,work_capacity,Active,Developing tolerance for repeated work,,50
+Movement Skill,movement_skill,Active,Developing technical movement proficiency,,60
+Stability,stability,Active,Developing control against perturbation or unwanted movement,,70
+Mobility,mobility,Active,Developing accessible and controllable range of motion,,80
+Rehabilitation,rehabilitation,Active,Supporting a reviewed rehabilitation objective,Requires appropriate clinical governance,90

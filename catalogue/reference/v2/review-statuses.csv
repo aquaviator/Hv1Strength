@@ -1,0 +1,8 @@
+value,slug,status,description,notes,sort_order
+Draft,draft,Active,Unreviewed or incomplete proposal,,10
+Architecture Reviewed,architecture_reviewed,Active,Identity taxonomy equipment aliases and duplication reviewed,,20
+Coaching Reviewed,coaching_reviewed,Active,Mechanics programming and coaching content reviewed,,30
+Clinical Review Required,clinical_review_required,Active,Record requires qualified clinical review before approval,,40
+Approved,approved,Active,Required reviews completed and record accepted for later mapping,,50
+Rejected,rejected,Active,Record does not meet catalogue requirements,,60
+Merged as Duplicate,merged_as_duplicate,Active,Record is retained historically but consolidated into another record,,70

@@ -1,0 +1,7 @@
+{
+  "schema_version": "2.0",
+  "reference_file_columns": ["value", "slug", "status", "description", "notes", "sort_order"],
+  "reference_statuses": ["Active", "Caution", "Deprecated", "Retired"],
+  "multi_value_separator": "|",
+  "slug_pattern": "^[a-z0-9]+(?:_[a-z0-9]+)*$"
+}

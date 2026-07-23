@@ -1,0 +1,6 @@
+value,slug,status,description,notes,sort_order
+Not Started,not_started,Active,Coaching review has not begun,,10
+Not Required,not_required,Caution,No coaching review is required,Use only when no coaching text or mechanics claim is present,20
+Required,required,Active,Coaching review is required,,30
+In Review,in_review,Active,Qualified coaching review is underway,,40
+Completed,completed,Active,Qualified coaching review is complete,,50

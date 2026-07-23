@@ -1,0 +1,6 @@
+value,slug,status,description,notes,sort_order
+Base,base,Active,Conceptual base exercise or canonical anchor,,10
+Meaningful Variation,meaningful_variation,Active,Variation with a material mechanical or programming distinction,,20
+Equipment Variation,equipment_variation,Active,Variation whose equipment materially changes execution or expectation,,30
+Progression,progression,Active,Variation primarily used as a progression from another record,Requires directed relationship review,40
+Regression,regression,Active,Variation primarily used as a regression from another record,Requires directed relationship review,50

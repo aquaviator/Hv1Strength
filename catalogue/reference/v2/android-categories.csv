@@ -1,0 +1,7 @@
+value,slug,status,description,notes,sort_order
+Chest,chest,Active,Temporary Android compatibility category for chest exercises,Compatibility metadata only,10
+Back,back,Active,Temporary Android compatibility category for back exercises,Compatibility metadata only,20
+Legs,legs,Active,Temporary Android compatibility category for leg exercises,Compatibility metadata only,30
+Shoulders,shoulders,Active,Temporary Android compatibility category for shoulder exercises,Compatibility metadata only,40
+Arms,arms,Active,Temporary Android compatibility category for arm exercises,Compatibility metadata only,50
+Abs,abs,Active,Temporary Android compatibility category for trunk exercises,Compatibility metadata only,60

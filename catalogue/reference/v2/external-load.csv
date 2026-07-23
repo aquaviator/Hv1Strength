@@ -1,0 +1,7 @@
+value,slug,status,description,notes,sort_order
+None,none,Active,Exercise uses no meaningful bodyweight or external resistance,,10
+Bodyweight Only,bodyweight_only,Active,Exercise resistance is primarily body mass,,20
+Optional External Load,optional_external_load,Active,Exercise may be performed with or without added load,,30
+External Load Required,external_load_required,Active,Exercise identity requires an external implement or free weight,,40
+Machine Resistance,machine_resistance,Active,Resistance is supplied by a machine,,50
+Elastic Resistance,elastic_resistance,Active,Resistance is supplied by elastic equipment,,60

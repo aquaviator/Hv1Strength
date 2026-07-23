@@ -1,0 +1,16 @@
+value,slug,status,description,notes,sort_order
+Horizontal Push,horizontal_push,Active,Pressing primarily away from the torso in the transverse plane,,10
+Horizontal Pull,horizontal_pull,Active,Pulling primarily toward the torso in the transverse plane,,20
+Vertical Push,vertical_push,Active,Pressing primarily overhead or upward,,30
+Vertical Pull,vertical_pull,Active,Pulling primarily downward or toward the body from overhead,,40
+Squat,squat,Active,Knee and hip dominant lowering and rising pattern,,50
+Hinge,hinge,Active,Hip dominant flexion and extension with limited knee travel,,60
+Lunge,lunge,Active,Split stance or stepping knee and hip dominant pattern,,70
+Carry,carry,Active,Transporting load while maintaining posture,,80
+Rotation,rotation,Active,Producing meaningful trunk or body rotation,,90
+Anti-Rotation,anti_rotation,Active,Resisting external rotational demand,,100
+Locomotion,locomotion,Active,Moving the body through space by stepping crawling or similar action,,110
+Olympic Lift,olympic_lift,Active,Olympic weightlifting or derivative explosive pattern,,120
+Loaded Event,loaded_event,Active,Nonstandard loaded event not represented by another primary pattern,,130
+Cyclical Conditioning,cyclical_conditioning,Active,Repeated cyclical locomotor conditioning pattern,,140
+Mobility,mobility,Active,Movement intended primarily to access or prepare range of motion,,150

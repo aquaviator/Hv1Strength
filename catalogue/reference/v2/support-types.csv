@@ -1,0 +1,12 @@
+value,slug,status,description,notes,sort_order
+Unsupported,unsupported,Active,No external structure materially supports the body,,10
+Floor Supported,floor_supported,Active,The floor materially supports the body,,20
+Bench Supported,bench_supported,Active,A bench materially supports part of the body,Requires Bench equipment,30
+Chest Supported,chest_supported,Active,The chest is materially supported by equipment,,40
+Back Supported,back_supported,Active,The back is materially supported by equipment,,50
+Hand Supported,hand_supported,Active,One or both hands provide meaningful support,,60
+Knee Supported,knee_supported,Active,One or both knees provide meaningful support,,70
+Machine Supported,machine_supported,Active,A machine materially guides or supports body position,,80
+Suspension Supported,suspension_supported,Active,Suspension equipment materially supports body position,,90
+Hanging,hanging,Active,The body is suspended from an overhead support,,100
+Not Applicable,not_applicable,Caution,Support classification is genuinely inapplicable,Do not use as a substitute for uncertainty,110

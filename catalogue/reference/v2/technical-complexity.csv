@@ -1,0 +1,5 @@
+value,slug,status,description,notes,sort_order
+Low,low,Active,Low coordination and coaching demand,,10
+Moderate,moderate,Active,Moderate coordination or setup demand,,20
+High,high,Active,High technical and coaching demand,,30
+Very High,very_high,Active,Specialist technical execution and coaching demand,,40

@@ -1,0 +1,4 @@
+value,slug,status,description,notes,sort_order
+Compound,compound,Active,Exercise materially involves multiple joint actions,,10
+Isolation,isolation,Active,Exercise is intended to emphasise one principal joint action,,20
+Hybrid,hybrid,Caution,Exercise does not fit a clear compound or isolation classification,Requires explicit review justification and must not be a default,30

@@ -1,0 +1,8 @@
+value,slug,status,description,notes,sort_order
+Identity Review Required,identity_review_required,Active,Identity or canonical naming requires human review,,10
+Anatomy Review Required,anatomy_review_required,Active,Joint-action or muscle metadata requires human review,,20
+Coaching Review Required,coaching_review_required,Active,Coaching content requires qualified review,,30
+Clinical Review Required,clinical_review_required,Active,Clinical content requires qualified review,,40
+Duplicate Review Required,duplicate_review_required,Active,Potential duplicate requires human resolution,,50
+Alias Review Required,alias_review_required,Active,Alias ownership or collision requires review,,60
+Source Verification Required,source_verification_required,Active,Source provenance requires verification,,70

@@ -1,0 +1,17 @@
+value,slug,status,description,notes,sort_order
+Unloaded,unloaded,Active,No meaningful external or bodyweight loading position,,10
+Bodyweight,bodyweight,Active,Resistance is primarily the participant body mass,,20
+Front Rack,front_rack,Active,Load is supported at the front of the shoulders,,30
+Back Rack,back_rack,Active,Load is supported across the upper back,,40
+Overhead,overhead,Active,Load is held overhead,,50
+At Sides,at_sides,Active,Load is held beside the body,,60
+Goblet,goblet,Active,Load is held close to the chest with both hands,,70
+Zercher,zercher,Active,Load is supported in the crooks of the elbows,,80
+Shoulder Loaded,shoulder_loaded,Active,Load is supported on one or both shoulders outside a rack position,,90
+Chest Loaded,chest_loaded,Active,Load is held or applied at the chest,,100
+Hip Loaded,hip_loaded,Active,Load is applied across or around the hips,,110
+Distal Limb,distal_limb,Active,Load is applied near the hand foot wrist or ankle,,120
+Machine Path,machine_path,Active,Load is applied through a guided machine path,,130
+Cable Line,cable_line,Active,Load is applied through a cable line of pull,,140
+Variable,variable,Caution,Loading position changes materially during the exercise,Requires review notes and must not be a default,150
+Not Applicable,not_applicable,Caution,Loading position is genuinely inapplicable,Do not use as a substitute for uncertainty,160

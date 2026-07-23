@@ -1,0 +1,8 @@
+value,slug,status,description,notes,sort_order
+Taxonomy Suggestion,taxonomy_suggestion,Active,AI suggested controlled taxonomy values,,10
+Alias Suggestion,alias_suggestion,Active,AI suggested discovery aliases,,20
+Duplicate Screening,duplicate_screening,Active,AI assisted with duplicate-risk screening,,30
+Coaching Draft,coaching_draft,Active,AI drafted coaching content,Requires human coaching review,40
+Programming Draft,programming_draft,Active,AI drafted programming metadata,,50
+Translation Draft,translation_draft,Active,AI drafted translated terminology,Translation is not authoritative without review,60
+Data Normalisation,data_normalisation,Active,AI assisted with formatting or controlled-value mapping,,70

@@ -1,0 +1,5 @@
+value,slug,status,description,notes,sort_order
+Not Required,not_required,Active,No clinical claim or context requires clinical review,,10
+Required,required,Active,Qualified clinical review is required before approval,,20
+In Review,in_review,Active,Qualified clinical review is underway,,30
+Completed,completed,Active,Qualified clinical review is complete,,40

@@ -1,0 +1,10 @@
+value,slug,status,description,notes,sort_order
+Not Applicable,not_applicable,Caution,No attachment or implement applies,Use only when the field is conditionally required and genuinely inapplicable,10
+Straight Bar Attachment,straight_bar_attachment,Active,Straight cable attachment held with one or both hands,,20
+EZ-Bar Attachment,ez_bar_attachment,Active,Angled cable bar attachment,,30
+Rope Attachment,rope_attachment,Active,Flexible rope cable attachment,,40
+Single Handle,single_handle,Active,Single-hand cable or band handle,,50
+Dual Handles,dual_handles,Active,Paired independent handles,,60
+Ankle Strap,ankle_strap,Active,Strap attaching cable resistance at the ankle,,70
+Lat Pulldown Bar,lat_pulldown_bar,Active,Wide or standard bar intended for pulldowns,,80
+Row Handle,row_handle,Active,Close or neutral-grip handle intended for rows,,90

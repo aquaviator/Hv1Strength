@@ -1,0 +1,11 @@
+value,slug,status,description,notes,sort_order
+Primary Lift,primary_lift,Active,Principal programmed lift receiving primary loading or progression focus,,10
+Secondary Compound,secondary_compound,Active,Compound movement supporting a primary lift or training goal,,20
+Accessory,accessory,Active,Supplementary movement addressing volume balance or a specific quality,,30
+Isolation,isolation,Active,Programming role focused on a narrow muscle or joint action,,40
+Skill,skill,Active,Movement programmed primarily for technical practice,,50
+Power,power,Active,Movement programmed primarily for rapid force production,,60
+Warm-Up,warm_up,Active,Movement used primarily in session preparation,,70
+Rehabilitation,rehabilitation,Active,Movement used in a reviewed rehabilitation context,Requires appropriate clinical governance,80
+Mobility,mobility,Active,Movement programmed primarily for accessible range or preparation,,90
+Conditioning,conditioning,Active,Movement programmed primarily for work capacity,,100

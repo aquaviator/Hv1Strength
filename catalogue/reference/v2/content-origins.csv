@@ -1,0 +1,6 @@
+value,slug,status,description,notes,sort_order
+Human Authored,human_authored,Active,Content was authored by a human,,10
+Human Authored with AI Assistance,human_authored_with_ai_assistance,Active,A human author used AI for declared supporting tasks,AI assistance tasks are required,20
+Imported — Human Reviewed,imported_human_reviewed,Active,Content was imported and subsequently reviewed by a human,,30
+Imported — Review Pending,imported_review_pending,Caution,Imported content is awaiting human review,Cannot be Approved,40
+AI Generated — Review Pending,ai_generated_review_pending,Caution,AI generated content is awaiting human review,Cannot be Approved and requires declared assistance tasks,50
