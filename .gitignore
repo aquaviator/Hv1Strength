@@ -1,4 +1,6 @@
 *.iml
+app/release/
+emulator-startup.log
 .gradle
 .kotlin
 .idea/
