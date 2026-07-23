@@ -33,7 +33,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.example.core.util.UnitConverter
 import com.example.data.Exercise
 import com.example.ui.viewmodel.ActiveSet
 import com.example.ui.viewmodel.ActiveWorkoutState
@@ -51,7 +50,7 @@ object CasualTheme {
     val SecondaryAccent = Color(0xFF4E8D68)     // Muted forest
     val TextPrimary = Color(0xFFF5F2EC)         // Warm off-white
     val TextSecondary = Color(0xFFA8ACA8)       // Stone grey
-    val Divider = Color(0x0FFFFFFF)             // Almost invisible rgba(255,255,255,0.06)
+    val Divider = Color(0x0FFFFFFF)             // Subtle divider rgba(255,255,255,0.06)
     val ErrorRed = Color(0xFFCF6679)
 }
 
@@ -74,7 +73,32 @@ fun CasualWorkoutJournalScreen(
     var showCancelConfirmDialog by remember { mutableStateOf(false) }
     var showFinishWorkoutDialog by remember { mutableStateOf(false) }
 
-    // Session timer loop
+    // Candidate 5.1 Focus Architecture:
+    // Pointers to currently focused exercise in Section 1 (Current Exercise)
+    var focusedExerciseId by remember { mutableStateOf<String?>(null) }
+
+    // Synchronize focused exercise pointer when workout exercises change
+    LaunchedEffect(activeWorkout.exercises) {
+        if (activeWorkout.exercises.isNotEmpty()) {
+            val exists = activeWorkout.exercises.any { it.id == focusedExerciseId }
+            if (!exists || focusedExerciseId == null) {
+                // Default to latest added exercise
+                focusedExerciseId = activeWorkout.exercises.last().id
+            }
+        } else {
+            focusedExerciseId = null
+        }
+    }
+
+    val currentExercise = remember(activeWorkout.exercises, focusedExerciseId) {
+        activeWorkout.exercises.find { it.id == focusedExerciseId } ?: activeWorkout.exercises.lastOrNull()
+    }
+
+    val timelineExercises = remember(activeWorkout.exercises, currentExercise) {
+        activeWorkout.exercises.filter { it.id != currentExercise?.id }
+    }
+
+    // Timer loop
     LaunchedEffect(activeWorkout.startTime) {
         while (true) {
             val totalSeconds = ((System.currentTimeMillis() - activeWorkout.startTime) / 1000).coerceAtLeast(0)
@@ -112,10 +136,6 @@ fun CasualWorkoutJournalScreen(
         activeWorkout.sets.values.sumOf { sets -> sets.count { it.isCompleted } }
     }
 
-    val totalSetsLogged = remember(activeWorkout.sets) {
-        activeWorkout.sets.values.sumOf { it.size }
-    }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -127,7 +147,7 @@ fun CasualWorkoutJournalScreen(
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
-            // Top App Bar & Calm Stats Header
+            // Calm Header Bar
             Surface(
                 color = CasualTheme.Background,
                 tonalElevation = 0.dp
@@ -135,7 +155,7 @@ fun CasualWorkoutJournalScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                        .padding(horizontal = 20.dp, vertical = 10.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -186,7 +206,7 @@ fun CasualWorkoutJournalScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Active",
+                                    text = "Active Session",
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
                                     color = CasualTheme.TextSecondary
                                 )
@@ -196,7 +216,7 @@ fun CasualWorkoutJournalScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Calm Header Stats Banner
+                    // Calm Header Stats Banner (No progress bar, no percentages, no completion indicator)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -228,7 +248,7 @@ fun CasualWorkoutJournalScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 8.dp)
+                            .padding(horizontal = 20.dp, vertical = 6.dp)
                             .testTag("superset_suggestion_banner"),
                         shape = RoundedCornerShape(18.dp),
                         colors = CardDefaults.cardColors(containerColor = CasualTheme.CardSurfaceElevated),
@@ -283,9 +303,9 @@ fun CasualWorkoutJournalScreen(
                 }
             }
 
-            // Journal Body Content
+            // Main Content Area
             if (activeWorkout.exercises.isEmpty()) {
-                // Inviting Minimal Empty State
+                // Empty State
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -324,7 +344,7 @@ fun CasualWorkoutJournalScreen(
 
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = "Ready to train?",
+                                    text = "What are you lifting?",
                                     style = MaterialTheme.typography.titleLarge.copy(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 22.sp
@@ -333,7 +353,7 @@ fun CasualWorkoutJournalScreen(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "Log your first exercise.",
+                                    text = "Add your first exercise to start tracking.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = CasualTheme.TextSecondary,
                                     textAlign = TextAlign.Center
@@ -363,42 +383,115 @@ fun CasualWorkoutJournalScreen(
                     }
                 }
             } else {
-                // Exercise Living Journal Cards List
+                // Focus Mode Layout: Section 1 Current Exercise + Section 2 Workout Timeline
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    itemsIndexed(
-                        items = activeWorkout.exercises,
-                        key = { _, ex -> ex.id }
-                    ) { _, exercise ->
-                        val sets = activeWorkout.sets[exercise.id] ?: emptyList()
-                        CasualExerciseJournalCard(
-                            exercise = exercise,
-                            sets = sets,
-                            isMetric = isMetric,
-                            onAddSet = { viewModel.addSetToExercise(exercise.id) },
-                            onUpdateSet = { setIndex, weight, reps, rpe, completed ->
-                                viewModel.updateSet(exercise.id, setIndex, reps, weight, completed, rpe)
-                            },
-                            onRemoveSet = { setIndex ->
-                                viewModel.removeSetFromExercise(exercise.id, setIndex)
-                            },
-                            onRemoveExercise = {
-                                viewModel.removeExerciseFromActiveWorkout(exercise.id)
+                    // SECTION 1 – CURRENT EXERCISE
+                    item(key = "section_current_exercise") {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = "CURRENT EXERCISE",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.2.sp,
+                                    fontSize = 11.sp
+                                ),
+                                color = CasualTheme.PrimaryAccent,
+                                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                            )
+
+                            // Animated Transition when switching active current exercise
+                            AnimatedContent(
+                                targetState = currentExercise,
+                                transitionSpec = {
+                                    (fadeIn(animationSpec = tween(250)) + expandVertically()) togetherWith
+                                            (fadeOut(animationSpec = tween(200)) + shrinkVertically())
+                                },
+                                label = "CurrentExerciseFocus"
+                            ) { activeEx ->
+                                if (activeEx != null) {
+                                    val sets = activeWorkout.sets[activeEx.id] ?: emptyList()
+                                    CurrentExerciseFocusCard(
+                                        exercise = activeEx,
+                                        sets = sets,
+                                        isMetric = isMetric,
+                                        onAddSet = { viewModel.addSetToExercise(activeEx.id) },
+                                        onUpdateSet = { setIndex, weight, reps, rpe, completed ->
+                                            viewModel.updateSet(activeEx.id, setIndex, reps, weight, completed, rpe)
+                                        },
+                                        onRemoveSet = { setIndex ->
+                                            viewModel.removeSetFromExercise(activeEx.id, setIndex)
+                                        },
+                                        onRemoveExercise = {
+                                            viewModel.removeExerciseFromActiveWorkout(activeEx.id)
+                                        }
+                                    )
+                                }
                             }
-                        )
+                        }
                     }
 
+                    // SECTION 2 – WORKOUT TIMELINE
+                    if (timelineExercises.isNotEmpty()) {
+                        item(key = "section_workout_timeline") {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "WORKOUT TIMELINE",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.2.sp,
+                                            fontSize = 11.sp
+                                        ),
+                                        color = CasualTheme.TextSecondary
+                                    )
+
+                                    Text(
+                                        text = "${timelineExercises.size} logged",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = CasualTheme.TextSecondary.copy(alpha = 0.7f)
+                                    )
+                                }
+
+                                timelineExercises.forEach { exercise ->
+                                    val sets = activeWorkout.sets[exercise.id] ?: emptyList()
+                                    val completedCount = sets.count { it.isCompleted }
+                                    TimelineCompactCard(
+                                        exercise = exercise,
+                                        setsCount = sets.size,
+                                        completedSetsCount = completedCount,
+                                        onSelectExercise = {
+                                            // Tap timeline item to focus it back into Current Exercise
+                                            focusedExerciseId = exercise.id
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // BOTTOM ACTIONS: Add Exercise + Finish Workout
                     item(key = "bottom_actions") {
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Column(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
+                            // Primary Action: Add Exercise
                             Button(
                                 onClick = { showAddExerciseDialog = true },
                                 modifier = Modifier
@@ -419,6 +512,7 @@ fun CasualWorkoutJournalScreen(
                                 )
                             }
 
+                            // Single Finish Workout Action
                             OutlinedButton(
                                 onClick = { showFinishWorkoutDialog = true },
                                 modifier = Modifier
@@ -447,7 +541,7 @@ fun CasualWorkoutJournalScreen(
             }
         }
 
-        // Add Exercise Dialog / Sheet
+        // Add Exercise Dialog
         if (showAddExerciseDialog) {
             Dialog(onDismissRequest = { showAddExerciseDialog = false }) {
                 Card(
@@ -527,6 +621,7 @@ fun CasualWorkoutJournalScreen(
                                         .fillMaxWidth()
                                         .clickable {
                                             viewModel.addExerciseToActiveWorkout(exercise)
+                                            focusedExerciseId = exercise.id
                                             showAddExerciseDialog = false
                                         },
                                     colors = CardDefaults.cardColors(containerColor = CasualTheme.CardSurfaceElevated),
@@ -592,7 +687,7 @@ fun CasualWorkoutJournalScreen(
             )
         }
 
-        // Finish Workout Sheet / Dialog
+        // Finish Workout Dialog
         if (showFinishWorkoutDialog) {
             if (activeWorkout.exercises.isEmpty()) {
                 AlertDialog(
@@ -628,11 +723,11 @@ fun CasualWorkoutJournalScreen(
                 AlertDialog(
                     onDismissRequest = { showFinishWorkoutDialog = false },
                     title = {
-                        Text("Finish this workout?", fontWeight = FontWeight.Bold, color = CasualTheme.TextPrimary)
+                        Text("Finish Workout?", fontWeight = FontWeight.Bold, color = CasualTheme.TextPrimary)
                     },
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text("Review your training session overview:", color = CasualTheme.TextSecondary)
+                            Text("Review your training session summary:", color = CasualTheme.TextSecondary)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -721,8 +816,12 @@ private fun HeaderDivider() {
     )
 }
 
+/**
+ * Section 1 – Current Exercise Focus Workspace Card.
+ * Fully expanded workspace for active lift.
+ */
 @Composable
-private fun CasualExerciseJournalCard(
+private fun CurrentExerciseFocusCard(
     exercise: Exercise,
     sets: List<ActiveSet>,
     isMetric: Boolean,
@@ -737,34 +836,47 @@ private fun CasualExerciseJournalCard(
             .testTag("casual_exercise_card_${exercise.id}"),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = CasualTheme.CardSurface),
-        border = BorderStroke(1.dp, CasualTheme.Divider)
+        border = BorderStroke(1.5.dp, CasualTheme.PrimaryAccent.copy(alpha = 0.6f))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Card Title Header
+            // Exercise Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text(
-                        text = exercise.name,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        ),
-                        color = CasualTheme.TextPrimary
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(CasualTheme.PrimaryAccent)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = exercise.category.uppercase(Locale.getDefault()),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                                fontSize = 10.sp
+                            ),
+                            color = CasualTheme.PrimaryAccent
+                        )
+                    }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "${sets.size} Set${if (sets.size != 1) "s" else ""}",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = CasualTheme.PrimaryAccent
+                        text = exercise.name,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Black,
+                            fontSize = 22.sp
+                        ),
+                        color = CasualTheme.TextPrimary
                     )
                 }
 
@@ -780,22 +892,30 @@ private fun CasualExerciseJournalCard(
 
             HorizontalDivider(color = CasualTheme.Divider)
 
-            // Sets list
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                sets.forEachIndexed { setIndex, activeSet ->
-                    CasualSetRow(
-                        setIndex = setIndex,
-                        activeSet = activeSet,
-                        isMetric = isMetric,
-                        onUpdateSet = { w, r, rpe, c -> onUpdateSet(setIndex, w, r, rpe, c) },
-                        onRemoveSet = { onRemoveSet(setIndex) }
-                    )
+            // Logged Sets List
+            if (sets.isEmpty()) {
+                Text(
+                    text = "No sets logged yet. Tap 'Add Set' below.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = CasualTheme.TextSecondary
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    sets.forEachIndexed { setIndex, activeSet ->
+                        CasualSetRow(
+                            setIndex = setIndex,
+                            activeSet = activeSet,
+                            isMetric = isMetric,
+                            onUpdateSet = { w, r, rpe, c -> onUpdateSet(setIndex, w, r, rpe, c) },
+                            onRemoveSet = { onRemoveSet(setIndex) }
+                        )
+                    }
                 }
             }
 
             HorizontalDivider(color = CasualTheme.Divider)
 
-            // Add Set Button
+            // Add Set Action
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center
@@ -817,6 +937,76 @@ private fun CasualExerciseJournalCard(
                         color = CasualTheme.PrimaryAccent
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Section 2 – Workout Timeline Compact Card.
+ * Quiet, collapsed summary card for completed / non-focused exercise entries.
+ */
+@Composable
+private fun TimelineCompactCard(
+    exercise: Exercise,
+    setsCount: Int,
+    completedSetsCount: Int,
+    onSelectExercise: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelectExercise() },
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = CasualTheme.CardSurface),
+        border = BorderStroke(1.dp, CasualTheme.Divider)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.CheckCircle,
+                    contentDescription = null,
+                    tint = CasualTheme.SecondaryAccent,
+                    modifier = Modifier.size(20.dp)
+                )
+
+                Column {
+                    Text(
+                        text = exercise.name,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = CasualTheme.TextPrimary
+                    )
+                    Text(
+                        text = "$setsCount Set${if (setsCount != 1) "s" else ""}" +
+                                if (completedSetsCount > 0) " ($completedSetsCount completed)" else "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CasualTheme.TextSecondary
+                    )
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Focus",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CasualTheme.PrimaryAccent.copy(alpha = 0.8f)
+                )
+                Spacer(modifier = Modifier.width(2.dp))
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Expand into focus",
+                    tint = CasualTheme.PrimaryAccent.copy(alpha = 0.8f),
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }
