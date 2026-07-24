@@ -20,3 +20,9 @@ local.properties
 .env
 debug.keystore
 my-upload-key.jks
+# Local Python environment
+.venv/
+# Python cache files
+__pycache__/
+*.py[cod]
+.pytest_cache/
