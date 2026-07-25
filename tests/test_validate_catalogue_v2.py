@@ -231,6 +231,29 @@ class CatalogueV2ValidationTests(unittest.TestCase):
         findings, _ = self.validate_rows([self.valid_row(secondary_movement_patterns="Horizontal Push")])
         self.assertIn("MOVEMENT_PATTERN_OVERLAP", self.codes(findings))
 
+    def test_refined_movement_patterns_accept_matching_actions(self):
+        cases = (
+            ("Elbow Flexion", "Elbow Flexion"),
+            ("Elbow Extension", "Elbow Extension"),
+            ("Anti-Extension", "Spinal Stabilisation"),
+            ("Anti-Lateral Flexion", "Spinal Stabilisation"),
+            ("Trunk Flexion", "Trunk Flexion"),
+        )
+        for pattern, action in cases:
+            with self.subTest(pattern=pattern):
+                findings, _ = self.validate_rows(
+                    [self.valid_row(primary_movement_pattern=pattern, primary_joint_actions=action)]
+                )
+                self.assertNotIn("SUSPICIOUS_MOVEMENT", self.codes(findings))
+
+    def test_refined_movement_patterns_warn_on_mismatched_actions(self):
+        for pattern in ("Elbow Flexion", "Elbow Extension", "Anti-Extension", "Anti-Lateral Flexion", "Trunk Flexion"):
+            with self.subTest(pattern=pattern):
+                findings, _ = self.validate_rows(
+                    [self.valid_row(primary_movement_pattern=pattern, primary_joint_actions="Shoulder Flexion")]
+                )
+                self.assertIn("SUSPICIOUS_MOVEMENT", self.codes(findings))
+
     def test_invalid_lateral_raise_classification(self):
         row = self.valid_row(
             catalogue_key="dumbbell_lateral_raise",

@@ -66,9 +66,9 @@ Human decisions are mandatory for `Back`, `Shoulders`, `Core`, `Full Body`, and 
 
 ## Movement migration
 
-- Preserve genuine programming patterns such as Horizontal Push Squat and Hinge.
-- Remove Flexion Extension and Lateral Flexion from movement-pattern use.
-- Express those concepts through joint actions such as Trunk Flexion Knee Extension or Trunk Lateral Flexion.
+- Preserve genuine programming patterns such as Horizontal Push, Squat, and Hinge.
+- Replace ambiguous legacy Flexion, Extension, and Lateral Flexion labels with precise v2 patterns where programming identity requires them, including Elbow Flexion, Elbow Extension, Trunk Flexion, Anti-Extension, and Anti-Lateral Flexion.
+- Continue to express biomechanical actions independently through joint actions such as Trunk Flexion, Knee Extension, or Trunk Lateral Flexion.
 - Lateral raises use Shoulder Abduction.
 - Chest fly mechanics use Horizontal Adduction.
 - Rear-delt fly mechanics use Horizontal Abduction.

@@ -129,6 +129,9 @@ Reference paths below are relative to `catalogue/reference/v2/`.
 - Vertical Push without Shoulder Flexion or Shoulder Abduction is suspicious.
 - Squat should describe hip and knee flexion/extension across its primary and secondary actions.
 - Hinge should describe Hip Flexion and Hip Extension.
+- Elbow Flexion and Elbow Extension patterns should include their matching joint action.
+- Anti-Extension and Anti-Lateral Flexion should include Spinal Stabilisation.
+- Trunk Flexion should include the matching Trunk Flexion joint action.
 - Isolation records with several unrelated primary joint actions are suspicious.
 - Bench-supported records and non-NA bench angles require Bench equipment.
 - A Landmine record using a barbell requires both Barbell and Landmine.

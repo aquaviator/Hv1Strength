@@ -500,6 +500,14 @@ def validate_v2(manifest: Path, references: Path) -> tuple[list[Finding], int]:
             add(findings, "WARNING", "SUSPICIOUS_MOVEMENT", row_number, "primary_joint_actions", "Squat normally includes hip and knee flexion or extension actions.")
         if pattern == "Hinge" and not {"Hip Flexion", "Hip Extension"} <= all_actions:
             add(findings, "WARNING", "SUSPICIOUS_MOVEMENT", row_number, "primary_joint_actions", "Hinge normally includes Hip Flexion and Hip Extension.")
+        if pattern == "Elbow Flexion" and "Elbow Flexion" not in all_actions:
+            add(findings, "WARNING", "SUSPICIOUS_MOVEMENT", row_number, "primary_joint_actions", "Elbow Flexion requires an Elbow Flexion joint action.")
+        if pattern == "Elbow Extension" and "Elbow Extension" not in all_actions:
+            add(findings, "WARNING", "SUSPICIOUS_MOVEMENT", row_number, "primary_joint_actions", "Elbow Extension requires an Elbow Extension joint action.")
+        if pattern in {"Anti-Extension", "Anti-Lateral Flexion"} and "Spinal Stabilisation" not in all_actions:
+            add(findings, "WARNING", "SUSPICIOUS_MOVEMENT", row_number, "primary_joint_actions", f"{pattern} requires a Spinal Stabilisation joint action.")
+        if pattern == "Trunk Flexion" and "Trunk Flexion" not in all_actions:
+            add(findings, "WARNING", "SUSPICIOUS_MOVEMENT", row_number, "primary_joint_actions", "Trunk Flexion requires a Trunk Flexion joint action.")
 
         equipment = set(split_values(row.get("equipment") or ""))
         bench_angle = (row.get("bench_angle") or "").strip()

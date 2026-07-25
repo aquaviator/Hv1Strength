@@ -14,3 +14,8 @@ Olympic Lift,olympic_lift,Active,Olympic weightlifting or derivative explosive p
 Loaded Event,loaded_event,Active,Nonstandard loaded event not represented by another primary pattern,,130
 Cyclical Conditioning,cyclical_conditioning,Active,Repeated cyclical locomotor conditioning pattern,,140
 Mobility,mobility,Active,Movement intended primarily to access or prepare range of motion,,150
+Elbow Flexion,elbow_flexion,Active,Isolated or arm-dominant flexion at the elbow used as a programming pattern,Distinguish from compound vertical pulling,160
+Elbow Extension,elbow_extension,Active,Isolated or arm-dominant extension at the elbow used as a programming pattern,Distinguish from compound horizontal or vertical pressing,170
+Anti-Extension,anti_extension,Active,Resisting trunk or spinal extension while maintaining controlled alignment,Use when extension resistance is the defining trunk demand,180
+Anti-Lateral Flexion,anti_lateral_flexion,Active,Resisting side bending while maintaining controlled trunk alignment,Use when lateral-flexion resistance is the defining trunk demand,190
+Trunk Flexion,trunk_flexion,Active,Dynamic flexion of the trunk used as the principal programming pattern,Distinguish from hip hinging and rotational trunk work,200
