@@ -1,5 +1,5 @@
 value,slug,status,description,notes,sort_order
-Draft,draft,Active,Unreviewed or incomplete proposal,,10
+Draft,draft,Active,Unapproved or incomplete proposal,May include automated or AI-assisted internal review but does not imply independent human verification,10
 Architecture Reviewed,architecture_reviewed,Active,Identity taxonomy equipment aliases and duplication reviewed,,20
 Coaching Reviewed,coaching_reviewed,Active,Mechanics programming and coaching content reviewed,,30
 Clinical Review Required,clinical_review_required,Active,Record requires qualified clinical review before approval,,40
