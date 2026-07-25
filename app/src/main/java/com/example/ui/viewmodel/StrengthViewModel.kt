@@ -462,7 +462,15 @@ class StrengthViewModel(
     fun skipRestGuide() = activeWorkoutViewModel.skipRestGuide()
     fun clearRestGuide() = activeWorkoutViewModel.clearRestGuide()
 
-    // Delegated Backup & Restore properties & functions
+    // Delegated Backup & Restore & Entitlement properties & functions
+    val subscriptionState: StateFlow<com.example.billing.SubscriptionState> = profileViewModel.subscriptionState
+    val productInfo: StateFlow<com.example.billing.SubscriptionProductInfo?> = profileViewModel.productInfo
+    val appAccessState: StateFlow<com.example.billing.AppAccessState> = profileViewModel.appAccessState
+    val hasAppAccess: StateFlow<Boolean> = profileViewModel.hasAppAccess
+
+    fun launchPurchaseFlow(activity: android.app.Activity): Boolean = profileViewModel.launchPurchaseFlow(activity)
+    fun restorePurchases() = profileViewModel.restorePurchases()
+
     suspend fun exportData() = profileViewModel.exportData()
     suspend fun exportDataToCsv() = profileViewModel.exportDataToCsv()
     fun importData(jsonStr: String, onSuccess: (ProfileViewModel.ImportResult) -> Unit, onError: (String) -> Unit) =

@@ -10,8 +10,23 @@ import kotlinx.coroutines.launch
 class ProfileViewModel(
     private val repository: StrengthRepository,
     private val context: Context,
-    private val authViewModel: AuthViewModel
+    private val authViewModel: AuthViewModel,
+    val billingRepository: com.example.billing.BillingRepository = com.example.billing.PlayBillingRepository(context),
+    val entitlementRepository: com.example.billing.EntitlementRepository = com.example.billing.PlayEntitlementRepository(context, billingRepository, repository)
 ) : ViewModel() {
+
+    val subscriptionState: StateFlow<com.example.billing.SubscriptionState> = billingRepository.subscriptionState
+    val productInfo: StateFlow<com.example.billing.SubscriptionProductInfo?> = billingRepository.productInfo
+    val appAccessState: StateFlow<com.example.billing.AppAccessState> = entitlementRepository.appAccessState
+    val hasAppAccess: StateFlow<Boolean> = appAccessState
+        .map { it.hasAppAccess }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    fun launchPurchaseFlow(activity: android.app.Activity): Boolean = billingRepository.launchPurchaseFlow(activity)
+    fun restorePurchases() {
+        billingRepository.restorePurchases()
+        entitlementRepository.refreshAccessState()
+    }
 
     // Settings StateFlows using modern database-backed UserPreferencesRepository
     val preferencesRepository = UserPreferencesRepository(repository.dao)
@@ -72,16 +87,11 @@ class ProfileViewModel(
         simulateTrialExpired.value = expired
     }
 
-    val isTrialExpired: StateFlow<Boolean> = activeUserProfile.combine(simulateTrialExpired) { profile, simulate ->
+    val isTrialExpired: StateFlow<Boolean> = combine(appAccessState, simulateTrialExpired) { accessState, simulate ->
         if (simulate) {
             true
-        } else if (profile == null) {
-            false
         } else {
-            val joinedAt = profile.createdAt
-            val thirtyDaysInMillis = 30L * 24L * 60L * 60L * 1000L
-            val expirationTime = joinedAt + thirtyDaysInMillis
-            System.currentTimeMillis() > expirationTime
+            accessState is com.example.billing.AppAccessState.Expired
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 

@@ -4,9 +4,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.sp
+import com.example.ui.screens.SubscriptionAccessScreen
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.History
@@ -160,9 +164,49 @@ fun MainAppScreen(
     navController: androidx.navigation.NavHostController = rememberNavController()
 ) {
     val authState by viewModel.authState.collectAsState()
+    val appAccessState by viewModel.appAccessState.collectAsState()
+    val hasAppAccess by viewModel.hasAppAccess.collectAsState()
     val vibrationOn by viewModel.vibrationOn.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    // Commercial Access Navigation Gate
+    if (appAccessState is com.example.billing.AppAccessState.Initializing) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
+                Column(
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        text = "HUMAN STRENGTH",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.5.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+            }
+        }
+        return
+    }
+
+    if (!hasAppAccess && currentRoute != "welcome") {
+        SubscriptionAccessScreen(
+            viewModel = viewModel,
+            onSignOutComplete = {
+                navController.navigate("welcome") {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
+        )
+        return
+    }
 
     CompositionLocalProvider(
         com.example.core.util.LocalVibrationEnabled provides vibrationOn

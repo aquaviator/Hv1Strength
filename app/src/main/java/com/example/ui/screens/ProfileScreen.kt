@@ -53,6 +53,9 @@ fun ProfileScreen(
     val isMetric by viewModel.isMetric.collectAsState()
     val isTrialExpired by viewModel.isTrialExpired.collectAsState()
     val simulateTrialExpired by viewModel.simulateTrialExpired.collectAsState()
+    val subscriptionState by viewModel.subscriptionState.collectAsState()
+    val productInfo by viewModel.productInfo.collectAsState()
+    val appAccessState by viewModel.appAccessState.collectAsState()
 
     var showSignOutDialog by remember { mutableStateOf(false) }
     var deleteLocalDataOnSignOut by remember { mutableStateOf(false) }
@@ -220,11 +223,73 @@ fun ProfileScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "MEMBERSHIP",
-                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "MEMBERSHIP",
+                            style = MaterialTheme.typography.titleSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        
+                        when (val state = appAccessState) {
+                            is com.example.billing.AppAccessState.Subscribed -> {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        text = "Active Subscription",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                            is com.example.billing.AppAccessState.TrialActive -> {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        text = "Introductory Trial (${state.daysRemaining} days left)",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
+                            }
+                            is com.example.billing.AppAccessState.GracePeriod -> {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        text = "Grace Period Active",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                }
+                            }
+                            is com.example.billing.AppAccessState.Expired -> {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.errorContainer,
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        text = "Membership Expired",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+                            else -> {}
+                        }
+                    }
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -234,27 +299,103 @@ fun ProfileScreen(
                             imageVector = Icons.Default.CardMembership,
                             contentDescription = "Membership status",
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(28.dp)
                         )
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
+                            val titleText = when (subscriptionState) {
+                                is com.example.billing.SubscriptionState.PurchasedUnverified -> "Human Strength Annual Membership"
+                                is com.example.billing.SubscriptionState.PurchasePending -> "Purchase Confirmation Pending"
+                                else -> productInfo?.title ?: "Human Strength Annual"
+                            }
                             Text(
-                                text = "Subscription system not yet active",
+                                text = titleText,
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyLarge
                             )
                             Spacer(modifier = Modifier.height(2.dp))
+                            
+                            val priceCopy = when {
+                                productInfo != null -> {
+                                    if (productInfo?.hasFreeTrial == true) {
+                                        "1 month free, then ${productInfo?.formattedPrice}/year"
+                                    } else {
+                                        "${productInfo?.formattedPrice}/year"
+                                    }
+                                }
+                                else -> "Planned UK price: £24.00/year (1 month free trial available via Play Store)"
+                            }
                             Text(
-                                text = "One-month full-access trial and annual membership are coming soon.",
+                                text = priceCopy,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
+                    when (subscriptionState) {
+                        is com.example.billing.SubscriptionState.PurchasePending -> {
+                            Text(
+                                text = "Your payment is currently being processed by Google Play. Entitlement will update once confirmed.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                        is com.example.billing.SubscriptionState.PurchasedUnverified -> {
+                            Text(
+                                text = "Google Play purchase observed on this device. Final verified entitlement access control will be enabled in Phase D.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        is com.example.billing.SubscriptionState.Error -> {
+                            val err = (subscriptionState as com.example.billing.SubscriptionState.Error).message
+                            Text(
+                                text = "Billing notice: $err",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        else -> {}
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val activity = context as? android.app.Activity
+                                if (activity != null) {
+                                    val launched = viewModel.launchPurchaseFlow(activity)
+                                    if (!launched) {
+                                        Toast.makeText(context, "Google Play Billing unavailable", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, "Cannot start billing from non-activity context", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.weight(1f).testTag("purchase_annual_button"),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Subscribe via Play", fontWeight = FontWeight.Bold)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                Toast.makeText(context, "Checking purchases…", Toast.LENGTH_SHORT).show()
+                                viewModel.restorePurchases()
+                            },
+                            modifier = Modifier.weight(1f).testTag("restore_purchases_button"),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Restore Purchases", fontWeight = FontWeight.Bold)
+                        }
+                    }
+
                     Text(
-                        text = "Planned UK price: £24 per year. All premium synchronization, coaching metrics, and active statistics tracking will be available standard during the preview period.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Subscription management occurs via Google Play. Signing out of your cloud account or deleting local data does not cancel your Google Play subscription.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
                 }
             }

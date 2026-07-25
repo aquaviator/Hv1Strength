@@ -106,6 +106,7 @@ dependencies {
   implementation(libs.firebase.ai)
   implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.play.services.auth)
+  implementation("com.android.billingclient:billing-ktx:7.0.0")
   implementation(libs.google.id)
   implementation(libs.androidx.credentials)
   implementation(libs.androidx.credentials.play.services.auth)
