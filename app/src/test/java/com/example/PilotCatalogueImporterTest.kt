@@ -15,10 +15,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
-import org.json.JSONTokener
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -163,6 +161,32 @@ class PilotCatalogueImporterTest {
         }
         assertEquals(8, database.catalogueStagingDao().getExercises().size)
         assertEquals("pilot-1.0", database.catalogueStagingDao().getRelease("pilot_staging")?.catalogueVersion)
+    }
+
+    @Test
+    fun persistenceFailureRollsBackEntireReplacementTransaction() = runBlocking {
+        importer.import(fixture)
+        database.openHelper.writableDatabase.execSQL(
+            """
+            CREATE TRIGGER fail_catalogue_alias_insert
+            BEFORE INSERT ON catalogue_staging_alias
+            BEGIN
+                SELECT RAISE(ABORT, 'forced alias persistence failure');
+            END
+            """.trimIndent()
+        )
+        val updated = JSONObject(fixture).apply {
+            put("catalogue_version", "pilot-1.1-rollback-test")
+        }
+
+        assertThrows(android.database.sqlite.SQLiteException::class.java) {
+            runBlocking { importer.import(resign(updated)) }
+        }
+
+        val dao = database.catalogueStagingDao()
+        assertEquals("pilot-1.0", dao.getRelease("pilot_staging")?.catalogueVersion)
+        assertEquals(8, dao.getExercises().size)
+        assertTrue(dao.getAliases().any { it.value == "Bench Press" && it.canonicalId == "bench_press" })
     }
 
     @Test
