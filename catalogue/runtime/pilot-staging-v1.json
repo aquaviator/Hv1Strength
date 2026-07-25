@@ -1,0 +1,450 @@
+{
+  "catalogue_version": "pilot-1.0",
+  "channel": "pilot_staging",
+  "checksum": "4855f1385f96b8b30a4116d3252639522d4a97746717cd20afefb0b757ebc005",
+  "distribution_scope": "official_catalogue_release",
+  "exercises": [
+    {
+      "anatomy": {
+        "primary_muscles": [
+          "pectoralis_major"
+        ],
+        "secondary_muscles": [
+          "triceps_brachii",
+          "deltoid_anterior"
+        ],
+        "stabiliser_muscles": [
+          "rotator_cuff",
+          "serratus_anterior"
+        ]
+      },
+      "canonical_id": "bench_press",
+      "classification": {
+        "compound_or_isolation": "compound",
+        "difficulty": "intermediate",
+        "family": "chest_and_horizontal_pressing",
+        "laterality": "bilateral",
+        "movement_pattern": "horizontal_push"
+      },
+      "coaching": {
+        "breathing_bracing": "Brace before the descent and release breath after the hardest portion of the press.",
+        "common_errors": "Losing upper-back position or bouncing the bar.",
+        "execution": "Lower the bar with control toward the chest then press to the start position.",
+        "range_of_motion": "Use a controlled range that preserves the chosen upper-back and shoulder position.",
+        "safety": "Use secure collars and appropriate rack safeties or a spotter for challenging loads.",
+        "setup": "Set the upper back on the bench and plant the feet before unracking."
+      },
+      "display_name": "Barbell Bench Press",
+      "equipment": {
+        "attachments": [],
+        "required": [
+          "barbell",
+          "bench"
+        ]
+      },
+      "relationships": [],
+      "search": {
+        "aliases": [
+          {
+            "normalised": "bench press",
+            "type": "search",
+            "value": "Bench Press"
+          },
+          {
+            "normalised": "flat bench press",
+            "type": "search",
+            "value": "Flat Bench Press"
+          }
+        ],
+        "keywords": []
+      }
+    },
+    {
+      "anatomy": {
+        "primary_muscles": [
+          "quadriceps",
+          "gluteus_maximus"
+        ],
+        "secondary_muscles": [
+          "hamstrings",
+          "hip_adductors"
+        ],
+        "stabiliser_muscles": [
+          "gluteus_medius",
+          "transverse_abdominis",
+          "soleus"
+        ]
+      },
+      "canonical_id": "ex_bulgarian_split_squat",
+      "classification": {
+        "compound_or_isolation": "compound",
+        "difficulty": "intermediate",
+        "family": "squat_and_knee_dominant_legs",
+        "laterality": "unilateral",
+        "movement_pattern": "lunge"
+      },
+      "coaching": {
+        "breathing_bracing": "Brace before lowering and exhale as the front leg drives the body upward.",
+        "common_errors": "Using the rear leg to push or choosing a stance that disrupts front-foot and knee control.",
+        "execution": "Lower under control through the front hip and knee then drive through the front leg while maintaining balance.",
+        "range_of_motion": "Use the range that preserves front-foot contact hip control and stable knee alignment.",
+        "safety": "Confirm the bench is stable and avoid excessive pressure through the elevated rear foot.",
+        "setup": "Place the rear foot lightly on a stable bench and adjust the stance so the front foot remains secure and balance is manageable."
+      },
+      "display_name": "Bulgarian Split Squat",
+      "equipment": {
+        "attachments": [],
+        "required": [
+          "bodyweight",
+          "bench"
+        ]
+      },
+      "relationships": [],
+      "search": {
+        "aliases": [
+          {
+            "normalised": "bss",
+            "type": "abbreviation",
+            "value": "BSS"
+          },
+          {
+            "normalised": "rear foot elevated split squat",
+            "type": "search",
+            "value": "Rear-Foot-Elevated Split Squat"
+          },
+          {
+            "normalised": "rfess",
+            "type": "search",
+            "value": "RFESS"
+          }
+        ],
+        "keywords": [
+          "rear foot elevated lunge"
+        ]
+      }
+    },
+    {
+      "anatomy": {
+        "primary_muscles": [
+          "forearm_flexors",
+          "trapezius_upper"
+        ],
+        "secondary_muscles": [
+          "gluteus_maximus",
+          "quadriceps"
+        ],
+        "stabiliser_muscles": [
+          "transverse_abdominis",
+          "internal_obliques",
+          "external_obliques",
+          "gluteus_medius"
+        ]
+      },
+      "canonical_id": "ex_farmers_carry",
+      "classification": {
+        "compound_or_isolation": "compound",
+        "difficulty": "intermediate",
+        "family": "core_and_carries",
+        "laterality": "bilateral",
+        "movement_pattern": "carry"
+      },
+      "coaching": {
+        "breathing_bracing": "Breathe in controlled cycles while maintaining trunk tension rather than holding the breath for the full carry.",
+        "common_errors": "Shrugging excessively or allowing lateral sway and uncontrolled steps as the loads drift from the body.",
+        "execution": "Walk with natural controlled steps while keeping both loads close to the body then stop and set them down deliberately.",
+        "range_of_motion": "Travel only as far as upright alignment secure grip and a stable gait can be maintained.",
+        "safety": "Use a clear route and loads that can be picked up carried stopped and lowered without losing grip or posture.",
+        "setup": "Stand between paired farmer handles and secure one load in each hand before establishing an upright braced posture."
+      },
+      "display_name": "Farmer's Carry",
+      "equipment": {
+        "attachments": [],
+        "required": [
+          "farmer_handles"
+        ]
+      },
+      "relationships": [],
+      "search": {
+        "aliases": [
+          {
+            "normalised": "farmer handle carry",
+            "type": "search",
+            "value": "Farmer Handle Carry"
+          },
+          {
+            "normalised": "farmer walk",
+            "type": "search",
+            "value": "Farmer Walk"
+          }
+        ],
+        "keywords": [
+          "bilateral loaded carry",
+          "grip carry"
+        ]
+      }
+    },
+    {
+      "anatomy": {
+        "primary_muscles": [
+          "quadriceps",
+          "gluteus_maximus"
+        ],
+        "secondary_muscles": [
+          "hip_adductors",
+          "hamstrings"
+        ],
+        "stabiliser_muscles": [
+          "transverse_abdominis",
+          "spinal_erectors",
+          "forearm_flexors"
+        ]
+      },
+      "canonical_id": "ex_goblet_squat",
+      "classification": {
+        "compound_or_isolation": "compound",
+        "difficulty": "beginner",
+        "family": "squat_and_knee_dominant_legs",
+        "laterality": "bilateral",
+        "movement_pattern": "squat"
+      },
+      "coaching": {
+        "breathing_bracing": "Brace before lowering and exhale through the ascent while keeping the load close.",
+        "common_errors": "Letting the load drift forward or allowing grip and upper-body fatigue to disrupt posture.",
+        "execution": "Lower through controlled hip and knee flexion then stand while keeping the load close to the body.",
+        "range_of_motion": "Use the depth that preserves whole-foot pressure and controlled hip knee and torso positions.",
+        "safety": "Choose a load that can be securely lifted into position and held without obscuring foot placement.",
+        "setup": "Hold one dumbbell close to the chest and establish a balanced stance with an upright torso."
+      },
+      "display_name": "Dumbbell Goblet Squat",
+      "equipment": {
+        "attachments": [],
+        "required": [
+          "dumbbell"
+        ]
+      },
+      "relationships": [],
+      "search": {
+        "aliases": [],
+        "keywords": [
+          "front loaded squat",
+          "squat teaching exercise"
+        ]
+      }
+    },
+    {
+      "anatomy": {
+        "primary_muscles": [
+          "pectoralis_major"
+        ],
+        "secondary_muscles": [
+          "triceps_brachii",
+          "deltoid_anterior"
+        ],
+        "stabiliser_muscles": [
+          "serratus_anterior",
+          "transverse_abdominis"
+        ]
+      },
+      "canonical_id": "ex_push_up",
+      "classification": {
+        "compound_or_isolation": "compound",
+        "difficulty": "beginner",
+        "family": "chest_and_horizontal_pressing",
+        "laterality": "bilateral",
+        "movement_pattern": "horizontal_push"
+      },
+      "coaching": {
+        "breathing_bracing": "Inhale during the descent and exhale through the press while maintaining trunk tension.",
+        "common_errors": "Allowing the hips to sag or the elbows to flare excessively.",
+        "execution": "Lower the chest under control then press the floor away while allowing the shoulder blades to move naturally.",
+        "range_of_motion": "Descend only through the range in which body position remains controlled.",
+        "safety": "Use a stable hand position and a range that remains controlled.",
+        "setup": "Place the hands in a comfortable position around shoulder width and establish a controlled body line."
+      },
+      "display_name": "Push-Up",
+      "equipment": {
+        "attachments": [],
+        "required": [
+          "bodyweight"
+        ]
+      },
+      "relationships": [],
+      "search": {
+        "aliases": [
+          {
+            "normalised": "press up",
+            "type": "regional",
+            "value": "Press-Up"
+          },
+          {
+            "normalised": "bodyweight push up",
+            "type": "search",
+            "value": "Bodyweight Push-Up"
+          }
+        ],
+        "keywords": []
+      }
+    },
+    {
+      "anatomy": {
+        "primary_muscles": [
+          "latissimus_dorsi"
+        ],
+        "secondary_muscles": [
+          "rhomboids",
+          "trapezius_middle",
+          "biceps_brachii"
+        ],
+        "stabiliser_muscles": [
+          "forearm_flexors",
+          "spinal_erectors"
+        ]
+      },
+      "canonical_id": "ex_seated_cable_row",
+      "classification": {
+        "compound_or_isolation": "compound",
+        "difficulty": "beginner",
+        "family": "back_and_pulling",
+        "laterality": "bilateral",
+        "movement_pattern": "horizontal_pull"
+      },
+      "coaching": {
+        "breathing_bracing": "Maintain trunk tension and exhale through the pull.",
+        "common_errors": "Using excessive torso swing or allowing the weight stack to slam.",
+        "execution": "Pull the handle toward the torso with controlled elbow and shoulder motion then return smoothly.",
+        "range_of_motion": "Allow natural controlled torso motion without using momentum to complete the pull.",
+        "safety": "Confirm the attachment and selector pin are secure before starting.",
+        "setup": "Sit securely with the feet supported and take a neutral grip on the row handle."
+      },
+      "display_name": "Seated Cable Row",
+      "equipment": {
+        "attachments": [
+          "row_handle"
+        ],
+        "required": [
+          "cable_machine"
+        ]
+      },
+      "relationships": [],
+      "search": {
+        "aliases": [
+          {
+            "normalised": "low cable row",
+            "type": "search",
+            "value": "Low Cable Row"
+          }
+        ],
+        "keywords": []
+      }
+    },
+    {
+      "anatomy": {
+        "primary_muscles": [
+          "pectoralis_major"
+        ],
+        "secondary_muscles": [
+          "triceps_brachii",
+          "deltoid_anterior"
+        ],
+        "stabiliser_muscles": []
+      },
+      "canonical_id": "ex_selectorized_chest_press",
+      "classification": {
+        "compound_or_isolation": "compound",
+        "difficulty": "beginner",
+        "family": "chest_and_horizontal_pressing",
+        "laterality": "bilateral",
+        "movement_pattern": "horizontal_push"
+      },
+      "coaching": {
+        "breathing_bracing": "Maintain contact with the support and exhale through the press.",
+        "common_errors": "Using a seat or start position that crowds the shoulders or losing stable contact with the support.",
+        "execution": "Press through the machine path under control then return without letting the stack slam.",
+        "range_of_motion": "Use the available machine range that permits controlled shoulder and elbow motion.",
+        "safety": "Confirm the selector pin and seat adjustment are secure before starting.",
+        "setup": "Adjust the seat and start position so the handles match the intended pressing line and the shoulders remain comfortable."
+      },
+      "display_name": "Selectorized Chest Press",
+      "equipment": {
+        "attachments": [],
+        "required": [
+          "selectorized_machine"
+        ]
+      },
+      "relationships": [],
+      "search": {
+        "aliases": [
+          {
+            "normalised": "selectorized seated chest press",
+            "type": "search",
+            "value": "Selectorized Seated Chest Press"
+          }
+        ],
+        "keywords": []
+      }
+    },
+    {
+      "anatomy": {
+        "primary_muscles": [
+          "transverse_abdominis",
+          "rectus_abdominis"
+        ],
+        "secondary_muscles": [
+          "gluteus_maximus"
+        ],
+        "stabiliser_muscles": [
+          "internal_obliques",
+          "external_obliques",
+          "serratus_anterior"
+        ]
+      },
+      "canonical_id": "plank",
+      "classification": {
+        "compound_or_isolation": "compound",
+        "difficulty": "beginner",
+        "family": "core_and_carries",
+        "laterality": "bilateral",
+        "movement_pattern": "anti_extension"
+      },
+      "coaching": {
+        "breathing_bracing": "Take controlled breaths throughout the hold without releasing abdominal tension or using prolonged breath holds.",
+        "common_errors": "Letting the hips sag or rise excessively while holding the breath for a prolonged period.",
+        "execution": "Brace the abdomen and glutes while keeping the head and spine neutral and breathing under steady tension.",
+        "range_of_motion": "Hold only the body position that preserves neutral alignment from the head through the hips and legs.",
+        "safety": "Use a stable surface and end the hold when shoulder support or straight body alignment can no longer be maintained.",
+        "setup": "Place the forearms on the floor with elbows beneath or near the shoulders and extend the body into a straight line."
+      },
+      "display_name": "Plank",
+      "equipment": {
+        "attachments": [],
+        "required": [
+          "bodyweight",
+          "exercise_mat"
+        ]
+      },
+      "relationships": [],
+      "search": {
+        "aliases": [
+          {
+            "normalised": "forearm plank",
+            "type": "search",
+            "value": "Forearm Plank"
+          },
+          {
+            "normalised": "front plank",
+            "type": "search",
+            "value": "Front Plank"
+          }
+        ],
+        "keywords": [
+          "anti extension plank",
+          "prone core hold"
+        ]
+      }
+    }
+  ],
+  "record_count": 8,
+  "runtime_contract_version": 1,
+  "schema_version": "2.0",
+  "source_catalogue_commit": "47523c6"
+}

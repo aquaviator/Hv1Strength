@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://human.local/schemas/runtime-catalogue-contract-v1.schema.json",
+  "title": "Human Exercise Runtime Catalogue Release v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "runtime_contract_version",
+    "schema_version",
+    "catalogue_version",
+    "source_catalogue_commit",
+    "channel",
+    "distribution_scope",
+    "record_count",
+    "exercises",
+    "checksum"
+  ],
+  "properties": {
+    "runtime_contract_version": {
+      "const": 1
+    },
+    "schema_version": {
+      "const": "2.0"
+    },
+    "catalogue_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_catalogue_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "channel": {
+      "enum": [
+        "pilot_staging",
+        "production"
+      ]
+    },
+    "distribution_scope": {
+      "const": "official_catalogue_release"
+    },
+    "record_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "checksum": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "exercises": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/exercise"
+      }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "exercise": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canonical_id",
+        "display_name",
+        "classification",
+        "search",
+        "anatomy",
+        "equipment",
+        "coaching",
+        "relationships"
+      ],
+      "properties": {
+        "canonical_id": {
+          "$ref": "#/$defs/slug"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "classification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "movement_pattern",
+            "difficulty",
+            "laterality",
+            "compound_or_isolation"
+          ],
+          "properties": {
+            "family": {
+              "$ref": "#/$defs/slug"
+            },
+            "movement_pattern": {
+              "$ref": "#/$defs/slug"
+            },
+            "difficulty": {
+              "$ref": "#/$defs/slug"
+            },
+            "laterality": {
+              "$ref": "#/$defs/slug"
+            },
+            "compound_or_isolation": {
+              "$ref": "#/$defs/slug"
+            }
+          }
+        },
+        "search": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "aliases",
+            "keywords"
+          ],
+          "properties": {
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "value",
+                  "normalised",
+                  "type"
+                ],
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "normalised": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "type": {
+                    "enum": [
+                      "search",
+                      "regional",
+                      "abbreviation",
+                      "legacy"
+                    ]
+                  }
+                }
+              }
+            },
+            "keywords": {
+              "$ref": "#/$defs/stringArray"
+            }
+          }
+        },
+        "anatomy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "primary_muscles",
+            "secondary_muscles",
+            "stabiliser_muscles"
+          ],
+          "properties": {
+            "primary_muscles": {
+              "$ref": "#/$defs/stringArray"
+            },
+            "secondary_muscles": {
+              "$ref": "#/$defs/stringArray"
+            },
+            "stabiliser_muscles": {
+              "$ref": "#/$defs/stringArray"
+            }
+          }
+        },
+        "equipment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "required",
+            "attachments"
+          ],
+          "properties": {
+            "required": {
+              "$ref": "#/$defs/stringArray"
+            },
+            "attachments": {
+              "$ref": "#/$defs/stringArray"
+            }
+          }
+        },
+        "coaching": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "setup",
+            "execution",
+            "common_errors",
+            "breathing_bracing",
+            "range_of_motion",
+            "safety"
+          ],
+          "properties": {
+            "setup": {
+              "type": "string"
+            },
+            "execution": {
+              "type": "string"
+            },
+            "common_errors": {
+              "type": "string"
+            },
+            "breathing_bracing": {
+              "type": "string"
+            },
+            "range_of_motion": {
+              "type": "string"
+            },
+            "safety": {
+              "type": "string"
+            }
+          }
+        },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "target_canonical_id"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "parent",
+                  "progression",
+                  "regression",
+                  "supersedes"
+                ]
+              },
+              "target_canonical_id": {
+                "$ref": "#/$defs/slug"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "runtime_contract_version": 1,
+  "catalogue_version": "pilot-1.0",
+  "source_catalogue_commit": "47523c6",
+  "entries": [
+    {
+      "catalogue_key": "barbell_bench_press",
+      "canonical_id": "bench_press",
+      "identity_source": "legacy_seed"
+    },
+    {
+      "catalogue_key": "bulgarian_split_squat",
+      "canonical_id": "ex_bulgarian_split_squat",
+      "identity_source": "new_allocation"
+    },
+    {
+      "catalogue_key": "farmers_carry",
+      "canonical_id": "ex_farmers_carry",
+      "identity_source": "new_allocation"
+    },
+    {
+      "catalogue_key": "goblet_squat",
+      "canonical_id": "ex_goblet_squat",
+      "identity_source": "new_allocation"
+    },
+    {
+      "catalogue_key": "plank",
+      "canonical_id": "plank",
+      "identity_source": "legacy_seed"
+    },
+    {
+      "catalogue_key": "push_up",
+      "canonical_id": "ex_push_up",
+      "identity_source": "new_allocation"
+    },
+    {
+      "catalogue_key": "seated_cable_row",
+      "canonical_id": "ex_seated_cable_row",
+      "identity_source": "new_allocation"
+    },
+    {
+      "catalogue_key": "selectorized_chest_press",
+      "canonical_id": "ex_selectorized_chest_press",
+      "identity_source": "new_allocation"
+    }
+  ]
+}

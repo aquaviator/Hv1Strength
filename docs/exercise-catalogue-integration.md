@@ -352,3 +352,31 @@ Sprint 6 should implement only the contract fixture and deterministic transforma
 7. do not change Room, Firestore, Android models, seed data, UI, or security rules.
 
 This slice proves the contract before any database migration or runtime import.
+
+## 22. Implemented Sprint 6 contract
+
+The executable Pilot contract is:
+
+- JSON Schema: `catalogue/runtime/runtime-catalogue-contract-v1.schema.json`;
+- canonical ID mapping: `catalogue/runtime/canonical-id-map-v1.json`;
+- deterministic transformer: `tools/catalogue/build_runtime_catalogue.py`;
+- generated staging fixture: `catalogue/runtime/pilot-staging-v1.json`;
+- regression coverage: `tests/test_build_runtime_catalogue.py`.
+
+Generate the fixture with:
+
+```powershell
+.\.venv\Scripts\python.exe tools/catalogue/build_runtime_catalogue.py `
+  --channel pilot_staging `
+  --output catalogue/runtime/pilot-staging-v1.json
+```
+
+Verify byte-for-byte reproducibility with the same command plus `--check`.
+
+Runtime contract version 1 exports canonical identity, selected classification slugs, typed aliases and keywords, muscle roles, equipment and attachments, coaching/detail content, and canonical-ID relationships. It excludes review notes, governance statuses and flags, AI-assistance metadata, authoring provenance, human-verification metadata, programming metadata not yet consumed at runtime, and other authoring-only fields identified in the mapping table above.
+
+The release checksum is lowercase SHA-256 over canonical UTF-8 JSON containing every envelope field except `checksum`. Canonical JSON sorts object keys, uses compact separators, preserves deterministic array ordering, and contains no generated timestamp or machine-specific path.
+
+`pilot_staging` accepts only the eight configured Draft fixtures. `production` applies the documented approval gate and rejects the current records. Valid relationships to records outside this isolated mapping are omitted; unknown source targets fail validation. A future full release must map every exported relationship target.
+
+Sprint 7 may consume only the checked-in staging fixture in a debug/test-isolated path. It should implement parser/contract models and Room staging persistence tests without replacing Kotlin seeds, exposing Draft records in production UI, or changing the existing custom-exercise Firestore sync path.
