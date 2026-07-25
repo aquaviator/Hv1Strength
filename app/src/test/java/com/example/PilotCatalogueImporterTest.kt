@@ -192,11 +192,11 @@ class PilotCatalogueImporterTest {
     fun migrationNineToTenPreservesExistingAndCustomExerciseRows() {
         val name = "catalogue-migration-test.db"
         context.deleteDatabase(name)
-        val old = helper(name, 9) { db ->
+        val old = helper(name, 9, createDatabase = { db ->
             db.execSQL("CREATE TABLE exercise (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, isCustom INTEGER NOT NULL)")
             db.execSQL("INSERT INTO exercise VALUES ('seed_test', 'Seed', 'Chest', 0)")
             db.execSQL("INSERT INTO exercise VALUES ('custom_test', 'Custom', 'Chest', 1)")
-        }
+        })
         old.writableDatabase
         old.close()
 

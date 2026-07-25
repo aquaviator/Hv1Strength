@@ -2,6 +2,19 @@
 
 Status: implementation-ready design for a Pilot integration slice. This document does not publish or import the 48 Draft records.
 
+## Pilot local staging implementation
+
+Runtime Contract v1 is consumed locally through `PilotCatalogueImporter`. The importer accepts only the
+`pilot_staging` channel, verifies the canonical SHA-256 payload before any Room write, validates record
+count and canonical references, and stores the snapshot in tables separate from the production
+`exercise` table. The checked-in runtime directory is configured as the Android asset source, so the
+Pilot fixture has one authoritative repository copy.
+
+An identical `(channel, catalogueVersion, checksum)` import is a deterministic no-op. A changed,
+valid Pilot release replaces the prior staging snapshot in one Room transaction while retaining
+canonical IDs. This path is deliberately not connected to production search, Compose UI, Kotlin
+seed population, or custom-exercise Firestore sync.
+
 ## 1. Current application architecture
 
 The Android application is a single Kotlin/Compose module. `Exercise` is both the Room entity and runtime model:
