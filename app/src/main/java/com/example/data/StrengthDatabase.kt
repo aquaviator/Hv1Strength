@@ -10,6 +10,12 @@ import com.example.core.identity.DeviceIdGenerator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.example.data.catalogue.CatalogueStagingAliasEntity
+import com.example.data.catalogue.CatalogueStagingDao
+import com.example.data.catalogue.CatalogueStagingExerciseEntity
+import com.example.data.catalogue.CatalogueStagingRelationshipEntity
+import com.example.data.catalogue.CatalogueStagingReleaseEntity
+import com.example.data.catalogue.CatalogueStagingSearchTokenEntity
 
 @Database(
     entities = [
@@ -24,14 +30,20 @@ import kotlinx.coroutines.launch
         WorkoutTemplateSet::class,
         CommandQueueEntity::class,
         UserPreferences::class,
-        ActiveWorkoutBackup::class
+        ActiveWorkoutBackup::class,
+        CatalogueStagingReleaseEntity::class,
+        CatalogueStagingExerciseEntity::class,
+        CatalogueStagingAliasEntity::class,
+        CatalogueStagingSearchTokenEntity::class,
+        CatalogueStagingRelationshipEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class StrengthDatabase : RoomDatabase() {
 
     abstract fun strengthDao(): StrengthDao
+    abstract fun catalogueStagingDao(): CatalogueStagingDao
 
     companion object {
         @Volatile
@@ -685,6 +697,22 @@ abstract class StrengthDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_9_10 = object : androidx.room.migration.Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `catalogue_staging_release` (`channel` TEXT NOT NULL, `catalogueVersion` TEXT NOT NULL, `runtimeContractVersion` INTEGER NOT NULL, `schemaVersion` TEXT NOT NULL, `checksum` TEXT NOT NULL, `recordCount` INTEGER NOT NULL, `sourceCatalogueCommit` TEXT NOT NULL, `distributionScope` TEXT NOT NULL, PRIMARY KEY(`channel`))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `catalogue_staging_exercise` (`canonicalId` TEXT NOT NULL, `displayName` TEXT NOT NULL, `family` TEXT NOT NULL, `movementPattern` TEXT NOT NULL, `laterality` TEXT NOT NULL, `compoundOrIsolation` TEXT NOT NULL, `difficulty` TEXT NOT NULL, `classificationJson` TEXT NOT NULL, `anatomyJson` TEXT NOT NULL, `equipmentJson` TEXT NOT NULL, `coachingJson` TEXT NOT NULL, `keywordsJson` TEXT NOT NULL, `relationshipsJson` TEXT NOT NULL, PRIMARY KEY(`canonicalId`))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `catalogue_staging_alias` (`canonicalId` TEXT NOT NULL, `value` TEXT NOT NULL, `normalised` TEXT NOT NULL, `type` TEXT NOT NULL, `locale` TEXT, PRIMARY KEY(`canonicalId`, `normalised`, `type`), FOREIGN KEY(`canonicalId`) REFERENCES `catalogue_staging_exercise`(`canonicalId`) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_catalogue_staging_alias_canonicalId` ON `catalogue_staging_alias` (`canonicalId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_catalogue_staging_alias_normalised` ON `catalogue_staging_alias` (`normalised`)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `catalogue_staging_search_token` (`canonicalId` TEXT NOT NULL, `normalised` TEXT NOT NULL, `source` TEXT NOT NULL, PRIMARY KEY(`canonicalId`, `normalised`, `source`), FOREIGN KEY(`canonicalId`) REFERENCES `catalogue_staging_exercise`(`canonicalId`) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_catalogue_staging_search_token_canonicalId` ON `catalogue_staging_search_token` (`canonicalId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_catalogue_staging_search_token_normalised` ON `catalogue_staging_search_token` (`normalised`)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `catalogue_staging_relationship` (`sourceCanonicalId` TEXT NOT NULL, `targetCanonicalId` TEXT NOT NULL, `type` TEXT NOT NULL, PRIMARY KEY(`sourceCanonicalId`, `targetCanonicalId`, `type`), FOREIGN KEY(`sourceCanonicalId`) REFERENCES `catalogue_staging_exercise`(`canonicalId`) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY(`targetCanonicalId`) REFERENCES `catalogue_staging_exercise`(`canonicalId`) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_catalogue_staging_relationship_sourceCanonicalId` ON `catalogue_staging_relationship` (`sourceCanonicalId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_catalogue_staging_relationship_targetCanonicalId` ON `catalogue_staging_relationship` (`targetCanonicalId`)")
+            }
+        }
+
         fun getDatabase(context: Context, scope: CoroutineScope): StrengthDatabase {
             val appCtx = context.applicationContext
             android.util.Log.i("StrengthDatabase", "getDatabase called. Setting appContext references.")
@@ -699,7 +727,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         StrengthDatabase::class.java,
                         "strength_database"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                         .addCallback(StrengthDatabaseCallback(scope))
                         .build()
                     INSTANCE = instance

@@ -11,6 +11,8 @@ plugins {
 
 android {
   namespace = "com.example"
+
+  sourceSets["main"].assets.srcDir("../catalogue/runtime")
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
