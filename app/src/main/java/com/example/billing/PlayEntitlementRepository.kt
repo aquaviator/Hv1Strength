@@ -96,6 +96,10 @@ class PlayEntitlementRepository(
         if (cached != null && cached.isValidAt(now)) {
             return when (cached.status) {
                 "ACTIVE" -> AppAccessState.Subscribed(cached.expiryTimestampMillis)
+                "TRIAL_ACTIVE" -> {
+                    val daysRemaining = maxOf(1, ((cached.expiryTimestampMillis - now) / (24L * 60L * 60L * 1000L)).toInt())
+                    AppAccessState.TrialActive(daysRemaining, cached.expiryTimestampMillis)
+                }
                 "CANCELLED_ACTIVE" -> AppAccessState.SubscriptionActiveUntilExpiry(cached.expiryTimestampMillis)
                 "GRACE_PERIOD" -> AppAccessState.GracePeriod
                 else -> AppAccessState.Subscribed(cached.expiryTimestampMillis)
@@ -114,23 +118,29 @@ class PlayEntitlementRepository(
                 if (verifySuccess) {
                     val updatedCached = _cachedEntitlement.value
                     if (updatedCached != null && updatedCached.isValidAt(now)) {
-                        return AppAccessState.Subscribed(updatedCached.expiryTimestampMillis)
+                        return when (updatedCached.status) {
+                            "TRIAL_ACTIVE" -> {
+                                val daysRemaining = maxOf(1, ((updatedCached.expiryTimestampMillis - now) / (24L * 60L * 60L * 1000L)).toInt())
+                                AppAccessState.TrialActive(daysRemaining, updatedCached.expiryTimestampMillis)
+                            }
+                            else -> AppAccessState.Subscribed(updatedCached.expiryTimestampMillis)
+                        }
                     }
                 }
             }
             is SubscriptionState.PurchasePending -> {
-                // If trial is still active, trial applies. Otherwise PaymentPending.
-                val trialState = checkTrialState(profileCreatedAt, now)
-                if (trialState is AppAccessState.TrialActive) {
-                    return trialState
-                }
                 return AppAccessState.PaymentPending
             }
             else -> {}
         }
 
-        // 3. Fallback to 30-day introductory trial
-        return checkTrialState(profileCreatedAt, now)
+        // 3. Fallback evaluation mode (DEBUG / Developer build preview only)
+        // In production, Google Play owns the 1-month introductory trial offer authority.
+        return if (com.example.BuildConfig.DEBUG) {
+            checkTrialState(profileCreatedAt, now)
+        } else {
+            AppAccessState.Expired
+        }
     }
 
     private fun checkTrialState(profileCreatedAt: Long?, nowMillis: Long): AppAccessState {

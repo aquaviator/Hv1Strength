@@ -5,4 +5,7 @@ object CommercialConfig {
     const val BASE_PLAN_ID_ANNUAL = "annual-base-plan"
     const val PLANNED_UK_PRICE = "£24.00/year"
     const val PLANNED_INTRO_OFFER = "1 month free trial"
+    const val PACKAGE_NAME = "com.aistudio.humanstrength.kfqjza"
+    const val VERIFICATION_ENDPOINT_URL = "https://europe-west1-hv1-platform.cloudfunctions.net/verifyPurchase"
 }
+
