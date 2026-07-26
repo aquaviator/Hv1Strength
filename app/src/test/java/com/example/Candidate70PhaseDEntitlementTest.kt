@@ -124,10 +124,10 @@ class Candidate70PhaseDEntitlementTest {
             productId = CommercialConfig.PRODUCT_ID_ANNUAL,
             orderId = "GPA.1111-2222-3333-44444"
         )
-        assertTrue(verifyResult is VerificationResult.Success)
+        assertTrue("Expected VerificationResult.Success but was $verifyResult", verifyResult is VerificationResult.Success)
 
         authRepository.signOut(keepLocalData = true)
         val authState = authRepository.authState.value
-        assertTrue(authState is AuthState.Offline || authState is AuthState.Initial)
+        assertTrue("Expected AuthState.Offline or Initial but was $authState", authState is AuthState.Offline || authState is AuthState.Initial)
     }
 }

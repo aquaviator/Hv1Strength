@@ -33,16 +33,35 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.rtdnHandler = exports.verifyPurchase = void 0;
-exports.mapPlayStateToEntitlementStatus = mapPlayStateToEntitlementStatus;
+exports.rtdnHandler = exports.verifyPurchase = exports.FUNCTION_REGION = exports.EXPECTED_PRODUCT_ID = exports.EXPECTED_PACKAGE_NAME = void 0;
 exports.getPurchaseDocId = getPurchaseDocId;
-const functions = __importStar(require("firebase-functions"));
+exports.getPlayDeveloperClient = getPlayDeveloperClient;
+exports.mapPlayStateToEntitlementStatus = mapPlayStateToEntitlementStatus;
+exports.verifyTokenWithGooglePlay = verifyTokenWithGooglePlay;
+const https_1 = require("firebase-functions/v2/https");
+const pubsub_1 = require("firebase-functions/v2/pubsub");
+const logger = __importStar(require("firebase-functions/logger"));
 const admin = __importStar(require("firebase-admin"));
 const googleapis_1 = require("googleapis");
-admin.initializeApp();
+const crypto = __importStar(require("crypto"));
+if (!admin.apps.length) {
+    admin.initializeApp();
+}
 const db = admin.firestore();
-const EXPECTED_PACKAGE_NAME = "com.aistudio.humanstrength.kfqjza";
-const EXPECTED_PRODUCT_ID = "human_strength_annual";
+exports.EXPECTED_PACKAGE_NAME = "com.aistudio.humanstrength.kfqjza";
+exports.EXPECTED_PRODUCT_ID = "human_strength_annual";
+exports.FUNCTION_REGION = "europe-west1";
+/**
+ * Creates a cryptographically secure one-way hash for purchase token doc IDs.
+ * Protects sensitive purchase token data by using SHA-256 without exposing raw token material.
+ */
+function getPurchaseDocId(purchaseToken) {
+    if (!purchaseToken) {
+        return "play_unknown";
+    }
+    const hash = crypto.createHash("sha256").update(purchaseToken).digest("hex");
+    return `play_${hash.substring(0, 32)}`;
+}
 /**
  * Creates an authorized Google Play Developer API client if service credentials exist.
  */
@@ -54,20 +73,18 @@ async function getPlayDeveloperClient() {
         return googleapis_1.google.androidpublisher({ version: "v3", auth });
     }
     catch (error) {
-        functions.logger.warn("Google Auth not initialized for Play API, using fallback mode:", error);
+        logger.warn("Google Auth initialization failed for Play Developer API:", error?.message || error);
         return null;
     }
 }
 /**
- * Maps raw Google Play subscription state or notification event into entitlement status.
+ * Maps raw Google Play subscription state and offer metadata into entitlement status.
+ * Fails CLOSED on unknown states by returning EXPIRED rather than granting access.
  */
 function mapPlayStateToEntitlementStatus(subscriptionState, expiryMillis, isTrial, nowMillis = Date.now()) {
-    if (expiryMillis <= nowMillis && subscriptionState !== "SUBSCRIPTION_STATE_IN_GRACE_PERIOD") {
-        return "EXPIRED";
-    }
     switch (subscriptionState) {
         case "SUBSCRIPTION_STATE_ACTIVE":
-            return isTrial ? "TRIAL_ACTIVE" : "ACTIVE";
+            return expiryMillis <= nowMillis ? "EXPIRED" : (isTrial ? "TRIAL_ACTIVE" : "ACTIVE");
         case "SUBSCRIPTION_STATE_IN_GRACE_PERIOD":
             return "GRACE_PERIOD";
         case "SUBSCRIPTION_STATE_ON_HOLD":
@@ -78,198 +95,276 @@ function mapPlayStateToEntitlementStatus(subscriptionState, expiryMillis, isTria
             return expiryMillis > nowMillis ? "CANCELLED_ACTIVE" : "EXPIRED";
         case "SUBSCRIPTION_STATE_EXPIRED":
             return "EXPIRED";
+        case "SUBSCRIPTION_STATE_REVOKED":
+            return "REVOKED";
         case "SUBSCRIPTION_STATE_PENDING":
             return "PENDING";
         default:
-            return isTrial ? "TRIAL_ACTIVE" : "ACTIVE";
+            // Fail closed: Unknown subscription states must NEVER grant access.
+            return "EXPIRED";
     }
 }
 /**
- * Generates a deterministic document ID for a purchase token.
+ * Performs authoritative Google Play Developer API verification for a purchase token.
+ * Validates package name, product ID, and expiry date strictly without fail-open fallbacks.
  */
-function getPurchaseDocId(purchaseToken) {
-    let hash = 0;
-    for (let i = 0; i < purchaseToken.length; i++) {
-        const char = purchaseToken.charCodeAt(i);
-        hash = (hash << 5) - hash + char;
-        hash |= 0;
+async function verifyTokenWithGooglePlay(playClient, purchaseToken, targetPackage = exports.EXPECTED_PACKAGE_NAME, targetProduct = exports.EXPECTED_PRODUCT_ID, nowMillis = Date.now()) {
+    if (targetPackage !== exports.EXPECTED_PACKAGE_NAME) {
+        return {
+            success: false,
+            error: {
+                code: "PRODUCT_MISMATCH",
+                message: `Package name mismatch: expected ${exports.EXPECTED_PACKAGE_NAME}, got ${targetPackage}`
+            }
+        };
     }
-    return `play_${Math.abs(hash)}_${purchaseToken.substring(0, Math.min(10, purchaseToken.length))}`;
+    if (targetProduct !== exports.EXPECTED_PRODUCT_ID) {
+        return {
+            success: false,
+            error: {
+                code: "PRODUCT_MISMATCH",
+                message: `Product ID mismatch: expected ${exports.EXPECTED_PRODUCT_ID}, got ${targetProduct}`
+            }
+        };
+    }
+    if (!playClient) {
+        return {
+            success: false,
+            error: {
+                code: "BACKEND_CONFIGURATION_ERROR",
+                message: "Google Play Developer API client is unavailable on backend"
+            }
+        };
+    }
+    try {
+        const response = await playClient.purchases.subscriptionsv2.get({
+            packageName: targetPackage,
+            token: purchaseToken
+        });
+        const subData = response?.data;
+        if (!subData) {
+            return {
+                success: false,
+                error: {
+                    code: "INVALID_PURCHASE",
+                    message: "Empty response received from Google Play Developer API"
+                }
+            };
+        }
+        // Product validation: find matching line item for EXPECTED_PRODUCT_ID
+        const lineItems = subData.lineItems || [];
+        const matchingLineItem = lineItems.find((item) => item.productId === targetProduct);
+        if (!matchingLineItem) {
+            return {
+                success: false,
+                error: {
+                    code: "PRODUCT_MISMATCH",
+                    message: `Purchase token does not contain line item matching expected product ${targetProduct}`
+                }
+            };
+        }
+        // Expiry validation: must come authoritatively from Google Play line item
+        if (!matchingLineItem.expiryTime) {
+            return {
+                success: false,
+                error: {
+                    code: "MALFORMED_REQUEST",
+                    message: "Google Play subscription line item is missing mandatory expiry time"
+                }
+            };
+        }
+        const expiryTimeMillis = new Date(matchingLineItem.expiryTime).getTime();
+        if (isNaN(expiryTimeMillis)) {
+            return {
+                success: false,
+                error: {
+                    code: "MALFORMED_REQUEST",
+                    message: "Google Play subscription line item contains invalid expiry timestamp"
+                }
+            };
+        }
+        const autoRenew = matchingLineItem.autoRenewingPlan?.autoRenewEnabled ?? false;
+        const subState = subData.subscriptionState || "SUBSCRIPTION_STATE_UNSPECIFIED";
+        // Trial validation: strictly check offerDetails tags, NO duration-based guessing
+        const offerTags = matchingLineItem.offerDetails?.offerTags || [];
+        const isTrialOffer = offerTags.includes("free-trial") || offerTags.includes("introductory-trial");
+        const status = mapPlayStateToEntitlementStatus(subState, expiryTimeMillis, isTrialOffer, nowMillis);
+        const verifiedEntitlement = {
+            productId: targetProduct,
+            status: status,
+            expiryTimestampMillis: expiryTimeMillis,
+            autoRenewEnabled: autoRenew,
+            verificationTimestampMillis: nowMillis,
+            source: "GOOGLE_PLAY_BACKEND"
+        };
+        return { success: true, entitlement: verifiedEntitlement };
+    }
+    catch (apiErr) {
+        const statusCode = apiErr?.code || apiErr?.status || apiErr?.response?.status;
+        logger.warn(`Google Play Developer API lookup failed (status=${statusCode}):`, apiErr?.message || apiErr);
+        if (statusCode === 404 || statusCode === 400) {
+            return {
+                success: false,
+                error: {
+                    code: "INVALID_PURCHASE",
+                    message: "Purchase token not found or invalid on Google Play"
+                }
+            };
+        }
+        else if (statusCode === 401 || statusCode === 403) {
+            return {
+                success: false,
+                error: {
+                    code: "BACKEND_CONFIGURATION_ERROR",
+                    message: "Backend unauthorized to query Google Play Developer API"
+                }
+            };
+        }
+        else {
+            return {
+                success: false,
+                error: {
+                    code: "PLAY_API_UNAVAILABLE",
+                    message: "Google Play Developer API is temporarily unavailable"
+                }
+            };
+        }
+    }
 }
 /**
- * Cloud Function HTTPS Endpoint: verifyPurchase
- * Verifies purchase token against Google Play Developer API and writes to Firestore.
+ * Cloud Function HTTPS Endpoint: verifyPurchase (Gen 2)
+ * Region: europe-west1
+ * Performs strict, fail-closed verification of purchase tokens against Google Play.
  */
-exports.verifyPurchase = functions.https.onRequest(async (req, res) => {
-    // CORS & Security headers
-    res.set("Access-Control-Allow-Origin", "*");
-    res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    if (req.method === "OPTIONS") {
-        res.status(204).send("");
+exports.verifyPurchase = (0, https_1.onRequest)({ region: exports.FUNCTION_REGION }, async (req, res) => {
+    // Only allow POST requests for native Android client calls
+    if (req.method !== "POST") {
+        res.status(405).json({
+            code: "MALFORMED_REQUEST",
+            message: "Method Not Allowed. Only POST is supported."
+        });
         return;
     }
     try {
         const { purchaseToken, productId, packageName } = req.body || {};
         if (!purchaseToken || typeof purchaseToken !== "string" || purchaseToken.trim() === "") {
-            res.status(400).json({ error: "Missing or invalid purchaseToken" });
+            res.status(400).json({
+                code: "INVALID_PURCHASE",
+                message: "Missing or empty purchaseToken parameter"
+            });
             return;
         }
-        const targetPackage = packageName || EXPECTED_PACKAGE_NAME;
-        const targetProduct = productId || EXPECTED_PRODUCT_ID;
-        if (targetPackage !== EXPECTED_PACKAGE_NAME) {
-            res.status(400).json({ error: `Invalid package name: ${targetPackage}` });
+        const targetPackage = packageName || exports.EXPECTED_PACKAGE_NAME;
+        const targetProduct = productId || exports.EXPECTED_PRODUCT_ID;
+        if (targetPackage !== exports.EXPECTED_PACKAGE_NAME) {
+            res.status(400).json({
+                code: "PRODUCT_MISMATCH",
+                message: `Package name mismatch: expected ${exports.EXPECTED_PACKAGE_NAME}`
+            });
             return;
         }
-        if (targetProduct !== EXPECTED_PRODUCT_ID) {
-            res.status(400).json({ error: `Invalid product ID: ${targetProduct}` });
+        if (targetProduct !== exports.EXPECTED_PRODUCT_ID) {
+            res.status(400).json({
+                code: "PRODUCT_MISMATCH",
+                message: `Product ID mismatch: expected ${exports.EXPECTED_PRODUCT_ID}`
+            });
             return;
         }
-        const now = Date.now();
+        const nowMillis = Date.now();
         const playClient = await getPlayDeveloperClient();
-        let verifiedEntitlement;
-        if (playClient) {
-            try {
-                const response = await playClient.purchases.subscriptionsv2.get({
-                    packageName: targetPackage,
-                    token: purchaseToken
-                });
-                const subData = response.data;
-                const lineItem = subData.lineItems && subData.lineItems[0];
-                const expiryTime = lineItem?.expiryTime ? new Date(lineItem.expiryTime).getTime() : now + (365 * 24 * 60 * 60 * 1000);
-                const autoRenew = lineItem?.autoRenewingPlan?.autoRenewEnabled ?? true;
-                const subState = subData.subscriptionState || "SUBSCRIPTION_STATE_ACTIVE";
-                const isTrialOffer = lineItem?.offerDetails?.offerTags?.includes("free-trial") || subState === "SUBSCRIPTION_STATE_ACTIVE" && (expiryTime - now) <= (31 * 24 * 60 * 60 * 1000);
-                const status = mapPlayStateToEntitlementStatus(subState, expiryTime, Boolean(isTrialOffer), now);
-                verifiedEntitlement = {
-                    productId: targetProduct,
-                    status: status,
-                    expiryTimestampMillis: expiryTime,
-                    autoRenewEnabled: autoRenew,
-                    verificationTimestampMillis: now,
-                    source: "GOOGLE_PLAY_BACKEND"
-                };
+        const result = await verifyTokenWithGooglePlay(playClient, purchaseToken, targetPackage, targetProduct, nowMillis);
+        if (!result.success) {
+            let httpStatus = 400;
+            if (result.error.code === "BACKEND_CONFIGURATION_ERROR") {
+                httpStatus = 503;
             }
-            catch (apiErr) {
-                functions.logger.warn("Play Developer API lookup failed, evaluating verification boundary rules:", apiErr?.message);
-                // Fallback for valid token in fallback mode
-                const oneYear = 365 * 24 * 60 * 60 * 1000;
-                verifiedEntitlement = {
-                    productId: targetProduct,
-                    status: "ACTIVE",
-                    expiryTimestampMillis: now + oneYear,
-                    autoRenewEnabled: true,
-                    verificationTimestampMillis: now,
-                    source: "GOOGLE_PLAY_BACKEND"
-                };
+            else if (result.error.code === "PLAY_API_UNAVAILABLE") {
+                httpStatus = 502;
             }
+            res.status(httpStatus).json(result.error);
+            return;
         }
-        else {
-            // Standalone verification fallback
-            const oneYear = 365 * 24 * 60 * 60 * 1000;
-            verifiedEntitlement = {
-                productId: targetProduct,
-                status: "ACTIVE",
-                expiryTimestampMillis: now + oneYear,
-                autoRenewEnabled: true,
-                verificationTimestampMillis: now,
-                source: "GOOGLE_PLAY_BACKEND"
-            };
-        }
-        // Persist entitlement in Firestore collection 'entitlements'
+        // Persist verified entitlement in Firestore 'entitlements' collection using SHA-256 doc ID
         const docId = getPurchaseDocId(purchaseToken);
         await db.collection("entitlements").doc(docId).set({
-            ...verifiedEntitlement,
-            purchaseToken: purchaseToken,
+            ...result.entitlement,
             packageName: targetPackage,
             lastUpdated: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
-        functions.logger.info(`Verified entitlement for token doc ${docId}: status=${verifiedEntitlement.status}`);
-        res.status(200).json(verifiedEntitlement);
+        logger.info(`Successfully verified entitlement for doc ${docId}: status=${result.entitlement.status}`);
+        res.status(200).json(result.entitlement);
     }
     catch (error) {
-        functions.logger.error("Verification endpoint internal error:", error);
-        res.status(500).json({ error: "Internal verification failure", message: error?.message });
+        logger.error("Internal server error during verification:", error?.message || error);
+        res.status(500).json({
+            code: "PLAY_API_UNAVAILABLE",
+            message: "Internal server error during purchase verification"
+        });
     }
 });
 /**
- * Cloud Function Pub/Sub Trigger: rtdnHandler
- * Processes Google Play Real-Time Developer Notifications idempotently.
+ * Cloud Function Pub/Sub Trigger: rtdnHandler (Gen 2)
+ * Region: europe-west1
+ * Listens to Google Play Real-Time Developer Notifications (RTDN),
+ * validates package identity, re-queries Google Play authoritatively, and updates Firestore.
  */
-exports.rtdnHandler = functions.pubsub
-    .topic("play-rtdn-topic")
-    .onPublish(async (message) => {
+exports.rtdnHandler = (0, pubsub_1.onMessagePublished)({ topic: "play-rtdn-topic", region: exports.FUNCTION_REGION }, async (event) => {
     try {
-        const payloadString = message.data ? Buffer.from(message.data, "base64").toString() : "{}";
+        const messageData = event.data?.message?.data;
+        if (!messageData) {
+            logger.warn("RTDN Pub/Sub event received without message data payload.");
+            return;
+        }
+        const payloadString = Buffer.from(messageData, "base64").toString("utf-8");
         const notificationData = JSON.parse(payloadString);
-        functions.logger.info("Received RTDN notification:", notificationData);
+        // Package Name Validation: Only process notifications for com.aistudio.humanstrength.kfqjza
+        if (notificationData.packageName && notificationData.packageName !== exports.EXPECTED_PACKAGE_NAME) {
+            logger.warn(`Received RTDN for unexpected package: ${notificationData.packageName}. Ignoring.`);
+            return;
+        }
         const subNotification = notificationData.subscriptionNotification;
         if (!subNotification) {
-            functions.logger.info("Non-subscription notification received, ignoring.");
+            logger.info("Non-subscription notification received, ignoring.");
             return;
         }
-        const { purchaseToken, subscriptionId, notificationType } = subNotification;
-        if (!purchaseToken) {
-            functions.logger.warn("RTDN missing purchaseToken");
+        const purchaseToken = subNotification.purchaseToken;
+        if (!purchaseToken || typeof purchaseToken !== "string") {
+            logger.warn("RTDN subscription notification missing purchaseToken.");
             return;
         }
-        const now = Date.now();
+        const nowMillis = Date.now();
         const docId = getPurchaseDocId(purchaseToken);
-        // Check for duplicate or stale message processing
+        // Authoritative Google Play Developer API Re-Query
+        const playClient = await getPlayDeveloperClient();
+        const verificationResult = await verifyTokenWithGooglePlay(playClient, purchaseToken, exports.EXPECTED_PACKAGE_NAME, exports.EXPECTED_PRODUCT_ID, nowMillis);
+        if (!verificationResult.success) {
+            logger.warn(`RTDN authoritative Play re-query failed (${verificationResult.error.code}: ${verificationResult.error.message}). Entitlement state not mutated.`);
+            return;
+        }
+        const newEntitlement = verificationResult.entitlement;
         const docRef = db.collection("entitlements").doc(docId);
         const existingDoc = await docRef.get();
-        let newStatus = "ACTIVE";
-        let autoRenew = true;
-        let expiryTime = now + (365 * 24 * 60 * 60 * 1000);
-        // Map notificationType:
-        // 1: RECOVERED / RENEWED, 2: CANCELED, 3: PURCHASED, 4: ON_HOLD, 5: IN_GRACE_PERIOD, 6: RESTARTED, 12: EXPIRED, 13: REVOKED
-        switch (notificationType) {
-            case 1: // RENEWED
-            case 3: // PURCHASED
-            case 6: // RESTARTED
-                newStatus = "ACTIVE";
-                autoRenew = true;
-                break;
-            case 2: // CANCELED
-                newStatus = "CANCELLED_ACTIVE";
-                autoRenew = false;
-                if (existingDoc.exists) {
-                    expiryTime = existingDoc.data()?.expiryTimestampMillis || expiryTime;
-                }
-                break;
-            case 4: // ON_HOLD
-                newStatus = "ACCOUNT_HOLD";
-                break;
-            case 5: // IN_GRACE_PERIOD
-                newStatus = "GRACE_PERIOD";
-                break;
-            case 12: // EXPIRED
-                newStatus = "EXPIRED";
-                autoRenew = false;
-                expiryTime = now - 1000;
-                break;
-            case 13: // REVOKED
-                newStatus = "REVOKED";
-                autoRenew = false;
-                expiryTime = now - 1000;
-                break;
-            default:
-                newStatus = "ACTIVE";
+        // Idempotency / Stale Event Guard
+        if (existingDoc.exists) {
+            const existingData = existingDoc.data();
+            if (existingData?.verificationTimestampMillis &&
+                existingData.verificationTimestampMillis > newEntitlement.verificationTimestampMillis) {
+                logger.info(`Skipping stale RTDN update for ${docId}: existing timestamp is newer.`);
+                return;
+            }
         }
         const updatedRecord = {
-            productId: subscriptionId || EXPECTED_PRODUCT_ID,
-            status: newStatus,
-            expiryTimestampMillis: expiryTime,
-            autoRenewEnabled: autoRenew,
-            verificationTimestampMillis: now,
+            ...newEntitlement,
             source: "GOOGLE_PLAY_RTDN",
-            lastRtdnNotificationType: notificationType,
+            packageName: exports.EXPECTED_PACKAGE_NAME,
+            lastRtdnNotificationType: subNotification.notificationType ?? null,
             lastUpdated: admin.firestore.FieldValue.serverTimestamp()
         };
         await docRef.set(updatedRecord, { merge: true });
-        functions.logger.info(`Idempotently updated entitlement ${docId} from RTDN type ${notificationType} to ${newStatus}`);
+        logger.info(`Updated entitlement ${docId} from RTDN to authoritative status ${newEntitlement.status}`);
     }
     catch (err) {
-        functions.logger.error("Error processing RTDN message:", err);
+        logger.error("Error processing RTDN message:", err?.message || err);
     }
 });
 //# sourceMappingURL=index.js.map
