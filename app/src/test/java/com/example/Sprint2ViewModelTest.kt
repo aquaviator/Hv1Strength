@@ -133,7 +133,7 @@ class Sprint2ViewModelTest {
         assertEquals(15.0f, weights.first().bodyFat)
 
         // Verify we got the backup item for undo
-        idleLooper()
+        waitUntil { backupWeight != null }
         assertNotNull(backupWeight)
         assertEquals(80.5f, backupWeight!!.weight)
 

@@ -46,8 +46,8 @@ class Candidate60PhaseBBrandFoundationTest {
 
     @Test
     fun testCentralTokenAvailability() {
-        // Verify Electric Royal Blue derived from master SVG artwork #0066FF
-        assertEquals(Color(0xFF0066FF), HumanElectricBlue)
+        // Verify Electric Royal Blue derived from master SVG artwork #0072FF
+        assertEquals(Color(0xFF0072FF), HumanElectricBlue)
 
         // Verify Dark Graphite Background derived from master logo #0A0D10
         assertEquals(Color(0xFF0A0D10), HumanDarkBackground)
