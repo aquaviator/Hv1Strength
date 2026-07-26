@@ -89,58 +89,16 @@ fun WelcomeScreen(
         ) {
             Spacer(modifier = Modifier.height(48.dp))
 
-            // App Brand Header - Canonical Clean Branding
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+            // App Brand Header - Canonical Master Banner Lockup
+            Image(
+                painter = painterResource(id = com.example.R.drawable.human_brand_lockup_mobile),
+                contentDescription = "Human V1 Strength Brand Lockup",
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("welcome_logo_card")
-            ) {
-                Image(
-                    painter = painterResource(id = com.example.R.drawable.human_logo),
-                    contentDescription = "Human Strength Symbol",
-                    modifier = Modifier
-                        .size(80.dp)
-                        .testTag("welcome_human_logo")
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "HUMAN V1",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 2.sp
-                        ),
-                        color = Color.White
-                    )
-                    Surface(
-                        color = Color(0xFF0072FF),
-                        shape = RoundedCornerShape(4.dp)
-                    ) {
-                        Text(
-                            text = "STRENGTH",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
-                            ),
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "TRAIN. TRACK. TRANSFORM.",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.5.sp
-                    ),
-                    color = Color(0xFF0072FF)
-                )
-            }
+                    .fillMaxWidth(0.85f)
+                    .padding(vertical = 8.dp)
+                    .testTag("welcome_logo_card"),
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit
+            )
 
             Spacer(modifier = Modifier.height(40.dp))
 

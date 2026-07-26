@@ -102,8 +102,8 @@ class Candidate60PhaseBBrandFoundationTest {
         val logoId = context.resources.getIdentifier("human_logo", "drawable", context.packageName)
         assertTrue("human_logo resource must exist", logoId != 0)
 
-        val launcherId = context.resources.getIdentifier("human_launcher", "drawable", context.packageName)
-        assertTrue("human_launcher resource must exist", launcherId != 0)
+        val launcherId = context.resources.getIdentifier("human_launcher_fg", "drawable", context.packageName)
+        assertTrue("human_launcher_fg resource must exist", launcherId != 0)
 
         val splashIconId = context.resources.getIdentifier("ic_splash_icon", "drawable", context.packageName)
         assertTrue("ic_splash_icon resource must exist", splashIconId != 0)

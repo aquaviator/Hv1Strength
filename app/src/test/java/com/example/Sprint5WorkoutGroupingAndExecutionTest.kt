@@ -243,6 +243,7 @@ class Sprint5WorkoutGroupingAndExecutionTest {
         assertEquals("test-group-session", activeState.activeSessionId)
 
         // Generate and verify queue
+        waitUntil { activeWorkoutViewModel.executionQueue.value.isNotEmpty() }
         val queue = activeWorkoutViewModel.executionQueue.value
         assertEquals(4, queue.size)
 
