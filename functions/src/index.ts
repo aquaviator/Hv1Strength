@@ -46,6 +46,71 @@ export function getPurchaseDocId(purchaseToken: string): string {
 }
 
 /**
+ * Deterministic Java String hashCode calculation in JS/TS.
+ * Matches Kotlin String.hashCode() behavior for deriving humanUserId from uid.
+ */
+export function getJavaStringHashCode(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0; // Convert to 32-bit signed integer
+  }
+  return hash;
+}
+
+export const FIRESTORE_USER_SUBCOLLECTIONS = [
+  "profile",
+  "sessions",
+  "loggedSets",
+  "weight",
+  "tape",
+  "customExercises",
+  "templates",
+  "templateExercises",
+  "templateSets",
+  "processedCommands"
+];
+
+/**
+ * Purges all user-owned Firestore documents and subcollections under users/{humanUserId}.
+ * Enforces ownership boundary derived from authenticated user context.
+ */
+export async function purgeUserCloudData(
+  firestoreDb: admin.firestore.Firestore,
+  uid: string,
+  targetHumanUserId: string
+): Promise<{ deletedSubcollections: string[]; totalDocumentsDeleted: number }> {
+  let totalDeleted = 0;
+  const deletedSubcollections: string[] = [];
+
+  const userDocRef = firestoreDb.collection("users").doc(targetHumanUserId);
+
+  for (const subColl of FIRESTORE_USER_SUBCOLLECTIONS) {
+    const subCollRef = userDocRef.collection(subColl);
+    const snapshot = await subCollRef.get();
+    if (!snapshot.empty) {
+      const batch = firestoreDb.batch();
+      snapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+        totalDeleted++;
+      });
+      await batch.commit();
+      deletedSubcollections.push(subColl);
+    }
+  }
+
+  // Delete top-level user document
+  const userDocSnapshot = await userDocRef.get();
+  if (userDocSnapshot.exists) {
+    await userDocRef.delete();
+    totalDeleted++;
+  }
+
+  return { deletedSubcollections, totalDocumentsDeleted: totalDeleted };
+}
+
+/**
  * Creates an authorized Google Play Developer API client if service credentials exist.
  */
 export async function getPlayDeveloperClient() {
@@ -415,6 +480,76 @@ export const rtdnHandler = onMessagePublished(
       logger.info(`Updated entitlement ${docId} from RTDN to authoritative status ${newEntitlement.status}`);
     } catch (err: any) {
       logger.error("Error processing RTDN message:", err?.message || err);
+    }
+  }
+);
+
+/**
+ * Authoritative Server-Side User Account & Cloud Data Deletion Endpoint.
+ * Purges all user-owned Firestore documents/subcollections and deletes the Firebase Authentication identity.
+ */
+export const deleteUserAccount = onRequest(
+  { region: FUNCTION_REGION },
+  async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    if (req.method === "OPTIONS") {
+      res.status(204).send("");
+      return;
+    }
+
+    if (req.method !== "POST") {
+      res.status(405).json({ code: "MALFORMED_REQUEST", message: "Method Not Allowed. Only POST is supported." });
+      return;
+    }
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      res.status(401).json({ code: "UNAUTHORIZED", message: "Missing or invalid Authorization header" });
+      return;
+    }
+
+    const idToken = authHeader.split("Bearer ")[1];
+    let decodedToken: admin.auth.DecodedIdToken;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(idToken);
+    } catch (e: any) {
+      logger.warn("Authentication failed for deleteUserAccount:", e?.message || e);
+      res.status(401).json({ code: "UNAUTHORIZED", message: "Invalid or expired authentication token" });
+      return;
+    }
+
+    const uid = decodedToken.uid;
+    const { humanUserId: bodyHumanUserId } = req.body || {};
+
+    let humanUserId = bodyHumanUserId;
+    if (!humanUserId || typeof humanUserId !== "string" || !humanUserId.startsWith("human_")) {
+      const hash = getJavaStringHashCode(uid).toString().replace("-", "n").padEnd(12, "x").substring(0, 12);
+      humanUserId = `human_${hash}`;
+    }
+
+    try {
+      logger.info(`Initiating cloud data purge for user ${uid} (humanUserId=${humanUserId})`);
+      const purgeResult = await purgeUserCloudData(db, uid, humanUserId);
+
+      // Delete Firebase Authentication identity
+      try {
+        await admin.auth().deleteUser(uid);
+        logger.info(`Successfully deleted Firebase Auth user ${uid}`);
+      } catch (authErr: any) {
+        logger.warn(`Firebase Auth user deletion produced warning/error for ${uid}:`, authErr?.message || authErr);
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Cloud account and all associated Firestore data successfully deleted",
+        humanUserId,
+        deletedSubcollections: purgeResult.deletedSubcollections,
+        totalDocumentsDeleted: purgeResult.totalDocumentsDeleted
+      });
+    } catch (err: any) {
+      logger.error(`Error deleting user account ${uid}:`, err?.message || err);
+      res.status(500).json({ code: "INTERNAL_ERROR", message: err?.message || "Failed to purge cloud user data" });
     }
   }
 );

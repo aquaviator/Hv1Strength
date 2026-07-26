@@ -69,6 +69,8 @@ fun ProfileScreen(
     var exportedCsvText by remember { mutableStateOf("") }
     var showDeleteLocalDataDialog by remember { mutableStateOf(false) }
     var showPlayBillingComingSoonDialog by remember { mutableStateOf(false) }
+    var showDeleteAccountDialog by remember { mutableStateOf(false) }
+    var isDeletingAccount by remember { mutableStateOf(false) }
 
     // Navigation back if session is cleared
     LaunchedEffect(authState) {
@@ -558,7 +560,7 @@ fun ProfileScreen(
             }
 
             // ==========================================
-            // SECTION 5: SUPPORT
+            // SECTION 5: SUPPORT & LEGAL
             // ==========================================
             Card(
                 modifier = Modifier.fillMaxWidth().testTag("profile_support_section"),
@@ -571,17 +573,18 @@ fun ProfileScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "SUPPORT",
+                        text = "SUPPORT & LEGAL",
                         style = MaterialTheme.typography.titleSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
                         color = MaterialTheme.colorScheme.primary
                     )
 
-                    // Contact Support Row
+                    // Help & Support Row
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                Toast.makeText(context, "Support portal is coming soon!", Toast.LENGTH_SHORT).show()
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://humanv1.com/support/"))
+                                context.startActivity(intent)
                             }
                             .padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -591,7 +594,7 @@ fun ProfileScreen(
                             Icon(Icons.Default.HelpOutline, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                             Column {
                                 Text("Help & Support", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                                Text("Coming soon", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                Text("https://humanv1.com/support/", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                             }
                         }
                         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
@@ -602,7 +605,8 @@ fun ProfileScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                Toast.makeText(context, "Privacy Policy is coming soon!", Toast.LENGTH_SHORT).show()
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://humanv1.com/privacy/"))
+                                context.startActivity(intent)
                             }
                             .padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -612,7 +616,7 @@ fun ProfileScreen(
                             Icon(Icons.Default.PrivacyTip, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                             Column {
                                 Text("Privacy Policy", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                                Text("Coming soon", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                Text("https://humanv1.com/privacy/", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                             }
                         }
                         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
@@ -623,7 +627,8 @@ fun ProfileScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                Toast.makeText(context, "Terms of Service are coming soon!", Toast.LENGTH_SHORT).show()
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://humanv1.com/terms/"))
+                                context.startActivity(intent)
                             }
                             .padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -633,7 +638,29 @@ fun ProfileScreen(
                             Icon(Icons.Default.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                             Column {
                                 Text("Terms of Service", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                                Text("Coming soon", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                Text("https://humanv1.com/terms/", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
+                    }
+
+                    // Data Deletion Web Request Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://humanv1.com/data-deletion/"))
+                                context.startActivity(intent)
+                            }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Column {
+                                Text("Web Data Deletion Request", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                Text("https://humanv1.com/data-deletion/", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                             }
                         }
                         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
@@ -641,20 +668,23 @@ fun ProfileScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-                    // Subscription Management Row (COMING SOON)
+                    // Subscription Management Row
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { showPlayBillingComingSoonDialog = true }
+                            .clickable {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/account/subscriptions"))
+                                context.startActivity(intent)
+                            }
                             .padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.SettingsApplications, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.SettingsApplications, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                             Column {
-                                Text("Subscription Management", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                                Text("Coming soon (Candidate 4B)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                Text("Google Play Subscriptions", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                Text("Manage active Google Play subscription", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                             }
                         }
                         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
@@ -697,6 +727,42 @@ fun ProfileScreen(
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Cloud Account Deletion Card (Only shown for authenticated cloud users)
+            if (userProfile?.authProvider == "google" || userProfile?.isOfflineUser == false) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().testTag("profile_cloud_account_section"),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                            Text("Delete Human Cloud Account", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
+                        }
+                        Text(
+                            text = "Permanently purges all cloud backups and deletes your Human identity. Local workout history on this device will remain intact as unlinked offline data.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Button(
+                            onClick = { showDeleteAccountDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("delete_cloud_account_button")
+                        ) {
+                            Text("Delete Cloud Account", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
             // Danger Zone Sign Out
@@ -716,6 +782,84 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+
+    // Cloud Account Deletion Confirmation Dialog
+    if (showDeleteAccountDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isDeletingAccount) showDeleteAccountDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                    Text("Delete Cloud Account", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Are you sure you want to permanently delete your Human cloud account?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "• All user-owned cloud backups and profile data in Firestore will be permanently purged.\n" +
+                               "• All local workout history, logged sets, custom exercises, routines, and body measurements on this device WILL be preserved as unlinked offline training history.\n" +
+                               "• IMPORTANT: Deleting your Human account DOES NOT cancel an active Google Play subscription.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/account/subscriptions"))
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.align(Alignment.Start)
+                    ) {
+                        Text("Manage Google Play Subscriptions", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    enabled = !isDeletingAccount,
+                    modifier = Modifier.testTag("confirm_delete_cloud_account_button"),
+                    onClick = {
+                        isDeletingAccount = true
+                        coroutineScope.launch {
+                            val result = viewModel.authRepository.deleteCloudAccount()
+                            isDeletingAccount = false
+                            showDeleteAccountDialog = false
+                            if (result.isSuccess) {
+                                Toast.makeText(context, "Cloud account successfully deleted. Local data preserved.", Toast.LENGTH_LONG).show()
+                            } else {
+                                val err = result.exceptionOrNull()
+                                val msg = if (err is com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException) {
+                                    "Re-authentication required: Please sign out and sign in again before deleting account."
+                                } else {
+                                    "Failed to delete cloud account: ${err?.message}"
+                                }
+                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                ) {
+                    if (isDeletingAccount) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Text("Permanently Delete Cloud Account", fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isDeletingAccount,
+                    onClick = { showDeleteAccountDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     // Sign Out Dialog

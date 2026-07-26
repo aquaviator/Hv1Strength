@@ -88,25 +88,31 @@ Google Play mandates that apps allowing account creation must provide an in-app 
 - **Local Workout Data Purge**: **`VERIFIED`**  
   - **Location**: `ProfileScreen.kt` ("Delete local workout data").
   - **Action**: Triggers `viewModel.deleteLocalWorkoutData()`, which calls Room DAO queries to execute `DELETE FROM workout_session`, `DELETE FROM logged_set`, `DELETE FROM body_weight`, `DELETE FROM tape_measurement`, and `DELETE FROM workout_template`.
-  - **Source Code**: `app/src/main/java/com/example/ui/screens/ProfileScreen.kt` (lines 1111–1141) & `app/src/main/java/com/example/data/StrengthDao.kt`.
+  - **Source Code**: `app/src/main/java/com/example/ui/screens/ProfileScreen.kt` & `app/src/main/java/com/example/data/StrengthDao.kt`.
 
-- **In-App Cloud Account Deletion**: **`NOT IMPLEMENTED`**  
-  - **Observation**: `ProfileScreen.kt` contains a "Sign Out of Account" action, but does **NOT** provide a dedicated "Delete Account" button or flow to delete the user's account from Firebase Authentication and purge user data from Cloud Firestore.
-  - **Source Code**: `app/src/main/java/com/example/ui/screens/ProfileScreen.kt` (lines 703–715).
+- **In-App Cloud Account Deletion (Option B: Cloud Disconnect Only)**: **`VERIFIED`**  
+  - **Location**: `ProfileScreen.kt` ("Delete Human Cloud Account" card & `DeleteAccountConfirmationDialog`).
+  - **Action**: Calls `AuthRepository.deleteCloudAccount()`, which:
+    1. Reauthenticates user identity via fresh ID token (`currentUser.getIdToken(true)`).
+    2. Invokes backend `deleteUserAccount` HTTP Cloud Function endpoint (`https://europe-west1-596361666131.cloudfunctions.net/deleteUserAccount`).
+    3. Deletes the Firebase Authentication identity (`currentUser.delete()`).
+    4. Unlinks local profile from cloud identity (`firebaseUid = null`, `isOfflineUser = true`) while **PRESERVING** local workout history, logged sets, custom exercises, routines, and measurements as offline history.
+    5. Clears cloud session state from shared preferences and transitions app state to `AuthState.Offline`.
+  - **Source Code**: `app/src/main/java/com/example/data/AuthRepository.kt` & `app/src/main/java/com/example/ui/screens/ProfileScreen.kt`.
 
 #### B. Cloud Firestore Server Cascade Deletion
 - **Soft Delete Sync Commands**: **`VERIFIED`**  
   - Individual session/measurement deletions place `WorkoutDeleted` or `MeasurementDeleted` commands into the `sync_command` table with a `deletedAt` timestamp for soft-deletion syncing.
   - **Source Code**: `app/src/main/java/com/example/data/StrengthRepository.kt` & `app/src/main/java/com/example/data/Entities.kt`.
 
-- **Cloud Account Purge Function**: **`NOT IMPLEMENTED`**  
-  - Neither the Android app nor the `functions/` Cloud Functions codebase contains an automated user account purge handler (e.g., a Firebase Auth `onUserDeleted` trigger) to purge cloud user data upon account removal.
-  - **Source Code**: `functions/src/index.ts`.
+- **Authoritative Server-Side User Cloud Data Purge Endpoint**: **`VERIFIED`**  
+  - The `deleteUserAccount` Cloud Function and `purgeUserCloudData` engine in `functions/src/index.ts` authoritatively purges `users/{humanUserId}` and all 10 user-owned subcollections (`profile`, `sessions`, `loggedSets`, `weight`, `tape`, `customExercises`, `templates`, `templateExercises`, `templateSets`, `processedCommands`) using Firestore batch writes, then deletes the Firebase Auth record via Firebase Admin SDK.
+  - **Source Code**: `functions/src/index.ts` & `functions/lib/index.js`.
 
 #### C. Web Data Deletion Request URL
-- **Web Portal Link**: **`NOT IMPLEMENTED`**  
-  - No web URL is linked inside the application or manifest for external web-based account deletion requests.
-  - **Source Code**: `app/src/main/AndroidManifest.xml` & `app/src/main/java/com/example/ui/screens/ProfileScreen.kt`.
+- **Web Portal Link**: **`VERIFIED`**  
+  - Production Data Deletion Web Request URL is implemented in `ProfileScreen.kt` launching `https://humanv1.com/data-deletion/`.
+  - **Source Code**: `app/src/main/java/com/example/ui/screens/ProfileScreen.kt`.
 
 ---
 
@@ -114,10 +120,12 @@ Google Play mandates that apps allowing account creation must provide an in-app 
 
 | Requirement | Current Status in Codebase | Implementation Details | Classification | Evidence Source File |
 | :--- | :--- | :--- | :---: | :--- |
-| **Help & Support Portal** | UI Placeholder | Clicking "Help & Support" triggers a Toast saying "Support portal is coming soon!". | **`NOT IMPLEMENTED`** | `app/src/main/java/com/example/ui/screens/ProfileScreen.kt` (lines 580–598) |
-| **Privacy Policy Link** | UI Placeholder | Clicking "Privacy Policy" triggers a Toast saying "Privacy Policy is coming soon!". | **`NOT IMPLEMENTED`** | `app/src/main/java/com/example/ui/screens/ProfileScreen.kt` (lines 601–620) |
-| **Terms of Service Link** | UI Placeholder | Clicking "Terms of Service" triggers a Toast saying "Terms of Service are coming soon!". | **`NOT IMPLEMENTED`** | `app/src/main/java/com/example/ui/screens/ProfileScreen.kt` (lines 622–640) |
-| **Open Source License Notice** | Implemented | `SettingsScreen.kt` displays "License: Open-source under MIT". | **`VERIFIED`** | `app/src/main/java/com/example/ui/screens/SettingsScreen.kt` (lines 360–365) |
+| **Help & Support Portal** | Production URL | Click opens `https://humanv1.com/support/` via `Intent.ACTION_VIEW`. | **`VERIFIED`** | `app/src/main/java/com/example/ui/screens/ProfileScreen.kt` |
+| **Privacy Policy Link** | Production URL | Click opens `https://humanv1.com/privacy/` via `Intent.ACTION_VIEW`. | **`VERIFIED`** | `app/src/main/java/com/example/ui/screens/ProfileScreen.kt` |
+| **Terms of Service Link** | Production URL | Click opens `https://humanv1.com/terms/` via `Intent.ACTION_VIEW`. | **`VERIFIED`** | `app/src/main/java/com/example/ui/screens/ProfileScreen.kt` |
+| **Data Deletion Web Link** | Production URL | Click opens `https://humanv1.com/data-deletion/` via `Intent.ACTION_VIEW`. | **`VERIFIED`** | `app/src/main/java/com/example/ui/screens/ProfileScreen.kt` |
+| **Google Play Subscriptions** | Production URL | Click opens `https://play.google.com/store/account/subscriptions` via `Intent.ACTION_VIEW`. | **`VERIFIED`** | `app/src/main/java/com/example/ui/screens/ProfileScreen.kt` |
+| **Open Source License Notice** | Implemented | `SettingsScreen.kt` displays "License: Open-source under MIT". | **`VERIFIED`** | `app/src/main/java/com/example/ui/screens/SettingsScreen.kt` |
 
 ---
 

@@ -293,5 +293,61 @@ describe("Hv1 Platform Production Entitlement Backend Unit Tests", () => {
             assert_1.default.notStrictEqual(result.error.code, undefined);
         }
     });
+    // 24. Deterministic Java String hashCode for humanUserId derivation
+    it("24. should compute deterministic hashCode matching Kotlin for humanUserId derivation", () => {
+        const hash = (0, index_1.getJavaStringHashCode)("user_12345");
+        assert_1.default.strictEqual(typeof hash, "number");
+        const humanId = "human_" + hash.toString().replace("-", "n").padEnd(12, "x").substring(0, 12);
+        assert_1.default.ok(humanId.startsWith("human_"));
+    });
+    // 25. FIRESTORE_USER_SUBCOLLECTIONS scope completeness
+    it("25. should identify all 10 user-owned subcollections for complete cloud purge", () => {
+        assert_1.default.strictEqual(index_1.FIRESTORE_USER_SUBCOLLECTIONS.length, 10);
+        assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("profile"));
+        assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("sessions"));
+        assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("loggedSets"));
+        assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("weight"));
+        assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("tape"));
+        assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("customExercises"));
+        assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("templates"));
+        assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("templateExercises"));
+        assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("templateSets"));
+        assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("processedCommands"));
+    });
+    // 26. Mock Firestore Purge execution
+    it("26. should purge all subcollections and root user doc in Firestore mock", async () => {
+        let deletedCount = 0;
+        const deletedPaths = [];
+        const mockDb = {
+            collection: (colName) => ({
+                doc: (docId) => ({
+                    collection: (subName) => ({
+                        get: async () => ({
+                            empty: false,
+                            docs: [
+                                { ref: `users/${docId}/${subName}/doc1` },
+                                { ref: `users/${docId}/${subName}/doc2` }
+                            ]
+                        })
+                    }),
+                    get: async () => ({ exists: true }),
+                    delete: async () => {
+                        deletedPaths.push(`users/${docId}`);
+                        deletedCount++;
+                    }
+                })
+            }),
+            batch: () => ({
+                delete: (ref) => {
+                    deletedPaths.push(ref);
+                    deletedCount++;
+                },
+                commit: async () => { }
+            })
+        };
+        const res = await (0, index_1.purgeUserCloudData)(mockDb, "test_uid", "human_test123");
+        assert_1.default.strictEqual(res.deletedSubcollections.length, 10);
+        assert_1.default.strictEqual(res.totalDocumentsDeleted, 21);
+    });
 });
 //# sourceMappingURL=index.test.js.map

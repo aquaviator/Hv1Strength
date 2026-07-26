@@ -33,8 +33,10 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.rtdnHandler = exports.verifyPurchase = exports.FUNCTION_REGION = exports.EXPECTED_PRODUCT_ID = exports.EXPECTED_PACKAGE_NAME = void 0;
+exports.deleteUserAccount = exports.rtdnHandler = exports.verifyPurchase = exports.FUNCTION_REGION = exports.EXPECTED_PRODUCT_ID = exports.EXPECTED_PACKAGE_NAME = void 0;
 exports.getPurchaseDocId = getPurchaseDocId;
+exports.getJavaStringHashCode = getJavaStringHashCode;
+exports.purgeUserCloudData = purgeUserCloudData;
 exports.getPlayDeveloperClient = getPlayDeveloperClient;
 exports.mapPlayStateToEntitlementStatus = mapPlayStateToEntitlementStatus;
 exports.verifyTokenWithGooglePlay = verifyTokenWithGooglePlay;
@@ -62,6 +64,53 @@ function getPurchaseDocId(purchaseToken) {
     const hash = crypto.createHash("sha256").update(purchaseToken).digest("hex");
     return `play_${hash.substring(0, 32)}`;
 }
+function getJavaStringHashCode(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = (hash << 5) - hash + char;
+        hash |= 0;
+    }
+    return hash;
+}
+exports.getJavaStringHashCode = getJavaStringHashCode;
+exports.FIRESTORE_USER_SUBCOLLECTIONS = [
+    "profile",
+    "sessions",
+    "loggedSets",
+    "weight",
+    "tape",
+    "customExercises",
+    "templates",
+    "templateExercises",
+    "templateSets",
+    "processedCommands"
+];
+async function purgeUserCloudData(firestoreDb, uid, targetHumanUserId) {
+    let totalDeleted = 0;
+    const deletedSubcollections = [];
+    const userDocRef = firestoreDb.collection("users").doc(targetHumanUserId);
+    for (const subColl of exports.FIRESTORE_USER_SUBCOLLECTIONS) {
+        const subCollRef = userDocRef.collection(subColl);
+        const snapshot = await subCollRef.get();
+        if (!snapshot.empty) {
+            const batch = firestoreDb.batch();
+            snapshot.docs.forEach((doc) => {
+                batch.delete(doc.ref);
+                totalDeleted++;
+            });
+            await batch.commit();
+            deletedSubcollections.push(subColl);
+        }
+    }
+    const userDocSnapshot = await userDocRef.get();
+    if (userDocSnapshot.exists) {
+        await userDocRef.delete();
+        totalDeleted++;
+    }
+    return { deletedSubcollections, totalDocumentsDeleted: totalDeleted };
+}
+exports.purgeUserCloudData = purgeUserCloudData;
 /**
  * Creates an authorized Google Play Developer API client if service credentials exist.
  */
@@ -365,6 +414,62 @@ exports.rtdnHandler = (0, pubsub_1.onMessagePublished)({ topic: "play-rtdn-topic
     }
     catch (err) {
         logger.error("Error processing RTDN message:", err?.message || err);
+    }
+});
+exports.deleteUserAccount = (0, https_1.onRequest)({ region: exports.FUNCTION_REGION }, async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    if (req.method === "OPTIONS") {
+        res.status(204).send("");
+        return;
+    }
+    if (req.method !== "POST") {
+        res.status(405).json({ code: "MALFORMED_REQUEST", message: "Method Not Allowed. Only POST is supported." });
+        return;
+    }
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        res.status(401).json({ code: "UNAUTHORIZED", message: "Missing or invalid Authorization header" });
+        return;
+    }
+    const idToken = authHeader.split("Bearer ")[1];
+    let decodedToken;
+    try {
+        decodedToken = await admin.auth().verifyIdToken(idToken);
+    }
+    catch (e) {
+        logger.warn("Authentication failed for deleteUserAccount:", e?.message || e);
+        res.status(401).json({ code: "UNAUTHORIZED", message: "Invalid or expired authentication token" });
+        return;
+    }
+    const uid = decodedToken.uid;
+    const { humanUserId: bodyHumanUserId } = req.body || {};
+    let humanUserId = bodyHumanUserId;
+    if (!humanUserId || typeof humanUserId !== "string" || !humanUserId.startsWith("human_")) {
+        const hash = getJavaStringHashCode(uid).toString().replace("-", "n").padEnd(12, "x").substring(0, 12);
+        humanUserId = `human_${hash}`;
+    }
+    try {
+        logger.info(`Initiating cloud data purge for user ${uid} (humanUserId=${humanUserId})`);
+        const purgeResult = await purgeUserCloudData(db, uid, humanUserId);
+        try {
+            await admin.auth().deleteUser(uid);
+            logger.info(`Successfully deleted Firebase Auth user ${uid}`);
+        }
+        catch (authErr) {
+            logger.warn(`Firebase Auth user deletion produced warning/error for ${uid}:`, authErr?.message || authErr);
+        }
+        res.status(200).json({
+            success: true,
+            message: "Cloud account and all associated Firestore data successfully deleted",
+            humanUserId,
+            deletedSubcollections: purgeResult.deletedSubcollections,
+            totalDocumentsDeleted: purgeResult.totalDocumentsDeleted
+        });
+    }
+    catch (err) {
+        logger.error(`Error deleting user account ${uid}:`, err?.message || err);
+        res.status(500).json({ code: "INTERNAL_ERROR", message: err?.message || "Failed to purge cloud user data" });
     }
 });
 //# sourceMappingURL=index.js.map

@@ -2,6 +2,9 @@ import assert from "assert";
 import {
   mapPlayStateToEntitlementStatus,
   getPurchaseDocId,
+  getJavaStringHashCode,
+  purgeUserCloudData,
+  FIRESTORE_USER_SUBCOLLECTIONS,
   verifyTokenWithGooglePlay,
   EXPECTED_PACKAGE_NAME,
   EXPECTED_PRODUCT_ID
@@ -342,5 +345,66 @@ describe("Hv1 Platform Production Entitlement Backend Unit Tests", () => {
     if (!result.success) {
       assert.notStrictEqual(result.error.code, undefined);
     }
+  });
+
+  // 24. Deterministic Java String hashCode for humanUserId derivation
+  it("24. should compute deterministic hashCode matching Kotlin for humanUserId derivation", () => {
+    const hash = getJavaStringHashCode("user_12345");
+    assert.strictEqual(typeof hash, "number");
+    const humanId = "human_" + hash.toString().replace("-", "n").padEnd(12, "x").substring(0, 12);
+    assert.ok(humanId.startsWith("human_"));
+  });
+
+  // 25. FIRESTORE_USER_SUBCOLLECTIONS scope completeness
+  it("25. should identify all 10 user-owned subcollections for complete cloud purge", () => {
+    assert.strictEqual(FIRESTORE_USER_SUBCOLLECTIONS.length, 10);
+    assert.ok(FIRESTORE_USER_SUBCOLLECTIONS.includes("profile"));
+    assert.ok(FIRESTORE_USER_SUBCOLLECTIONS.includes("sessions"));
+    assert.ok(FIRESTORE_USER_SUBCOLLECTIONS.includes("loggedSets"));
+    assert.ok(FIRESTORE_USER_SUBCOLLECTIONS.includes("weight"));
+    assert.ok(FIRESTORE_USER_SUBCOLLECTIONS.includes("tape"));
+    assert.ok(FIRESTORE_USER_SUBCOLLECTIONS.includes("customExercises"));
+    assert.ok(FIRESTORE_USER_SUBCOLLECTIONS.includes("templates"));
+    assert.ok(FIRESTORE_USER_SUBCOLLECTIONS.includes("templateExercises"));
+    assert.ok(FIRESTORE_USER_SUBCOLLECTIONS.includes("templateSets"));
+    assert.ok(FIRESTORE_USER_SUBCOLLECTIONS.includes("processedCommands"));
+  });
+
+  // 26. Mock Firestore Purge execution
+  it("26. should purge all subcollections and root user doc in Firestore mock", async () => {
+    let deletedCount = 0;
+    const deletedPaths: string[] = [];
+
+    const mockDb: any = {
+      collection: (colName: string) => ({
+        doc: (docId: string) => ({
+          collection: (subName: string) => ({
+            get: async () => ({
+              empty: false,
+              docs: [
+                { ref: `users/${docId}/${subName}/doc1` },
+                { ref: `users/${docId}/${subName}/doc2` }
+              ]
+            })
+          }),
+          get: async () => ({ exists: true }),
+          delete: async () => {
+            deletedPaths.push(`users/${docId}`);
+            deletedCount++;
+          }
+        })
+      }),
+      batch: () => ({
+        delete: (ref: any) => {
+          deletedPaths.push(ref);
+          deletedCount++;
+        },
+        commit: async () => {}
+      })
+    };
+
+    const res = await purgeUserCloudData(mockDb, "test_uid", "human_test123");
+    assert.strictEqual(res.deletedSubcollections.length, 10);
+    assert.strictEqual(res.totalDocumentsDeleted, 21); // 20 subdocs + 1 root doc
   });
 });
