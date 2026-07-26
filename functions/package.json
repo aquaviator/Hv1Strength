@@ -13,7 +13,7 @@
     "test": "npm run build && mocha --reporter spec lib/test/**/*.test.js"
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "dependencies": {
     "firebase-admin": "^12.0.0",

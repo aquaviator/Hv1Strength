@@ -14,5 +14,14 @@
       "firebase-debug.log",
       "firebase-debug.*.log"
     ]
-  }
+  },
+"hosting": {
+  "public": "hosting",
+  "cleanUrls": true,
+  "ignore": [
+    "firebase.json",
+    "**/.*",
+    "**/node_modules/**"
+  ]
+}
 }
