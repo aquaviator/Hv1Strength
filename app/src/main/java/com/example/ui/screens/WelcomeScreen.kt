@@ -77,37 +77,35 @@ fun WelcomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(Color.Black),
+        contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 28.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Spacer(modifier = Modifier.height(48.dp))
-
             // App Brand Header - Canonical Master Banner Lockup
             Image(
-                painter = painterResource(id = com.example.R.drawable.human_brand_lockup_mobile),
+                painter = painterResource(id = com.example.R.drawable.hv1_banner),
                 contentDescription = "Human V1 Strength Brand Lockup",
                 modifier = Modifier
-                    .fillMaxWidth(0.85f)
-                    .padding(vertical = 8.dp)
+                    .fillMaxWidth()
                     .testTag("welcome_logo_card"),
                 contentScale = androidx.compose.ui.layout.ContentScale.Fit
             )
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             // Information Bullet points
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 InfoBulletRow(
                     icon = Icons.Default.Security,
@@ -121,7 +119,7 @@ fun WelcomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(56.dp))
+            Spacer(modifier = Modifier.height(48.dp))
 
             if (authState is AuthState.Loading) {
                 CircularProgressIndicator(

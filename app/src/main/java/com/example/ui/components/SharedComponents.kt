@@ -578,7 +578,7 @@ fun HumanBrandMark(
     modifier: Modifier = Modifier
 ) {
     androidx.compose.foundation.Image(
-        painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.human_logo),
+        painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.ic_launcher_foreground_monochrome),
         contentDescription = "Human V1 Logo",
         modifier = modifier.size(40.dp)
     )
