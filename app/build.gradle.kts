@@ -63,7 +63,13 @@ create("debugConfig") {
     compose = true
     buildConfig = true
   }
-  testOptions { unitTests { isIncludeAndroidResources = true } }
+  testOptions {
+    unitTests.isIncludeAndroidResources = true
+    unitTests.all {
+      val robolectricCache = File(rootProject.projectDir, ".robolectric-cache").absolutePath
+      it.systemProperty("maven.repo.local", robolectricCache)
+    }
+  }
 }
 
 // Configure the Secrets Gradle Plugin to use .env and .env.example files
