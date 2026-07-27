@@ -36,7 +36,7 @@ import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w480dp-h1500dp")
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
+
 class NavigationAndIndicatorRegressionTest {
 
     @get:Rule
