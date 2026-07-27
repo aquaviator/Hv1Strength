@@ -10,25 +10,25 @@
         android:scaleY="0.66"
         android:translateX="17"
         android:translateY="17">
-        <!-- Outer Circular Badge Ring (White) -->
+        <!-- Outer Circular Badge Ring -->
         <path
             android:strokeColor="#FFFFFF"
             android:strokeWidth="4"
             android:pathData="M50,10 A40,40 0 1,1 49.99,10 Z" />
 
-        <!-- Head (White) -->
+        <!-- Head -->
         <path
             android:fillColor="#FFFFFF"
             android:pathData="M50,37.5 A5.5,5.5 0 1,1 49.99,37.5 Z" />
 
-        <!-- Torso (White) -->
+        <!-- Torso -->
         <path
             android:strokeColor="#FFFFFF"
             android:strokeWidth="5"
             android:strokeLineCap="round"
             android:pathData="M50,49 L50,68" />
 
-        <!-- Legs (White) -->
+        <!-- Legs -->
         <path
             android:strokeColor="#FFFFFF"
             android:strokeWidth="4"
@@ -40,7 +40,7 @@
             android:strokeLineCap="round"
             android:pathData="M50,68 L59,84" />
 
-        <!-- Arms (White) -->
+        <!-- Arms -->
         <path
             android:strokeColor="#FFFFFF"
             android:strokeWidth="4"
@@ -52,33 +52,33 @@
             android:strokeLineCap="round"
             android:pathData="M50,52 L68,32" />
 
-        <!-- Barbell Bar (Electric Blue Accent) -->
+        <!-- Barbell Bar -->
         <path
-            android:strokeColor="#0066FF"
+            android:strokeColor="#FFFFFF"
             android:strokeWidth="4"
             android:strokeLineCap="round"
             android:pathData="M18,32 L82,32" />
 
-        <!-- Barbell Weight Plates - Inner (Electric Blue Accent) -->
+        <!-- Barbell Weight Plates - Inner -->
         <path
-            android:strokeColor="#0066FF"
+            android:strokeColor="#FFFFFF"
             android:strokeWidth="5.5"
             android:strokeLineCap="round"
             android:pathData="M26,20 L26,44" />
         <path
-            android:strokeColor="#0066FF"
+            android:strokeColor="#FFFFFF"
             android:strokeWidth="5.5"
             android:strokeLineCap="round"
             android:pathData="M74,20 L74,44" />
 
-        <!-- Barbell Weight Plates - Outer (Electric Blue Accent) -->
+        <!-- Barbell Weight Plates - Outer -->
         <path
-            android:strokeColor="#0066FF"
+            android:strokeColor="#FFFFFF"
             android:strokeWidth="4"
             android:strokeLineCap="round"
             android:pathData="M20,24 L20,40" />
         <path
-            android:strokeColor="#0066FF"
+            android:strokeColor="#FFFFFF"
             android:strokeWidth="4"
             android:strokeLineCap="round"
             android:pathData="M80,24 L80,40" />

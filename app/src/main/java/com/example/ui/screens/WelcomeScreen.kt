@@ -77,79 +77,35 @@ fun WelcomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(Color.Black),
+        contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 28.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Spacer(modifier = Modifier.height(48.dp))
-
-            // App Brand Header - Canonical Clean Branding
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+            // App Brand Header - Canonical Master Banner Lockup
+            Image(
+                painter = painterResource(id = com.example.R.drawable.hv1_banner),
+                contentDescription = "Human V1 Strength Brand Lockup",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("welcome_logo_card")
-            ) {
-                Image(
-                    painter = painterResource(id = com.example.R.drawable.human_logo),
-                    contentDescription = "Human Strength Symbol",
-                    modifier = Modifier
-                        .size(80.dp)
-                        .testTag("welcome_human_logo")
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "HUMAN V1",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 2.sp
-                        ),
-                        color = Color.White
-                    )
-                    Surface(
-                        color = Color(0xFF0072FF),
-                        shape = RoundedCornerShape(4.dp)
-                    ) {
-                        Text(
-                            text = "STRENGTH",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
-                            ),
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "TRAIN. TRACK. TRANSFORM.",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.5.sp
-                    ),
-                    color = Color(0xFF0072FF)
-                )
-            }
+                    .testTag("welcome_logo_card"),
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit
+            )
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             // Information Bullet points
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 InfoBulletRow(
                     icon = Icons.Default.Security,
@@ -163,7 +119,7 @@ fun WelcomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(56.dp))
+            Spacer(modifier = Modifier.height(48.dp))
 
             if (authState is AuthState.Loading) {
                 CircularProgressIndicator(
