@@ -58,6 +58,7 @@ sealed class AppAccessState {
     object GracePeriod : AppAccessState()
     object PaymentPending : AppAccessState()
     object Expired : AppAccessState()
+    object Unentitled : AppAccessState()
     object VerificationUnavailable : AppAccessState()
     
     data class Error(
@@ -80,7 +81,7 @@ data class VerifiedEntitlement(
     val expiryTimestampMillis: Long,
     val autoRenewEnabled: Boolean,
     val verificationTimestampMillis: Long,
-    val source: String // "GOOGLE_PLAY_BACKEND", "LOCAL_TRIAL", "CACHED"
+    val source: String // "GOOGLE_PLAY_BACKEND", "CACHED"
 ) {
     fun isValidAt(nowMillis: Long = System.currentTimeMillis()): Boolean {
         return expiryTimestampMillis > nowMillis && status != "EXPIRED"
