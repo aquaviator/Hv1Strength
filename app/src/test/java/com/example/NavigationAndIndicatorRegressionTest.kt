@@ -333,7 +333,7 @@ class NavigationAndIndicatorRegressionTest {
         composeTestRule.waitForIdle()
 
         // 1. Confirm we started on Welcome destination
-        assertEquals("welcome", navController.currentDestination?.route)
+        assertEquals("Expected welcome, but was ${navController.currentDestination?.route}", "welcome", navController.currentDestination?.route)
 
         // 2. Perform authentication -> enter offline mode
         runBlocking {

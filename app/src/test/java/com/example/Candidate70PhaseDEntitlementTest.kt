@@ -76,7 +76,8 @@ class Candidate70PhaseDEntitlementTest {
         val entitlementRepository = PlayEntitlementRepository(
             context = context,
             billingRepository = fakeBillingRepository,
-            repository = repository
+            repository = repository,
+            authRepository = authRepository
         )
 
         // Initial launch -> 30 day trial active
@@ -106,7 +107,8 @@ class Candidate70PhaseDEntitlementTest {
         val entitlementRepository = PlayEntitlementRepository(
             context = context,
             billingRepository = fakeBillingRepository,
-            repository = repository
+            repository = repository,
+            authRepository = authRepository
         )
         entitlementRepository.refreshAccessState()
 

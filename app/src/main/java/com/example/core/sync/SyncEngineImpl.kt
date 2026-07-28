@@ -262,6 +262,8 @@ class SyncEngineImpl(
                     docData["dateOfBirth"] = profile.dateOfBirth
                     docData["sex"] = profile.sex
                     docData["trainingExperience"] = profile.trainingExperience
+                    docData["trialStartedAt"] = profile.trialStartedAt
+                    docData["trialEndsAt"] = profile.trialEndsAt
                     docData["createdAt"] = profile.createdAt
                     docData["updatedAt"] = profile.updatedAt
                     docData["revision"] = profile.revision
@@ -705,6 +707,8 @@ class SyncEngineImpl(
                     dateOfBirth = doc.getString("dateOfBirth"),
                     sex = doc.getString("sex"),
                     trainingExperience = doc.getString("trainingExperience"),
+                    trialStartedAt = doc.getLong("trialStartedAt"),
+                    trialEndsAt = doc.getLong("trialEndsAt"),
                     globalId = doc.getString("globalId") ?: "",
                     humanUserId = doc.getString("humanUserId") ?: "",
                     createdAt = doc.getLong("createdAt") ?: now,
@@ -966,6 +970,8 @@ class SyncEngineImpl(
                     dateOfBirth = doc.getString("dateOfBirth") ?: local.dateOfBirth,
                     sex = doc.getString("sex") ?: local.sex,
                     trainingExperience = doc.getString("trainingExperience") ?: local.trainingExperience,
+                    trialStartedAt = doc.getLong("trialStartedAt") ?: local.trialStartedAt,
+                    trialEndsAt = doc.getLong("trialEndsAt") ?: local.trialEndsAt,
                     updatedAt = doc.getLong("updatedAt") ?: now,
                     deletedAt = doc.getLong("deletedAt"),
                     revision = doc.getLong("revision") ?: local.revision,

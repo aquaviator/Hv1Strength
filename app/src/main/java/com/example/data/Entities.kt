@@ -19,8 +19,9 @@ data class UserProfile(
     val heightCm: Float? = null,
     val dateOfBirth: String? = null,
     val sex: String? = null,
-    val trainingExperience: String? = null, // "Beginner", "Intermediate", "Advanced"
-
+    val trainingExperience: String? = null,
+    val trialStartedAt: Long? = null,
+    val trialEndsAt: Long? = null,
     // Sync metadata fields
     override val globalId: String = "",
     override val humanUserId: String = "",

@@ -309,9 +309,11 @@ class Sprint5WorkoutGroupingAndExecutionTest {
         assertEquals("Legacy Workout", activeState.templateName)
 
         val queue = activeWorkoutViewModel.executionQueue.value
-        assertEquals(1, queue.size)
-        assertEquals(WorkoutGroupType.SINGLE, queue[0].groupType)
-        assertFalse(queue[0].set.isCompleted)
+        waitUntil { activeWorkoutViewModel.executionQueue.value.isNotEmpty() }
+        val updatedQueue = activeWorkoutViewModel.executionQueue.value
+        assertEquals(1, updatedQueue.size)
+        assertEquals(WorkoutGroupType.SINGLE, updatedQueue[0].groupType)
+        assertFalse(updatedQueue[0].set.isCompleted)
     }
 
     @Test

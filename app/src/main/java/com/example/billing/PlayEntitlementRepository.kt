@@ -1,5 +1,4 @@
 package com.example.billing
-
 import android.content.Context
 import android.util.Log
 import com.example.data.StrengthRepository
@@ -7,6 +6,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import com.example.data.AuthRepository
+import com.example.data.AuthState
+import com.example.data.PlatformConfigRepository
+
 
 interface EntitlementRepository {
     val appAccessState: StateFlow<AppAccessState>
@@ -15,11 +19,16 @@ interface EntitlementRepository {
     suspend fun verifyAndProcessPurchase(purchaseToken: String, productId: String, orderId: String?): Boolean
 }
 
+
+
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class PlayEntitlementRepository(
     private val context: Context,
     private val billingRepository: BillingRepository,
     private val repository: StrengthRepository,
+    private val authRepository: AuthRepository,
     private val verificationClient: EntitlementVerificationClient = PlayEntitlementVerificationClient(context),
+    private val platformConfigRepository: PlatformConfigRepository = PlatformConfigRepository(),
     private val externalScope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) : EntitlementRepository {
 
@@ -42,12 +51,21 @@ class PlayEntitlementRepository(
 
     init {
         externalScope.launch {
+            val userProfileFlow = authRepository.authState.flatMapLatest { state ->
+                val userId = when (state) {
+                    is AuthState.Authenticated -> state.profile.id
+                    is AuthState.Offline -> "offline"
+                    else -> "offline"
+                }
+                repository.getUserProfileFlow(userId)
+            }
+
             combine(
                 billingRepository.subscriptionState,
-                repository.getUserProfileFlow("offline"),
+                userProfileFlow,
                 _cachedEntitlement
             ) { subState, userProfile, cached ->
-                resolveAccessState(subState, cached)
+                resolveAccessState(subState, userProfile, cached)
             }.collect { newState ->
                 _appAccessState.value = newState
             }
@@ -87,6 +105,7 @@ class PlayEntitlementRepository(
 
     private suspend fun resolveAccessState(
         subState: SubscriptionState,
+        userProfile: com.example.data.UserProfile?,
         cached: VerifiedEntitlement?
     ): AppAccessState {
         val now = System.currentTimeMillis()
@@ -133,21 +152,84 @@ class PlayEntitlementRepository(
             else -> {}
         }
 
-        if (cached != null && (!cached.isValidAt(now) || cached.status == "EXPIRED")) {
-            return AppAccessState.Expired
-        } else if (subState is SubscriptionState.Loading) {
+        if (subState is SubscriptionState.Loading) {
             return AppAccessState.Initializing
-        } else {
-            return AppAccessState.Unentitled
         }
+
+        // 3. Check Human V1 Account Trial
+        if (userProfile != null) {
+            if (userProfile.trialStartedAt != null && userProfile.trialEndsAt != null) {
+                // Trial has been initialized
+                if (now < userProfile.trialEndsAt!!) {
+                    val daysRemaining = maxOf(1, ((userProfile.trialEndsAt!! - now) / (24L * 60L * 60L * 1000L)).toInt())
+                    return AppAccessState.TrialActive(daysRemaining, userProfile.trialEndsAt!!)
+                }
+            } else {
+                // New eligible account - initialize trial once
+                val trialPolicy = platformConfigRepository.getTrialPolicy()
+                if (trialPolicy.trialEnabled) {
+                    var cloudTrialStartedAt: Long? = null
+                    var cloudTrialEndsAt: Long? = null
+                    
+                    if (com.example.HumanStrengthApplication.isFirebaseConfigured) {
+                        try {
+                            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                            val doc = db.collection("users").document(userProfile.humanUserId).collection("profile").document("main").get().await()
+                            if (doc.exists()) {
+                                cloudTrialStartedAt = doc.getLong("trialStartedAt")
+                                cloudTrialEndsAt = doc.getLong("trialEndsAt")
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Could not fetch cloud profile to verify trial status", e)
+                        }
+                    }
+
+                    if (cloudTrialStartedAt != null && cloudTrialEndsAt != null) {
+                        val updatedProfile = userProfile.copy(
+                            trialStartedAt = cloudTrialStartedAt,
+                            trialEndsAt = cloudTrialEndsAt
+                        )
+                        repository.insertUserProfile(updatedProfile)
+                        return AppAccessState.Initializing
+                    } else {
+                        val isExistingAccount = (now - userProfile.createdAt) > (24L * 60L * 60L * 1000L)
+                        val startedAt = if (isExistingAccount) userProfile.createdAt else now
+                        val trialEndsAt = startedAt + (trialPolicy.trialDurationDays * 24L * 60L * 60L * 1000L)
+                        
+                        val updatedProfile = userProfile.copy(
+                            trialStartedAt = startedAt,
+                            trialEndsAt = trialEndsAt,
+                            updatedAt = now
+                        )
+                        repository.insertUserProfile(updatedProfile)
+                        return AppAccessState.Initializing
+                    }
+                }
+            }
+        }
+
+        // 4. Known Human V1 trial expired or Play Subscription expired
+        val hasExpiredPlay = cached != null && (!cached.isValidAt(now) || cached.status == "EXPIRED")
+        val hasExpiredTrial = userProfile?.trialEndsAt != null && now >= userProfile.trialEndsAt
+
+        if (hasExpiredPlay || hasExpiredTrial) {
+            return AppAccessState.Expired
+        }
+
+        return AppAccessState.Unentitled
     }
 
     override fun refreshAccessState() {
         externalScope.launch {
-            val userProfile = repository.getUserProfile("offline")
+            val userId = when (val state = authRepository.authState.value) {
+                is AuthState.Authenticated -> state.profile.id
+                is AuthState.Offline -> "offline"
+                else -> "offline"
+            }
+            val userProfile = repository.getUserProfile(userId)
             val subState = billingRepository.subscriptionState.value
             val cached = _cachedEntitlement.value
-            _appAccessState.value = resolveAccessState(subState, cached)
+            _appAccessState.value = resolveAccessState(subState, userProfile, cached)
         }
     }
 

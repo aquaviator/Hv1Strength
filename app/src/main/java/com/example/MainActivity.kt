@@ -196,7 +196,7 @@ fun MainAppScreen(
         return
     }
 
-    if (!hasAppAccess && currentRoute != "welcome") {
+    if (!hasAppAccess && currentRoute != null && currentRoute != "welcome") {
         SubscriptionAccessScreen(
             viewModel = viewModel,
             onSignOutComplete = {

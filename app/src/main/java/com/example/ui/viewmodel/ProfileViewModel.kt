@@ -12,7 +12,7 @@ class ProfileViewModel(
     private val context: Context,
     private val authViewModel: AuthViewModel,
     val billingRepository: com.example.billing.BillingRepository = com.example.billing.PlayBillingRepository(context),
-    val entitlementRepository: com.example.billing.EntitlementRepository = com.example.billing.PlayEntitlementRepository(context, billingRepository, repository)
+    val entitlementRepository: com.example.billing.EntitlementRepository = com.example.billing.PlayEntitlementRepository(context, billingRepository, repository, authViewModel.authRepository)
 ) : ViewModel() {
 
     val subscriptionState: StateFlow<com.example.billing.SubscriptionState> = billingRepository.subscriptionState
