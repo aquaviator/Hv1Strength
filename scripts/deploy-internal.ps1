@@ -27,6 +27,31 @@ function Fail {
 }
 
 # ------------------------------------------------------------
+# Set Credentials
+# ------------------------------------------------------------
+$credentialsPath = "D:\App-Security-Keys\PlayStore\passwords.txt"
+
+if ((-not $env:STORE_PASSWORD -or -not $env:KEY_PASSWORD) -and
+    (Test-Path -LiteralPath $credentialsPath)) {
+
+    foreach ($line in Get-Content -LiteralPath $credentialsPath) {
+        if ($line -match '^\s*STORE_PASSWORD=(.*)$') {
+            $env:STORE_PASSWORD = $matches[1].Trim()
+        }
+        elseif ($line -match '^\s*KEY_PASSWORD=(.*)$') {
+            $env:KEY_PASSWORD = $matches[1].Trim()
+        }
+    }
+}
+
+if (-not $env:STORE_PASSWORD) {
+    Fail "STORE_PASSWORD was not found in the environment or password.txt."
+}
+
+if (-not $env:KEY_PASSWORD) {
+    Fail "KEY_PASSWORD was not found in the environment or password.txt."
+}
+# ------------------------------------------------------------
 # Resolve repository root
 # ------------------------------------------------------------
 
