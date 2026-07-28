@@ -4,83 +4,55 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-
     <group
-        android:scaleX="0.66"
-        android:scaleY="0.66"
-        android:translateX="17"
-        android:translateY="17">
+        android:scaleX="0.825"
+        android:scaleY="0.825"
+        android:translateX="12.75"
+        android:translateY="12.75">
         <!-- Outer Circular Badge Ring -->
         <path
-            android:strokeColor="#FFFFFF"
+            android:strokeColor="#000000"
             android:strokeWidth="4"
-            android:pathData="M50,10 A40,40 0 1,1 49.99,10 Z" />
-
+            android:pathData="M 50 10 A 40 40 0 1 0 50 90 A 40 40 0 1 0 50 10" />
         <!-- Head -->
         <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M50,37.5 A5.5,5.5 0 1,1 49.99,37.5 Z" />
-
+            android:fillColor="#000000"
+            android:pathData="M 50 37.5 A 5.5 5.5 0 1 0 50 48.5 A 5.5 5.5 0 1 0 50 37.5" />
         <!-- Torso -->
         <path
-            android:strokeColor="#FFFFFF"
+            android:strokeColor="#000000"
             android:strokeWidth="5"
             android:strokeLineCap="round"
-            android:pathData="M50,49 L50,68" />
-
+            android:pathData="M 50 49 L 50 68" />
         <!-- Legs -->
         <path
-            android:strokeColor="#FFFFFF"
+            android:strokeColor="#000000"
             android:strokeWidth="4"
             android:strokeLineCap="round"
-            android:pathData="M50,68 L41,84" />
-        <path
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="4"
-            android:strokeLineCap="round"
-            android:pathData="M50,68 L59,84" />
-
+            android:pathData="M 50 68 L 41 84 M 50 68 L 59 84" />
         <!-- Arms -->
         <path
-            android:strokeColor="#FFFFFF"
+            android:strokeColor="#000000"
             android:strokeWidth="4"
             android:strokeLineCap="round"
-            android:pathData="M50,52 L32,32" />
-        <path
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="4"
-            android:strokeLineCap="round"
-            android:pathData="M50,52 L68,32" />
-
+            android:pathData="M 50 52 L 32 32 M 50 52 L 68 32" />
         <!-- Barbell Bar -->
         <path
-            android:strokeColor="#FFFFFF"
+            android:strokeColor="#000000"
             android:strokeWidth="4"
             android:strokeLineCap="round"
-            android:pathData="M18,32 L82,32" />
-
+            android:pathData="M 18 32 L 82 32" />
         <!-- Barbell Weight Plates - Inner -->
         <path
-            android:strokeColor="#FFFFFF"
+            android:strokeColor="#000000"
             android:strokeWidth="5.5"
             android:strokeLineCap="round"
-            android:pathData="M26,20 L26,44" />
-        <path
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="5.5"
-            android:strokeLineCap="round"
-            android:pathData="M74,20 L74,44" />
-
+            android:pathData="M 26 20 L 26 44 M 74 20 L 74 44" />
         <!-- Barbell Weight Plates - Outer -->
         <path
-            android:strokeColor="#FFFFFF"
+            android:strokeColor="#000000"
             android:strokeWidth="4"
             android:strokeLineCap="round"
-            android:pathData="M20,24 L20,40" />
-        <path
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="4"
-            android:strokeLineCap="round"
-            android:pathData="M80,24 L80,40" />
+            android:pathData="M 20 24 L 20 40 M 80 24 L 80 40" />
     </group>
 </vector>

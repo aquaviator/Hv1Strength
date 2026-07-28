@@ -31,17 +31,17 @@ android {
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
     }
-    create("debugConfig") {
-        val debugKeystore = File(
-            System.getProperty("user.home"),
-            ".android/debug.keystore"
-        )
+create("debugConfig") {
+    val debugKeystore = File(
+        System.getProperty("user.home"),
+        ".android/debug.keystore"
+    )
 
-        storeFile = debugKeystore
-        storePassword = "android"
-        keyAlias = "androiddebugkey"
-        keyPassword = "android"
-    }
+    storeFile = debugKeystore
+    storePassword = "android"
+    keyAlias = "androiddebugkey"
+    keyPassword = "android"
+}
   }
 
   buildTypes {

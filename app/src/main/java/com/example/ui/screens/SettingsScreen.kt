@@ -29,7 +29,6 @@ import com.example.ui.viewmodel.StrengthViewModel
 import com.example.BuildConfig
 import com.example.data.AuthState
 import com.example.data.UserProfile
-import com.example.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -321,7 +320,7 @@ fun SettingsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_foreground_monochrome),
+                        painter = painterResource(id = com.example.R.drawable.ic_launcher_foreground_monochrome),
                         contentDescription = "Human V1 Strength Logo",
                         modifier = Modifier.size(64.dp)
                     )

@@ -99,10 +99,10 @@ class Candidate60PhaseBBrandFoundationTest {
     @Test
     fun testBrandResourcesExist() {
         // Verify vector & launcher resources exist in Android application context
-        val logoId = context.resources.getIdentifier("human_logo", "drawable", context.packageName)
+        val logoId = context.resources.getIdentifier("ic_splash_icon", "drawable", context.packageName)
         assertTrue("human_logo resource must exist", logoId != 0)
 
-        val launcherId = context.resources.getIdentifier("human_launcher_fg", "drawable", context.packageName)
+        val launcherId = context.resources.getIdentifier("ic_launcher_foreground", "drawable", context.packageName)
         assertTrue("human_launcher_fg resource must exist", launcherId != 0)
 
         val splashIconId = context.resources.getIdentifier("ic_splash_icon", "drawable", context.packageName)

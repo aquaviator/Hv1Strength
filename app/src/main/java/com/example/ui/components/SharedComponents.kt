@@ -12,7 +12,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.R
 
 @Composable
 fun PrimaryButton(
@@ -579,7 +578,7 @@ fun HumanBrandMark(
     modifier: Modifier = Modifier
 ) {
     androidx.compose.foundation.Image(
-        painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_launcher_foreground_monochrome),
+        painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.ic_launcher_foreground_monochrome),
         contentDescription = "Human V1 Logo",
         modifier = modifier.size(40.dp)
     )

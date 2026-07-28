@@ -42,7 +42,6 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.example.ui.viewmodel.StrengthViewModel
 import com.example.data.AuthState
 import kotlinx.coroutines.launch
-import com.example.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,37 +89,14 @@ fun WelcomeScreen(
             verticalArrangement = Arrangement.Center
         ) {
             // App Brand Header - Canonical Master Banner Lockup
-            Box(
+            Image(
+                painter = painterResource(id = com.example.R.drawable.hv1_banner),
+                contentDescription = "Human V1 Strength Brand Lockup",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primaryContainer,
-                                MaterialTheme.colorScheme.tertiaryContainer
-                            )
-                        )
-                    )
                     .testTag("welcome_logo_card"),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.FitnessCenter,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "HUMAN V1",
-                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit
+            )
 
             Spacer(modifier = Modifier.height(32.dp))
 
