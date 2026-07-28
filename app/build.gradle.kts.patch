@@ -1,0 +1,28 @@
+--- app/build.gradle.kts
++++ app/build.gradle.kts
+@@ -31,6 +31,17 @@
+       keyAlias = "upload"
+       keyPassword = System.getenv("KEY_PASSWORD")
+     }
++    create("debugConfig") {
++        val debugKeystore = File(
++            System.getProperty("user.home"),
++            ".android/debug.keystore"
++        )
++
++        storeFile = debugKeystore
++        storePassword = "android"
++        keyAlias = "androiddebugkey"
++        keyPassword = "android"
++    }
+   }
+ 
+   buildTypes {
+@@ -41,6 +52,7 @@
+       signingConfig = signingConfigs.getByName("release")
+     }
+     debug {
++      signingConfig = signingConfigs.getByName("debugConfig")
+     }
+   }
+   compileOptions {

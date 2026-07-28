@@ -68,6 +68,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.lazy.rememberLazyListState
+import com.example.R
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextAlign
@@ -2615,7 +2616,7 @@ fun HighDensityHeader(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Image(
-                    painter = painterResource(id = com.example.R.drawable.ic_launcher_foreground_monochrome),
+                    painter = painterResource(id = R.drawable.ic_launcher_foreground_monochrome),
                     contentDescription = null,
                     modifier = Modifier.size(16.dp)
                 )
