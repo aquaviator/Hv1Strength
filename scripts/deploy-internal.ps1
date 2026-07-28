@@ -1,6 +1,3 @@
-$path = ".\scripts\deploy-internal.ps1"
-
-$script = @'
 param(
     [Parameter(Mandatory = $true)]
     [int]$PlayVersionCode,
@@ -55,31 +52,68 @@ Write-Host "Repository: $repoRoot"
 
 Write-Step "Checking Java"
 
-if (-not $env:JAVA_HOME) {
-    $androidStudioJbr = "C:\Program Files\Android\Android Studio\jbr"
+$androidStudioJbr = "C:\Program Files\Android\Android Studio\jbr"
 
-    if (Test-Path $androidStudioJbr) {
+$javaHomeValid =
+    $env:JAVA_HOME -and
+    (Test-Path -LiteralPath (Join-Path $env:JAVA_HOME "bin\java.exe"))
+
+if (-not $javaHomeValid) {
+    if (Test-Path -LiteralPath (Join-Path $androidStudioJbr "bin\java.exe")) {
         $env:JAVA_HOME = $androidStudioJbr
+    }
+    else {
+        Fail "Java was not found in JAVA_HOME or Android Studio JBR."
     }
 }
 
-if ($env:JAVA_HOME) {
-    $javaBin = Join-Path $env:JAVA_HOME "bin"
+$javaExe = Join-Path $env:JAVA_HOME "bin\java.exe"
+$javaBin = Join-Path $env:JAVA_HOME "bin"
 
-    if ($env:Path -notlike "*$javaBin*") {
-        $env:Path = "$javaBin;$env:Path"
-    }
+if ($env:Path -notlike "*$javaBin*") {
+    $env:Path = "$javaBin;$env:Path"
+}
+
+if (-not (Test-Path -LiteralPath $javaExe)) {
+    Fail "Java executable does not exist: $javaExe"
 }
 
 try {
-    $null = Get-Command java -ErrorAction Stop
-    $javaVersion = (& java -version 2>&1 | Select-Object -First 1)
-    Write-Host "Java: $javaVersion"
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = New-Object System.Diagnostics.ProcessStartInfo
+
+    $process.StartInfo.FileName = $javaExe
+    $process.StartInfo.Arguments = "-version"
+    $process.StartInfo.UseShellExecute = $false
+    $process.StartInfo.RedirectStandardOutput = $true
+    $process.StartInfo.RedirectStandardError = $true
+    $process.StartInfo.CreateNoWindow = $true
+
+    $started = $process.Start()
+
+    if (-not $started) {
+        Fail "Java process could not be started."
+    }
+
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+
+    $process.WaitForExit()
+
+    if ($process.ExitCode -ne 0) {
+        Fail "Java exists but returned exit code $($process.ExitCode)."
+    }
+
+    # java -version normally writes its version information to STDERR.
+    $javaOutput = if ($stderr) { $stderr } else { $stdout }
+    $javaVersion = ($javaOutput -split "`r?`n" | Where-Object { $_ } | Select-Object -First 1)
+
+    Write-Host "JAVA_HOME: $env:JAVA_HOME"
+    Write-Host "Java:      $javaVersion"
 }
 catch {
-    Fail "Java is unavailable. Set JAVA_HOME or install/configure the Android Studio JBR."
+    Fail "Java could not be executed from '$javaExe'. Error: $($_.Exception.Message)"
 }
-
 # ------------------------------------------------------------
 # Git state
 # ------------------------------------------------------------
@@ -418,12 +452,3 @@ Write-Host "Created:      $($aabFile.LastWriteTime)"
 
 Write-Host ""
 Write-Host "READY FOR GOOGLE PLAY INTERNAL TESTING" -ForegroundColor Green
-'@
-
-$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-
-[System.IO.File]::WriteAllText(
-    (Resolve-Path $path),
-    $script.TrimEnd() + "`r`n",
-    $utf8NoBom
-)
