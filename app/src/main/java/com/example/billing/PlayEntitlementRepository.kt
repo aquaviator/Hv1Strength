@@ -47,7 +47,7 @@ class PlayEntitlementRepository(
                 repository.getUserProfileFlow("offline"),
                 _cachedEntitlement
             ) { subState, userProfile, cached ->
-                resolveAccessState(subState, userProfile?.createdAt, cached)
+                resolveAccessState(subState, cached)
             }.collect { newState ->
                 _appAccessState.value = newState
             }
@@ -87,7 +87,6 @@ class PlayEntitlementRepository(
 
     private suspend fun resolveAccessState(
         subState: SubscriptionState,
-        profileCreatedAt: Long?,
         cached: VerifiedEntitlement?
     ): AppAccessState {
         val now = System.currentTimeMillis()
@@ -134,35 +133,12 @@ class PlayEntitlementRepository(
             else -> {}
         }
 
-        // 3. Fallback evaluation mode (DEBUG / Developer build preview only)
-        // In production, Google Play owns the 1-month introductory trial offer authority.
-        return if (com.example.BuildConfig.DEBUG) {
-            checkTrialState(profileCreatedAt, now)
+        if (cached != null && (!cached.isValidAt(now) || cached.status == "EXPIRED")) {
+            return AppAccessState.Expired
+        } else if (subState is SubscriptionState.Loading) {
+            return AppAccessState.Initializing
         } else {
-            AppAccessState.Expired
-        }
-    }
-
-    private fun checkTrialState(profileCreatedAt: Long?, nowMillis: Long): AppAccessState {
-        val createdAt = profileCreatedAt ?: prefs.getLong("first_launch_time", 0L).let {
-            if (it == 0L) {
-                val currentTime = System.currentTimeMillis()
-                prefs.edit().putLong("first_launch_time", currentTime).apply()
-                currentTime
-            } else {
-                it
-            }
-        }
-
-        val thirtyDaysInMillis = 30L * 24L * 60L * 60L * 1000L
-        val trialEndDateMillis = createdAt + thirtyDaysInMillis
-
-        return if (nowMillis < trialEndDateMillis) {
-            val millisRemaining = trialEndDateMillis - nowMillis
-            val daysRemaining = (millisRemaining / (24L * 60L * 60L * 1000L)).toInt() + 1
-            AppAccessState.TrialActive(daysRemaining, trialEndDateMillis)
-        } else {
-            AppAccessState.Expired
+            return AppAccessState.Unentitled
         }
     }
 
@@ -171,7 +147,7 @@ class PlayEntitlementRepository(
             val userProfile = repository.getUserProfile("offline")
             val subState = billingRepository.subscriptionState.value
             val cached = _cachedEntitlement.value
-            _appAccessState.value = resolveAccessState(subState, userProfile?.createdAt, cached)
+            _appAccessState.value = resolveAccessState(subState, cached)
         }
     }
 

@@ -81,8 +81,20 @@ fun SubscriptionAccessScreen(
                 }
             }
 
+            val titleText = if (appAccessState is com.example.billing.AppAccessState.Expired) {
+                "YOUR TRIAL HAS ENDED"
+            } else {
+                "UNLOCK HUMAN STRENGTH"
+            }
+
+            val bodyText = if (appAccessState is com.example.billing.AppAccessState.Expired) {
+                "Your training history, logged workouts, and custom routines are safe. Continue training with Human Strength for £24/year."
+            } else {
+                "Access all training modules, preserve local & cloud sync data, and build your custom routines with Human Strength."
+            }
+
             Text(
-                text = "YOUR TRIAL HAS ENDED",
+                text = titleText,
                 style = MaterialTheme.typography.headlineSmall.copy(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
@@ -92,7 +104,7 @@ fun SubscriptionAccessScreen(
             )
 
             Text(
-                text = "Your training history, logged workouts, and custom routines are safe. Continue training with Human Strength for £24/year.",
+                text = bodyText,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -132,7 +144,7 @@ fun SubscriptionAccessScreen(
                                         "${productInfo?.formattedPrice}/year"
                                     }
                                 }
-                                else -> CommercialConfig.PLANNED_UK_PRICE + "/year (1 month free trial available via Play)"
+                                else -> CommercialConfig.PLANNED_UK_PRICE
                             }
                             Text(
                                 text = priceCopy,

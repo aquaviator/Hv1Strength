@@ -83,7 +83,7 @@ class Candidate70PhaseDEntitlementTest {
         val state = entitlementRepository.appAccessState.value
         assertNotNull(state)
         // Verify trial active or initial state
-        assertTrue(state is AppAccessState.TrialActive || state is AppAccessState.Initializing)
+        assertTrue(state is AppAccessState.Unentitled || state is AppAccessState.Initializing)
     }
 
     @Test
