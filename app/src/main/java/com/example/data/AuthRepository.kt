@@ -79,6 +79,51 @@ class AuthRepository(
     }
 
     private fun restoreSession() {
+        if (com.example.HumanStrengthApplication.isFirebaseConfigured) {
+            _authState.value = AuthState.Loading
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val firebaseUser = firebaseAuth?.currentUser
+                    if (firebaseUser == null) {
+                        clearPersistedAuthentication()
+                        _authState.value = AuthState.Initial
+                        return@launch
+                    }
+
+                    val userId = firebaseUser.uid
+                    val existingProfile = strengthRepository.getUserProfile(userId)
+                    val profile = existingProfile?.copy(
+                        firebaseUid = userId,
+                        authProvider = "google",
+                        isOfflineUser = false
+                    )
+                        ?: UserProfile(
+                            id = userId,
+                            googleUserId = userId,
+                            email = firebaseUser.email,
+                            displayName = firebaseUser.displayName
+                                ?: firebaseUser.email?.substringBefore("@")
+                                ?: "Google User",
+                            photoUrl = firebaseUser.photoUrl?.toString(),
+                            authProvider = "google",
+                            humanUserId = HumanUserIdGenerator.mapUserIdToHumanUserId(userId),
+                            firebaseUid = userId,
+                            isOfflineUser = false
+                        )
+
+                    strengthRepository.insertUserProfile(profile)
+                    persistGoogleAuthentication(profile)
+                    _authState.value = AuthState.Authenticated(profile)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error restoring Firebase session", e)
+                    _authState.value = AuthState.Error(
+                        e.localizedMessage ?: "Unable to restore cloud authentication"
+                    )
+                }
+            }
+            return
+        }
+
         val isLoggedIn = prefs.getBoolean("auth_is_logged_in", false)
         val authProvider = prefs.getString("auth_provider", "offline")
         val activeUserId = prefs.getString("auth_active_user_id", "offline") ?: "offline"
@@ -116,6 +161,28 @@ class AuthRepository(
         } else {
             _authState.value = AuthState.Initial
         }
+    }
+
+    private fun clearPersistedAuthentication() {
+        prefs.edit()
+            .remove("auth_is_logged_in")
+            .remove("auth_provider")
+            .remove("auth_active_user_id")
+            .remove("auth_email")
+            .remove("auth_display_name")
+            .remove("auth_photo_url")
+            .apply()
+    }
+
+    private fun persistGoogleAuthentication(profile: UserProfile) {
+        prefs.edit()
+            .putBoolean("auth_is_logged_in", true)
+            .putString("auth_provider", "google")
+            .putString("auth_active_user_id", profile.id)
+            .putString("auth_email", profile.email)
+            .putString("auth_display_name", profile.displayName)
+            .putString("auth_photo_url", profile.photoUrl)
+            .apply()
     }
 
     suspend fun signInAnonymously() = withContext(Dispatchers.IO) {
@@ -186,14 +253,7 @@ class AuthRepository(
             strengthRepository.insertUserProfile(profile)
 
             // Save to shared preferences
-            prefs.edit()
-                .putBoolean("auth_is_logged_in", true)
-                .putString("auth_provider", "google")
-                .putString("auth_active_user_id", userId)
-                .putString("auth_email", email)
-                .putString("auth_display_name", finalDisplayName)
-                .putString("auth_photo_url", photoUrl)
-                .apply()
+            persistGoogleAuthentication(profile)
 
             _authState.value = AuthState.Authenticated(profile)
             return@withContext profile

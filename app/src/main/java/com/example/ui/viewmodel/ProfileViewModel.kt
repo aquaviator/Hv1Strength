@@ -24,8 +24,11 @@ class ProfileViewModel(
 
     init {
         viewModelScope.launch {
-            authViewModel.activeUserId
-                .collect { entitlementRepository.refreshAccessState() }
+            authViewModel.authState.collect { authState ->
+                if (authState is AuthState.Authenticated) {
+                    entitlementRepository.refreshAccessState()
+                }
+            }
         }
     }
 

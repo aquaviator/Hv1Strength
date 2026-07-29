@@ -165,13 +165,15 @@ fun MainAppScreen(
 ) {
     val authState by viewModel.authState.collectAsState()
     val appAccessState by viewModel.appAccessState.collectAsState()
-    val hasAppAccess by viewModel.hasAppAccess.collectAsState()
     val vibrationOn by viewModel.vibrationOn.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val startupDestination = resolveStartupDestination(authState, appAccessState)
 
-    // Commercial Access Navigation Gate
-    if (appAccessState is com.example.billing.AppAccessState.Initializing) {
+    if (
+        startupDestination == StartupDestination.AuthLoading ||
+        startupDestination == StartupDestination.AccessLoading
+    ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
@@ -196,7 +198,7 @@ fun MainAppScreen(
         return
     }
 
-    if (!hasAppAccess && currentRoute != "welcome") {
+    if (startupDestination == StartupDestination.SubscriptionGate) {
         SubscriptionAccessScreen(
             viewModel = viewModel,
             onSignOutComplete = {
@@ -310,7 +312,7 @@ fun MainAppScreen(
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = if (authState is AuthState.Initial) "welcome" else "workout",
+            startDestination = if (startupDestination == StartupDestination.Welcome) "welcome" else "workout",
             modifier = Modifier.padding(innerPadding)
         ) {
             composable("welcome") {
@@ -421,6 +423,32 @@ fun MainAppScreen(
         }
     }
 }
+}
+
+internal enum class StartupDestination {
+    AuthLoading,
+    Welcome,
+    AccessLoading,
+    FullApp,
+    SubscriptionGate
+}
+
+internal fun resolveStartupDestination(
+    authState: AuthState,
+    appAccessState: com.example.billing.AppAccessState
+): StartupDestination = when (authState) {
+    AuthState.Loading -> StartupDestination.AuthLoading
+    AuthState.Initial,
+    is AuthState.Error -> StartupDestination.Welcome
+    // Offline mode remains available only for builds where Firebase is genuinely
+    // unconfigured. Configured startup never treats a local profile as cloud auth.
+    AuthState.Offline -> StartupDestination.FullApp
+    is AuthState.Authenticated -> when {
+        appAccessState is com.example.billing.AppAccessState.Initializing ->
+            StartupDestination.AccessLoading
+        appAccessState.hasAppAccess -> StartupDestination.FullApp
+        else -> StartupDestination.SubscriptionGate
+    }
 }
 
 data class NavigationItem(
