@@ -7,6 +7,14 @@ const assert_1 = __importDefault(require("assert"));
 const index_1 = require("../index");
 describe("Hv1 Platform Production Entitlement Backend Unit Tests", () => {
     const now = 1753460000000; // Fixed timestamp for test determinism
+    it("accepts only an explicit valid backend trial policy", () => {
+        assert_1.default.deepStrictEqual((0, index_1.parseTrialPolicy)({ trialEnabled: true, trialDurationDays: 30 }), { trialEnabled: true, trialDurationDays: 30 });
+        assert_1.default.strictEqual((0, index_1.parseTrialPolicy)(undefined), null);
+        assert_1.default.strictEqual((0, index_1.parseTrialPolicy)({ trialEnabled: true }), null);
+        assert_1.default.strictEqual((0, index_1.parseTrialPolicy)({ trialEnabled: true, trialDurationDays: 0 }), null);
+        assert_1.default.strictEqual((0, index_1.parseTrialPolicy)({ trialEnabled: true, trialDurationDays: 30.5 }), null);
+        assert_1.default.strictEqual((0, index_1.parseTrialPolicy)({ trialEnabled: "true", trialDurationDays: 30 }), null);
+    });
     // Mock Play Client Builder
     function createMockPlayClient(subscriptionState, lineItems, shouldThrow = false, throwError = null) {
         return {
@@ -347,7 +355,7 @@ describe("Hv1 Platform Production Entitlement Backend Unit Tests", () => {
         };
         const res = await (0, index_1.purgeUserCloudData)(mockDb, "test_uid", "human_test123");
         assert_1.default.strictEqual(res.deletedSubcollections.length, 10);
-        assert_1.default.strictEqual(res.totalDocumentsDeleted, 21);
+        assert_1.default.strictEqual(res.totalDocumentsDeleted, 21); // 20 subdocs + 1 root doc
     });
 });
 //# sourceMappingURL=index.test.js.map

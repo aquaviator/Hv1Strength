@@ -7,5 +7,6 @@ object CommercialConfig {
     const val PLANNED_INTRO_OFFER = "1 month free trial"
     const val PACKAGE_NAME = "com.aistudio.humanstrength.kfqjza"
     const val VERIFICATION_ENDPOINT_URL = "https://europe-west1-hv1-platform.cloudfunctions.net/verifyPurchase"
+    const val ACCOUNT_TRIAL_ENDPOINT_URL = "https://europe-west1-hv1-platform.cloudfunctions.net/initializeAccountTrial"
 }
 

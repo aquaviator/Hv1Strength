@@ -22,6 +22,13 @@ class ProfileViewModel(
         .map { it.hasAppAccess }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    init {
+        viewModelScope.launch {
+            authViewModel.activeUserId
+                .collect { entitlementRepository.refreshAccessState() }
+        }
+    }
+
     fun launchPurchaseFlow(activity: android.app.Activity): Boolean = billingRepository.launchPurchaseFlow(activity)
     fun restorePurchases() {
         billingRepository.restorePurchases()

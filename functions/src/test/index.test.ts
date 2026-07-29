@@ -6,12 +6,25 @@ import {
   purgeUserCloudData,
   FIRESTORE_USER_SUBCOLLECTIONS,
   verifyTokenWithGooglePlay,
+  parseTrialPolicy,
   EXPECTED_PACKAGE_NAME,
   EXPECTED_PRODUCT_ID
 } from "../index";
 
 describe("Hv1 Platform Production Entitlement Backend Unit Tests", () => {
   const now = 1753460000000; // Fixed timestamp for test determinism
+
+  it("accepts only an explicit valid backend trial policy", () => {
+    assert.deepStrictEqual(
+      parseTrialPolicy({ trialEnabled: true, trialDurationDays: 30 }),
+      { trialEnabled: true, trialDurationDays: 30 }
+    );
+    assert.strictEqual(parseTrialPolicy(undefined), null);
+    assert.strictEqual(parseTrialPolicy({ trialEnabled: true }), null);
+    assert.strictEqual(parseTrialPolicy({ trialEnabled: true, trialDurationDays: 0 }), null);
+    assert.strictEqual(parseTrialPolicy({ trialEnabled: true, trialDurationDays: 30.5 }), null);
+    assert.strictEqual(parseTrialPolicy({ trialEnabled: "true", trialDurationDays: 30 }), null);
+  });
 
   // Mock Play Client Builder
   function createMockPlayClient(

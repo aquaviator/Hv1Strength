@@ -33,7 +33,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.rtdnHandler = exports.verifyPurchase = exports.FUNCTION_REGION = exports.EXPECTED_PRODUCT_ID = exports.EXPECTED_PACKAGE_NAME = void 0;
+exports.deleteUserAccount = exports.rtdnHandler = exports.initializeAccountTrial = exports.verifyPurchase = exports.FIRESTORE_USER_SUBCOLLECTIONS = exports.MILLIS_PER_DAY = exports.ACCOUNT_TRIAL_DOCUMENT_ID = exports.TRIAL_POLICY_PATH = exports.FUNCTION_REGION = exports.EXPECTED_PRODUCT_ID = exports.EXPECTED_PACKAGE_NAME = void 0;
+exports.parseTrialPolicy = parseTrialPolicy;
 exports.getPurchaseDocId = getPurchaseDocId;
 exports.getJavaStringHashCode = getJavaStringHashCode;
 exports.purgeUserCloudData = purgeUserCloudData;
@@ -53,6 +54,21 @@ const db = admin.firestore();
 exports.EXPECTED_PACKAGE_NAME = "com.aistudio.humanstrength.kfqjza";
 exports.EXPECTED_PRODUCT_ID = "human_strength_annual";
 exports.FUNCTION_REGION = "europe-west1";
+exports.TRIAL_POLICY_PATH = "platform_config/trial_policy";
+exports.ACCOUNT_TRIAL_DOCUMENT_ID = "human_v1";
+exports.MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
+function parseTrialPolicy(data) {
+    if (!data ||
+        typeof data.trialEnabled !== "boolean" ||
+        !Number.isInteger(data.trialDurationDays) ||
+        data.trialDurationDays <= 0) {
+        return null;
+    }
+    return {
+        trialEnabled: data.trialEnabled,
+        trialDurationDays: data.trialDurationDays
+    };
+}
 /**
  * Creates a cryptographically secure one-way hash for purchase token doc IDs.
  * Protects sensitive purchase token data by using SHA-256 without exposing raw token material.
@@ -64,16 +80,19 @@ function getPurchaseDocId(purchaseToken) {
     const hash = crypto.createHash("sha256").update(purchaseToken).digest("hex");
     return `play_${hash.substring(0, 32)}`;
 }
+/**
+ * Deterministic Java String hashCode calculation in JS/TS.
+ * Matches Kotlin String.hashCode() behavior for deriving humanUserId from uid.
+ */
 function getJavaStringHashCode(str) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
         const char = str.charCodeAt(i);
         hash = (hash << 5) - hash + char;
-        hash |= 0;
+        hash |= 0; // Convert to 32-bit signed integer
     }
     return hash;
 }
-exports.getJavaStringHashCode = getJavaStringHashCode;
 exports.FIRESTORE_USER_SUBCOLLECTIONS = [
     "profile",
     "sessions",
@@ -86,6 +105,10 @@ exports.FIRESTORE_USER_SUBCOLLECTIONS = [
     "templateSets",
     "processedCommands"
 ];
+/**
+ * Purges all user-owned Firestore documents and subcollections under users/{humanUserId}.
+ * Enforces ownership boundary derived from authenticated user context.
+ */
 async function purgeUserCloudData(firestoreDb, uid, targetHumanUserId) {
     let totalDeleted = 0;
     const deletedSubcollections = [];
@@ -103,6 +126,7 @@ async function purgeUserCloudData(firestoreDb, uid, targetHumanUserId) {
             deletedSubcollections.push(subColl);
         }
     }
+    // Delete top-level user document
     const userDocSnapshot = await userDocRef.get();
     if (userDocSnapshot.exists) {
         await userDocRef.delete();
@@ -110,7 +134,6 @@ async function purgeUserCloudData(firestoreDb, uid, targetHumanUserId) {
     }
     return { deletedSubcollections, totalDocumentsDeleted: totalDeleted };
 }
-exports.purgeUserCloudData = purgeUserCloudData;
 /**
  * Creates an authorized Google Play Developer API client if service credentials exist.
  */
@@ -352,6 +375,84 @@ exports.verifyPurchase = (0, https_1.onRequest)({ region: exports.FUNCTION_REGIO
     }
 });
 /**
+ * Authenticated, idempotent Human V1 account-trial initialization/status endpoint.
+ * Trial records are stored outside client-writable profile sync and can only be
+ * created by this trusted backend.
+ */
+exports.initializeAccountTrial = (0, https_1.onRequest)({ region: exports.FUNCTION_REGION }, async (req, res) => {
+    if (req.method !== "POST") {
+        res.status(405).json({ code: "MALFORMED_REQUEST", message: "Method Not Allowed. Only POST is supported." });
+        return;
+    }
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        res.status(401).json({ code: "UNAUTHORIZED", message: "Missing or invalid Authorization header" });
+        return;
+    }
+    let uid;
+    try {
+        uid = (await admin.auth().verifyIdToken(authHeader.substring("Bearer ".length))).uid;
+    }
+    catch (error) {
+        logger.warn("Authentication failed for initializeAccountTrial:", error?.message || error);
+        res.status(401).json({ code: "UNAUTHORIZED", message: "Invalid or expired authentication token" });
+        return;
+    }
+    const trialRef = db.collection("accounts").doc(uid)
+        .collection("entitlements").doc(exports.ACCOUNT_TRIAL_DOCUMENT_ID);
+    const policyRef = db.doc(exports.TRIAL_POLICY_PATH);
+    try {
+        const result = await db.runTransaction(async (transaction) => {
+            const existing = await transaction.get(trialRef);
+            if (existing.exists) {
+                const data = existing.data();
+                const startedAt = data?.trialStartedAt;
+                const endsAt = data?.trialEndsAt;
+                if (startedAt instanceof admin.firestore.Timestamp &&
+                    endsAt instanceof admin.firestore.Timestamp) {
+                    const serverNowMillis = Date.now();
+                    return {
+                        status: endsAt.toMillis() > serverNowMillis ? "ACTIVE" : "EXPIRED",
+                        trialStartedAtMillis: startedAt.toMillis(),
+                        trialEndsAtMillis: endsAt.toMillis(),
+                        serverNowMillis
+                    };
+                }
+                throw new Error("Existing account trial record is malformed");
+            }
+            const policySnapshot = await transaction.get(policyRef);
+            const policy = parseTrialPolicy(policySnapshot.data());
+            if (!policy) {
+                throw new Error("Trial policy is missing or invalid");
+            }
+            if (!policy.trialEnabled) {
+                return { status: "DISABLED", serverNowMillis: Date.now() };
+            }
+            const serverNowMillis = Date.now();
+            const trialStartedAt = admin.firestore.Timestamp.fromMillis(serverNowMillis);
+            const trialEndsAt = admin.firestore.Timestamp.fromMillis(serverNowMillis + policy.trialDurationDays * exports.MILLIS_PER_DAY);
+            transaction.create(trialRef, {
+                trialStartedAt,
+                trialEndsAt
+            });
+            return {
+                status: "ACTIVE",
+                trialStartedAtMillis: trialStartedAt.toMillis(),
+                trialEndsAtMillis: trialEndsAt.toMillis(),
+                serverNowMillis
+            };
+        });
+        res.status(200).json(result);
+    }
+    catch (error) {
+        logger.error(`Account trial initialization unavailable for ${uid}:`, error?.message || error);
+        res.status(503).json({
+            code: "TRIAL_UNAVAILABLE",
+            message: "Account trial status is temporarily unavailable"
+        });
+    }
+});
+/**
  * Cloud Function Pub/Sub Trigger: rtdnHandler (Gen 2)
  * Region: europe-west1
  * Listens to Google Play Real-Time Developer Notifications (RTDN),
@@ -416,6 +517,10 @@ exports.rtdnHandler = (0, pubsub_1.onMessagePublished)({ topic: "play-rtdn-topic
         logger.error("Error processing RTDN message:", err?.message || err);
     }
 });
+/**
+ * Authoritative Server-Side User Account & Cloud Data Deletion Endpoint.
+ * Purges all user-owned Firestore documents/subcollections and deletes the Firebase Authentication identity.
+ */
 exports.deleteUserAccount = (0, https_1.onRequest)({ region: exports.FUNCTION_REGION }, async (req, res) => {
     res.set("Access-Control-Allow-Origin", "*");
     res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
@@ -452,6 +557,7 @@ exports.deleteUserAccount = (0, https_1.onRequest)({ region: exports.FUNCTION_RE
     try {
         logger.info(`Initiating cloud data purge for user ${uid} (humanUserId=${humanUserId})`);
         const purgeResult = await purgeUserCloudData(db, uid, humanUserId);
+        // Delete Firebase Authentication identity
         try {
             await admin.auth().deleteUser(uid);
             logger.info(`Successfully deleted Firebase Auth user ${uid}`);

@@ -14,6 +14,29 @@ const db = admin.firestore();
 export const EXPECTED_PACKAGE_NAME = "com.aistudio.humanstrength.kfqjza";
 export const EXPECTED_PRODUCT_ID = "human_strength_annual";
 export const FUNCTION_REGION = "europe-west1";
+export const TRIAL_POLICY_PATH = "platform_config/trial_policy";
+export const ACCOUNT_TRIAL_DOCUMENT_ID = "human_v1";
+export const MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
+
+export interface TrialPolicy {
+  trialEnabled: boolean;
+  trialDurationDays: number;
+}
+
+export function parseTrialPolicy(data: admin.firestore.DocumentData | undefined): TrialPolicy | null {
+  if (
+    !data ||
+    typeof data.trialEnabled !== "boolean" ||
+    !Number.isInteger(data.trialDurationDays) ||
+    data.trialDurationDays <= 0
+  ) {
+    return null;
+  }
+  return {
+    trialEnabled: data.trialEnabled,
+    trialDurationDays: data.trialDurationDays
+  };
+}
 
 export interface VerifiedEntitlement {
   productId: string;
@@ -390,6 +413,97 @@ export const verifyPurchase = onRequest(
       res.status(500).json({
         code: "PLAY_API_UNAVAILABLE",
         message: "Internal server error during purchase verification"
+      });
+    }
+  }
+);
+
+/**
+ * Authenticated, idempotent Human V1 account-trial initialization/status endpoint.
+ * Trial records are stored outside client-writable profile sync and can only be
+ * created by this trusted backend.
+ */
+export const initializeAccountTrial = onRequest(
+  { region: FUNCTION_REGION },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).json({ code: "MALFORMED_REQUEST", message: "Method Not Allowed. Only POST is supported." });
+      return;
+    }
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      res.status(401).json({ code: "UNAUTHORIZED", message: "Missing or invalid Authorization header" });
+      return;
+    }
+
+    let uid: string;
+    try {
+      uid = (await admin.auth().verifyIdToken(authHeader.substring("Bearer ".length))).uid;
+    } catch (error: any) {
+      logger.warn("Authentication failed for initializeAccountTrial:", error?.message || error);
+      res.status(401).json({ code: "UNAUTHORIZED", message: "Invalid or expired authentication token" });
+      return;
+    }
+
+    const trialRef = db.collection("accounts").doc(uid)
+      .collection("entitlements").doc(ACCOUNT_TRIAL_DOCUMENT_ID);
+    const policyRef = db.doc(TRIAL_POLICY_PATH);
+
+    try {
+      const result = await db.runTransaction(async (transaction) => {
+        const existing = await transaction.get(trialRef);
+        if (existing.exists) {
+          const data = existing.data();
+          const startedAt = data?.trialStartedAt;
+          const endsAt = data?.trialEndsAt;
+          if (
+            startedAt instanceof admin.firestore.Timestamp &&
+            endsAt instanceof admin.firestore.Timestamp
+          ) {
+            const serverNowMillis = Date.now();
+            return {
+              status: endsAt.toMillis() > serverNowMillis ? "ACTIVE" : "EXPIRED",
+              trialStartedAtMillis: startedAt.toMillis(),
+              trialEndsAtMillis: endsAt.toMillis(),
+              serverNowMillis
+            };
+          }
+          throw new Error("Existing account trial record is malformed");
+        }
+
+        const policySnapshot = await transaction.get(policyRef);
+        const policy = parseTrialPolicy(policySnapshot.data());
+        if (!policy) {
+          throw new Error("Trial policy is missing or invalid");
+        }
+        if (!policy.trialEnabled) {
+          return { status: "DISABLED", serverNowMillis: Date.now() };
+        }
+
+        const serverNowMillis = Date.now();
+        const trialStartedAt = admin.firestore.Timestamp.fromMillis(serverNowMillis);
+        const trialEndsAt = admin.firestore.Timestamp.fromMillis(
+          serverNowMillis + policy.trialDurationDays * MILLIS_PER_DAY
+        );
+        transaction.create(trialRef, {
+          trialStartedAt,
+          trialEndsAt
+        });
+        return {
+          status: "ACTIVE",
+          trialStartedAtMillis: trialStartedAt.toMillis(),
+          trialEndsAtMillis: trialEndsAt.toMillis(),
+          serverNowMillis
+        };
+      });
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      logger.error(`Account trial initialization unavailable for ${uid}:`, error?.message || error);
+      res.status(503).json({
+        code: "TRIAL_UNAVAILABLE",
+        message: "Account trial status is temporarily unavailable"
       });
     }
   }
