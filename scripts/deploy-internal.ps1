@@ -10,10 +10,43 @@ param(
 
     [switch]$SkipDebugBuild,
 
-    [switch]$RunTests
+    [switch]$RunTests,
+
+    [switch]$VersionCheckOnly
 )
 
 $ErrorActionPreference = "Stop"
+$script:VersionChangePending = $false
+$script:VersionRollbackPath = $null
+$script:VersionRollbackBytes = $null
+
+trap {
+    if (
+        $script:VersionChangePending -and
+        $script:VersionRollbackPath -and
+        $null -ne $script:VersionRollbackBytes
+    ) {
+        [System.IO.File]::WriteAllBytes(
+            $script:VersionRollbackPath,
+            $script:VersionRollbackBytes
+        )
+        Write-Host ""
+        Write-Host "Restored the original app/build.gradle.kts version after failure." -ForegroundColor Yellow
+    }
+
+    Write-Host ""
+    Write-Host "DEPLOYMENT STOPPED: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}
+
+$versioningHelper =
+    Join-Path $PSScriptRoot "release-versioning.ps1"
+
+if (-not (Test-Path -LiteralPath $versioningHelper)) {
+    throw "Missing release versioning helper: $versioningHelper"
+}
+
+. $versioningHelper
 
 # ============================================================
 # Helpers
@@ -41,9 +74,7 @@ function Write-Warn {
 function Fail {
     param([string]$Message)
 
-    Write-Host ""
-    Write-Host "DEPLOYMENT STOPPED: $Message" -ForegroundColor Red
-    exit 1
+    throw $Message
 }
 
 # ============================================================
@@ -307,16 +338,16 @@ $buildGradle =
         -LiteralPath $buildGradlePath `
         -Raw
 
-$versionCodeMatch =
-    [regex]::Match(
+$versionCodeMatches =
+    [regex]::Matches(
         $buildGradle,
-        'versionCode\s*=\s*(\d+)'
+        '(?m)^\s*versionCode\s*=\s*(\d+)\s*(?://.*)?$'
     )
 
-$versionNameMatch =
-    [regex]::Match(
+$versionNameMatches =
+    [regex]::Matches(
         $buildGradle,
-        'versionName\s*=\s*"([^"]+)"'
+        '(?m)^\s*versionName\s*=\s*"([^"]+)"\s*(?://.*)?$'
     )
 
 $targetSdkMatch =
@@ -325,12 +356,12 @@ $targetSdkMatch =
         'targetSdk\s*=\s*(\d+)'
     )
 
-if (-not $versionCodeMatch.Success) {
-    Fail "Could not determine versionCode."
+if ($versionCodeMatches.Count -ne 1) {
+    Fail "Expected exactly one versionCode declaration, found $($versionCodeMatches.Count)."
 }
 
-if (-not $versionNameMatch.Success) {
-    Fail "Could not determine versionName."
+if ($versionNameMatches.Count -ne 1) {
+    Fail "Expected exactly one versionName declaration, found $($versionNameMatches.Count)."
 }
 
 if (-not $targetSdkMatch.Success) {
@@ -338,24 +369,71 @@ if (-not $targetSdkMatch.Success) {
 }
 
 $versionCode =
-    [int]$versionCodeMatch.Groups[1].Value
+    [int]$versionCodeMatches[0].Groups[1].Value
 
 $versionName =
-    $versionNameMatch.Groups[1].Value
+    $versionNameMatches[0].Groups[1].Value
 
 $targetSdk =
     [int]$targetSdkMatch.Groups[1].Value
 
-Write-Host "versionCode: $versionCode"
-Write-Host "versionName: $versionName"
-Write-Host "targetSdk:   $targetSdk"
-Write-Host "Play code:   $PlayVersionCode"
+$versionDecision =
+    Get-ReleaseVersionDecision `
+        -PlayVersionCode $PlayVersionCode `
+        -LocalVersionCode $versionCode `
+        -LocalVersionName $versionName
 
-if ($versionCode -le $PlayVersionCode) {
-    Fail "Local versionCode $versionCode must be greater than Play versionCode $PlayVersionCode."
+$targetVersionCode =
+    $versionDecision.TargetVersionCode
+
+$targetVersionName =
+    $versionDecision.TargetVersionName
+
+Write-Host "Current Play version:  $PlayVersionCode"
+Write-Host "Current local version: $versionCode / $versionName"
+Write-Host "Target release version: $targetVersionCode"
+Write-Host "Target version name:     $targetVersionName"
+Write-Host "Target SDK:              $targetSdk"
+
+Write-OK "Version decision: OK"
+
+if ($VersionCheckOnly) {
+    Write-Host ""
+    Write-OK "Version check only: no files changed and no build started."
+    exit 0
 }
 
-Write-OK "Version check: OK"
+if ($versionDecision.RequiresUpdate) {
+    $updatedBuildGradle =
+        Set-AndroidReleaseVersion `
+            -BuildGradle $buildGradle `
+            -VersionCode $targetVersionCode `
+            -VersionName $targetVersionName
+
+    $resolvedBuildGradlePath =
+        (Resolve-Path -LiteralPath $buildGradlePath).Path
+
+    $script:VersionRollbackPath =
+        $resolvedBuildGradlePath
+
+    $script:VersionRollbackBytes =
+        [System.IO.File]::ReadAllBytes(
+            $resolvedBuildGradlePath
+        )
+
+    [System.IO.File]::WriteAllText(
+        $resolvedBuildGradlePath,
+        $updatedBuildGradle,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+
+    $script:VersionChangePending = $true
+    Write-OK "Prepared release version $targetVersionCode / $targetVersionName"
+}
+else {
+    $updatedBuildGradle = $buildGradle
+    Write-OK "Local project already contains release version $targetVersionCode / $targetVersionName; no rewrite needed."
+}
 
 # ============================================================
 # Keystore
@@ -639,26 +717,41 @@ Write-OK "Release bundle: SUCCESS"
 
 Write-Step "Final Git sanity check"
 
-$finalTrackedChanges =
-    @(
-        git status `
-            --porcelain `
-            --untracked-files=no
-    )
+$stagedChanges =
+    @(git diff --cached --name-only)
 
-if ($finalTrackedChanges.Count -gt 0) {
-
-    Write-Host "Tracked files changed during deployment:"
-
-    $finalTrackedChanges |
-        ForEach-Object {
-            Write-Host "  $_"
-        }
-
-    Fail "Deployment changed tracked repository files."
+if ($stagedChanges.Count -gt 0) {
+    Fail "Deployment unexpectedly staged tracked files: $($stagedChanges -join ', ')."
 }
 
-Write-OK "Git remained clean during build"
+$finalTrackedFiles =
+    @(git diff --name-only)
+
+if ($versionDecision.RequiresUpdate) {
+    if (
+        $finalTrackedFiles.Count -ne 1 -or
+        $finalTrackedFiles[0] -ne "app/build.gradle.kts"
+    ) {
+        Fail "Unexpected tracked files changed during deployment: $($finalTrackedFiles -join ', ')."
+    }
+
+    $finalBuildGradle =
+        [System.IO.File]::ReadAllText(
+            $script:VersionRollbackPath
+        )
+
+    if ($finalBuildGradle -ne $updatedBuildGradle) {
+        Fail "app/build.gradle.kts contains changes beyond the intended release version update."
+    }
+
+    Write-OK "Git contains only the expected uncommitted release version change."
+}
+elseif ($finalTrackedFiles.Count -gt 0) {
+    Fail "Deployment changed tracked repository files: $($finalTrackedFiles -join ', ')."
+}
+else {
+    Write-OK "Git remained clean; the target release version was already present."
+}
 
 # ============================================================
 # Release summary
@@ -670,8 +763,8 @@ Write-Host ""
 Write-Host "Branch:       $branch"
 Write-Host "Remote:       $remoteBranch"
 Write-Host "Commit:       $localHead"
-Write-Host "Version code: $versionCode"
-Write-Host "Version name: $versionName"
+Write-Host "Version code: $targetVersionCode"
+Write-Host "Version name: $targetVersionName"
 Write-Host "Target SDK:   $targetSdk"
 Write-Host "Play code:    $PlayVersionCode"
 Write-Host "Keystore:     $resolvedKeystore"
@@ -679,6 +772,14 @@ Write-Host "AAB:          $($aabFile.FullName)"
 Write-Host "Size:         $([math]::Round($aabFile.Length / 1MB, 2)) MB"
 Write-Host "Created:      $($aabFile.LastWriteTime)"
 
+Write-Host ""
+Write-OK "Release version prepared: $targetVersionCode / $targetVersionName"
+if ($versionDecision.RequiresUpdate) {
+    Write-Warn "Tracked release version change pending commit: app/build.gradle.kts"
+}
+else {
+    Write-Host "Release version was already committed before this build."
+}
 Write-Host ""
 Write-Host "READY FOR GOOGLE PLAY INTERNAL TESTING" `
     -ForegroundColor Green
