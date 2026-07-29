@@ -261,13 +261,10 @@ fun SettingsScreen(
                 )
 
                 // Timer sound/vibration Preferences Selection
-                SettingsClickableRow(
+                SettingsComingSoonRow(
                     icon = Icons.Default.NotificationsActive,
                     title = "Rest Timer Preferences",
-                    subtitle = "Coming soon (Candidate 4B)",
-                    onClick = {
-                        Toast.makeText(context, "Rest Timer Preferences are coming soon!", Toast.LENGTH_SHORT).show()
-                    }
+                    subtitle = "Additional rest timer controls coming soon"
                 )
             }
 
@@ -345,28 +342,24 @@ fun SettingsScreen(
                 SettingsInfoRow(
                     icon = Icons.Default.Info,
                     title = "Application Version",
-                    value = "v0.0.0.2 (Human Brand Release)"
-                )
-                SettingsInfoRow(
-                    icon = Icons.Default.Settings,
-                    title = "Room Database Schema",
-                    value = "v2"
+                    value = "v${BuildConfig.VERSION_NAME}"
                 )
                 SettingsInfoRow(
                     icon = Icons.Default.Security,
                     title = "Offline Privacy",
-                    value = "100% Client-Side. No telemetry logs."
-                )
-                SettingsInfoRow(
-                    icon = Icons.Default.Code,
-                    title = "License",
-                    value = "Open-source under MIT"
+                    value = "Workouts stay available on this device. Signed-in accounts can securely sync supported data."
                 )
             }
 
             // Developer Tools Section Card
             if (BuildConfig.DEBUG) {
                 SettingsSectionCard(title = "DEVELOPER TOOLS") {
+                    SettingsInfoRow(
+                        icon = Icons.Default.Settings,
+                        title = "Room Database Schema",
+                        value = "v9"
+                    )
+
                     SettingsToggleRow(
                         icon = Icons.Default.Timer,
                         title = "Simulate Trial Expiration",

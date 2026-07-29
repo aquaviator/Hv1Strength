@@ -68,7 +68,6 @@ fun ProfileScreen(
     var showExportCsvDialog by remember { mutableStateOf(false) }
     var exportedCsvText by remember { mutableStateOf("") }
     var showDeleteLocalDataDialog by remember { mutableStateOf(false) }
-    var showPlayBillingComingSoonDialog by remember { mutableStateOf(false) }
     var showDeleteAccountDialog by remember { mutableStateOf(false) }
     var isDeletingAccount by remember { mutableStateOf(false) }
 
@@ -1227,26 +1226,6 @@ fun ProfileScreen(
         )
     }
 
-    // Play Billing Coming Soon Dialog
-    if (showPlayBillingComingSoonDialog) {
-        AlertDialog(
-            onDismissRequest = { showPlayBillingComingSoonDialog = false },
-            title = { Text("Subscription Management") },
-            text = {
-                Text(
-                    text = "Google Play Billing integration is coming soon in the next update. You will be able to manage your Human Annual Membership subscriptions directly through Google Play.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = { showPlayBillingComingSoonDialog = false }
-                ) {
-                    Text("Got It")
-                }
-            }
-        )
-    }
 }
 
 @Composable

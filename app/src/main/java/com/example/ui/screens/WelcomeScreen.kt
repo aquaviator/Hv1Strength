@@ -37,6 +37,7 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
 import androidx.credentials.CustomCredential
+import com.example.BuildConfig
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.example.ui.viewmodel.StrengthViewModel
@@ -220,7 +221,7 @@ fun WelcomeScreen(
     }
 
     // Google Sign-In Simulation Dialog for development / headless environments
-    if (showSimulationDialog) {
+    if (BuildConfig.DEBUG && showSimulationDialog) {
         AlertDialog(
             onDismissRequest = { showSimulationDialog = false },
             title = {
@@ -307,22 +308,24 @@ fun WelcomeScreen(
                             style = MaterialTheme.typography.bodyMedium
                         )
 
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(
-                                    text = "How to test on this Emulator:",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "Click 'Use Sign-In Simulation' below. This will simulate a complete Google Sign-In and authenticate successfully with the Firebase SDK, allowing you to fully test the database syncing and live features without needing a physical device!",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
+                        if (BuildConfig.DEBUG) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = "How to test on this Emulator:",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Use sign-in simulation to test account linkage and syncing without a Google account on this device.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -351,11 +354,12 @@ fun WelcomeScreen(
                         }
                     }
 
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                    if (BuildConfig.DEBUG) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
                             Text(
                                 text = "Firebase Setup Reference:",
                                 style = MaterialTheme.typography.titleSmall,
@@ -448,27 +452,28 @@ fun WelcomeScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            }
                         }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+
+                        Text(
+                            text = "Verify Web Client ID (or in Settings):",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        OutlinedTextField(
+                            value = webClientId,
+                            onValueChange = {
+                                webClientId = it
+                                sharedPrefs.edit().putString("google_web_client_id", it).apply()
+                            },
+                            label = { Text("Google Web Client ID") },
+                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = MaterialTheme.typography.bodySmall
+                        )
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-
-                    Text(
-                        text = "Verify Web Client ID (or in Settings):",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    OutlinedTextField(
-                        value = webClientId,
-                        onValueChange = { 
-                            webClientId = it
-                            sharedPrefs.edit().putString("google_web_client_id", it).apply()
-                        },
-                        label = { Text("Google Web Client ID") },
-                        modifier = Modifier.fillMaxWidth(),
-                        textStyle = MaterialTheme.typography.bodySmall
-                    )
                 }
             },
             confirmButton = {
@@ -476,14 +481,16 @@ fun WelcomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Button(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            showSignInErrorDialog = false
-                            showSimulationDialog = true
+                    if (BuildConfig.DEBUG) {
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                showSignInErrorDialog = false
+                                showSimulationDialog = true
+                            }
+                        ) {
+                            Text("Use Sign-In Simulation")
                         }
-                    ) {
-                        Text("Use Sign-In Simulation")
                     }
                     
                     OutlinedButton(
