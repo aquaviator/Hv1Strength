@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 class AuthViewModel(
     private val repository: StrengthRepository,
@@ -26,4 +27,20 @@ class AuthViewModel(
             else -> "offline"
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, "offline")
+
+    fun signInWithGoogle(
+        idToken: String,
+        displayName: String?,
+        email: String?,
+        photoUrl: String?
+    ) {
+        launchAuthentication(viewModelScope) {
+            authRepository.signInWithGoogle(idToken, displayName, email, photoUrl)
+        }
+    }
 }
+
+internal fun launchAuthentication(
+    authenticationScope: kotlinx.coroutines.CoroutineScope,
+    authenticate: suspend () -> Unit
+) = authenticationScope.launch { authenticate() }

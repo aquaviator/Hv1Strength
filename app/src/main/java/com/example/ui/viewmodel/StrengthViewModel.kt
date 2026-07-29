@@ -263,6 +263,12 @@ class StrengthViewModel(
     val authRepository get() = authViewModel.authRepository
     val authState = authViewModel.authState
     val activeUserId = authViewModel.activeUserId
+    fun signInWithGoogle(
+        idToken: String,
+        displayName: String?,
+        email: String?,
+        photoUrl: String?
+    ) = authViewModel.signInWithGoogle(idToken, displayName, email, photoUrl)
 
     // Delegated User Profile & Settings properties & functions
     val activeUserProfile = profileViewModel.activeUserProfile

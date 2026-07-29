@@ -151,7 +151,7 @@ fun WelcomeScreen(
                                     .build()
 
                                 val response = credentialManager.getCredential(context, request)
-                                handleCredentialResponse(response, viewModel, coroutineScope)
+                                handleCredentialResponse(response, viewModel)
                             } catch (e: Exception) {
                                 val errorMsg = e.localizedMessage ?: e.message ?: "Unknown error"
                                 Log.e("WelcomeScreen", "Google Sign-In failed", e)
@@ -258,7 +258,7 @@ fun WelcomeScreen(
                         coroutineScope.launch {
                             // Mock Google sign-in using deterministic hashed ID token based on email
                             val mockIdToken = "simulated_token_" + simEmail.hashCode().toString()
-                            viewModel.authRepository.signInWithGoogle(
+                            viewModel.signInWithGoogle(
                                 idToken = mockIdToken,
                                 displayName = simName,
                                 email = simEmail,
@@ -504,7 +504,7 @@ fun WelcomeScreen(
                                         .build()
 
                                     val response = credentialManager.getCredential(context, request)
-                                    handleCredentialResponse(response, viewModel, coroutineScope)
+                                    handleCredentialResponse(response, viewModel)
                                 } catch (e: Exception) {
                                     val errorMsg = e.localizedMessage ?: e.message ?: "Unknown error"
                                     Log.e("WelcomeScreen", "Google Sign-In retry failed", e)
@@ -535,21 +535,18 @@ fun WelcomeScreen(
 
 private fun handleCredentialResponse(
     response: GetCredentialResponse,
-    viewModel: StrengthViewModel,
-    coroutineScope: kotlinx.coroutines.CoroutineScope
+    viewModel: StrengthViewModel
 ) {
     val credential = response.credential
     if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
         try {
             val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-            coroutineScope.launch {
-                viewModel.authRepository.signInWithGoogle(
-                    idToken = googleIdTokenCredential.idToken,
-                    displayName = googleIdTokenCredential.displayName,
-                    email = googleIdTokenCredential.id,
-                    photoUrl = googleIdTokenCredential.profilePictureUri?.toString()
-                )
-            }
+            viewModel.signInWithGoogle(
+                idToken = googleIdTokenCredential.idToken,
+                displayName = googleIdTokenCredential.displayName,
+                email = googleIdTokenCredential.id,
+                photoUrl = googleIdTokenCredential.profilePictureUri?.toString()
+            )
         } catch (e: Exception) {
             Log.e("WelcomeScreen", "Failed to parse Google ID Token credential", e)
         }
