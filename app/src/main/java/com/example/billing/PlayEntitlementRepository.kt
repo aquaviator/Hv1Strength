@@ -107,10 +107,12 @@ class PlayEntitlementRepository(
     }
 
     private fun accountTrialState(trial: CachedAccountTrial, nowMillis: Long): AppAccessState {
-        if (trial.endsAtMillis <= nowMillis) return AppAccessState.Expired
+        if (trial.endsAtMillis <= nowMillis) {
+            return AppAccessState.Expired(trial.endsAtMillis, trial.startedAtMillis)
+        }
         val remainingMillis = trial.endsAtMillis - nowMillis
         val daysRemaining = ((remainingMillis + MILLIS_PER_DAY - 1L) / MILLIS_PER_DAY).toInt()
-        return AppAccessState.TrialActive(daysRemaining, trial.endsAtMillis)
+        return AppAccessState.TrialActive(daysRemaining, trial.endsAtMillis, trial.startedAtMillis)
     }
 
     private fun paidAccessState(entitlement: VerifiedEntitlement, nowMillis: Long): AppAccessState? {
@@ -181,7 +183,7 @@ class PlayEntitlementRepository(
                     is AccountTrialResult.Expired -> {
                         if (result.uid != currentUid) return@withLock AppAccessState.VerificationUnavailable
                         saveCachedAccountTrial(result.uid, result.trialStartedAtMillis, result.trialEndsAtMillis)
-                        AppAccessState.Expired
+                        AppAccessState.Expired(result.trialEndsAtMillis, result.trialStartedAtMillis)
                     }
                     AccountTrialResult.Disabled -> AppAccessState.Unentitled
                     AccountTrialResult.Unauthenticated -> AppAccessState.Unentitled
@@ -192,7 +194,7 @@ class PlayEntitlementRepository(
 
         return when {
             subState is SubscriptionState.Loading -> AppAccessState.Initializing
-            cached != null && (!cached.isValidAt(now) || cached.status == "EXPIRED") -> AppAccessState.Expired
+            cached != null && (!cached.isValidAt(now) || cached.status == "EXPIRED") -> AppAccessState.Expired()
             else -> AppAccessState.Unentitled
         }
     }

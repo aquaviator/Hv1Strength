@@ -279,23 +279,6 @@ fun WorkoutScreen(
                                     color = MaterialTheme.colorScheme.onTertiary
                                 )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .background(
-                                        color = MaterialTheme.colorScheme.secondary,
-                                        shape = RoundedCornerShape(100.dp)
-                                    )
-                                    .padding(horizontal = 12.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = "Day 12 of 30",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSecondary
-                                )
-                            }
                         }
                         Text(
                             "Start a custom session right away and add exercises as you train.",

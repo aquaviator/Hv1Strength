@@ -41,7 +41,7 @@ class Candidate70PhaseDEntitlementTest {
         assertTrue(AppAccessState.GracePeriod.hasAppAccess)
 
         assertFalse(AppAccessState.Initializing.hasAppAccess)
-        assertFalse(AppAccessState.Expired.hasAppAccess)
+        assertFalse(AppAccessState.Expired().hasAppAccess)
         assertFalse(AppAccessState.PaymentPending.hasAppAccess)
         assertFalse(AppAccessState.VerificationUnavailable.hasAppAccess)
         assertFalse(AppAccessState.Error("Test error").hasAppAccess)

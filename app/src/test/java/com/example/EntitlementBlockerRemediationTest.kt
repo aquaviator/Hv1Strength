@@ -83,7 +83,7 @@ class EntitlementBlockerRemediationTest {
     @Test
     fun unavailableAndExpiredAccessCopyRemainDistinctAndRetryRefreshes() {
         val unavailable = subscriptionAccessContent(AppAccessState.VerificationUnavailable)
-        val expired = subscriptionAccessContent(AppAccessState.Expired)
+        val expired = subscriptionAccessContent(AppAccessState.Expired())
         var retries = 0
 
         retryAccessVerification { retries += 1 }

@@ -52,7 +52,7 @@ class StartupDestinationTest {
     fun authenticatedExpiredTrialShowsSubscriptionGate() {
         assertEquals(
             StartupDestination.SubscriptionGate,
-            resolveStartupDestination(authenticated, AppAccessState.Expired)
+            resolveStartupDestination(authenticated, AppAccessState.Expired())
         )
     }
 

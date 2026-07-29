@@ -225,114 +225,56 @@ fun ProfileScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    val membership = membershipPresentation(appAccessState)
+                    Text(
+                        text = "MEMBERSHIP",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        ),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = membership.primaryTitle,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = membership.primaryStatus,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = membership.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    membership.trialStartedAtMillis?.let {
+                        MembershipDateRow("Trial started", formatMembershipDate(it))
+                    }
+                    membership.trialEndsAtMillis?.let {
+                        MembershipDateRow("Trial ends", formatMembershipDate(it))
+                    }
+                    if (membership.showAnnualProduct) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         Text(
-                            text = "MEMBERSHIP",
-                            style = MaterialTheme.typography.titleSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                            color = MaterialTheme.colorScheme.primary
+                            text = membership.annualHeading.orEmpty(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        
-                        when (val state = appAccessState) {
-                            is com.example.billing.AppAccessState.Subscribed -> {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Text(
-                                        text = "Active Subscription",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-                            }
-                            is com.example.billing.AppAccessState.TrialActive -> {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.secondaryContainer,
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Text(
-                                        text = "Introductory Trial (${state.daysRemaining} days left)",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                }
-                            }
-                            is com.example.billing.AppAccessState.GracePeriod -> {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Text(
-                                        text = "Grace Period Active",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                                    )
-                                }
-                            }
-                            is com.example.billing.AppAccessState.Expired -> {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.errorContainer,
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Text(
-                                        text = "Membership Expired",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                            }
-                            else -> {}
-                        }
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CardMembership,
-                            contentDescription = "Membership status",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(28.dp)
+                        Text(
+                            text = "Human Strength Annual",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyLarge
                         )
-                        Column(modifier = Modifier.weight(1f)) {
-                            val titleText = when (subscriptionState) {
-                                is com.example.billing.SubscriptionState.PurchasedUnverified -> "Human Strength Annual Membership"
-                                is com.example.billing.SubscriptionState.PurchasePending -> "Purchase Confirmation Pending"
-                                else -> productInfo?.title ?: "Human Strength Annual"
-                            }
-                            Text(
-                                text = titleText,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            
-                            val priceCopy = when {
-                                productInfo != null -> {
-                                    if (productInfo?.hasFreeTrial == true) {
-                                        "1 month free, then ${productInfo?.formattedPrice}/year"
-                                    } else {
-                                        "${productInfo?.formattedPrice}/year"
-                                    }
-                                }
-                                else -> "Planned UK price: £24.00/year (1 month free trial available via Play Store)"
-                            }
-                            Text(
-                                text = priceCopy,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
+                    Text(
+                        text = annualPriceCopy(productInfo?.formattedPrice),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
                     when (subscriptionState) {
                         is com.example.billing.SubscriptionState.PurchasePending -> {
@@ -376,6 +318,7 @@ fun ProfileScreen(
                                     Toast.makeText(context, "Cannot start billing from non-activity context", Toast.LENGTH_SHORT).show()
                                 }
                             },
+                            enabled = membership.allowPurchase,
                             modifier = Modifier.weight(1f).testTag("purchase_annual_button"),
                             shape = RoundedCornerShape(12.dp)
                         ) {
@@ -1302,6 +1245,25 @@ fun ProfileScreen(
                     Text("Got It")
                 }
             }
+        )
+    }
+}
+
+@Composable
+private fun MembershipDateRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold
         )
     }
 }

@@ -39,7 +39,7 @@ internal fun subscriptionAccessContent(state: AppAccessState): SubscriptionAcces
             body = "Human Strength cannot currently verify your account access. Check your connection and try again.",
             showsPurchaseRequirement = false
         )
-        AppAccessState.Expired -> SubscriptionAccessContent(
+        is AppAccessState.Expired -> SubscriptionAccessContent(
             title = "YOUR TRIAL HAS ENDED",
             body = "Your training history, logged workouts, and custom routines are safe. Continue training with Human Strength for £24/year.",
             showsPurchaseRequirement = true
@@ -171,16 +171,7 @@ fun SubscriptionAccessScreen(
                                 text = productInfo?.title ?: "Human Strength Annual Membership",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                             )
-                            val priceCopy = when {
-                                productInfo != null -> {
-                                    if (productInfo?.hasFreeTrial == true) {
-                                        "1 month free, then ${productInfo?.formattedPrice}/year"
-                                    } else {
-                                        "${productInfo?.formattedPrice}/year"
-                                    }
-                                }
-                                else -> CommercialConfig.PLANNED_UK_PRICE
-                            }
+                            val priceCopy = annualPriceCopy(productInfo?.formattedPrice)
                             Text(
                                 text = priceCopy,
                                 style = MaterialTheme.typography.bodyMedium,

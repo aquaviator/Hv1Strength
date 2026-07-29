@@ -44,7 +44,8 @@ sealed class AppAccessState {
     
     data class TrialActive(
         val daysRemaining: Int,
-        val trialEndDateMillis: Long
+        val trialEndDateMillis: Long,
+        val trialStartedAtMillis: Long? = null
     ) : AppAccessState()
     
     data class Subscribed(
@@ -57,7 +58,10 @@ sealed class AppAccessState {
     
     object GracePeriod : AppAccessState()
     object PaymentPending : AppAccessState()
-    object Expired : AppAccessState()
+    data class Expired(
+        val trialEndDateMillis: Long? = null,
+        val trialStartedAtMillis: Long? = null
+    ) : AppAccessState()
     object Unentitled : AppAccessState()
     object VerificationUnavailable : AppAccessState()
     
