@@ -46,7 +46,7 @@ class PlayEntitlementRepository(
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val trialRefreshMutex = Mutex()
 
-    private val _cachedEntitlement = MutableStateFlow<VerifiedEntitlement?>(loadCachedEntitlement())
+    private val _cachedEntitlement = MutableStateFlow<VerifiedEntitlement?>(discardLegacyPaidEntitlementCache())
     override val cachedEntitlement: StateFlow<VerifiedEntitlement?> = _cachedEntitlement.asStateFlow()
 
     private val _appAccessState = MutableStateFlow<AppAccessState>(AppAccessState.Initializing)
@@ -65,34 +65,22 @@ class PlayEntitlementRepository(
         }
     }
 
-    private fun loadCachedEntitlement(): VerifiedEntitlement? {
-        val productId = prefs.getString(KEY_PRODUCT_ID, null) ?: return null
-        val status = prefs.getString(KEY_STATUS, "EXPIRED") ?: "EXPIRED"
-        val expiryMillis = prefs.getLong(KEY_EXPIRY_MILLIS, 0L)
-        val autoRenew = prefs.getBoolean(KEY_AUTO_RENEW, false)
-        val verificationMillis = prefs.getLong(KEY_VERIFICATION_MILLIS, 0L)
-        val source = prefs.getString(KEY_SOURCE, "CACHED") ?: "CACHED"
-
-        return VerifiedEntitlement(
-            productId = productId,
-            status = status,
-            expiryTimestampMillis = expiryMillis,
-            autoRenewEnabled = autoRenew,
-            verificationTimestampMillis = verificationMillis,
-            source = source
-        )
+    private fun discardLegacyPaidEntitlementCache(): VerifiedEntitlement? {
+        // Old backend-verified and client-manufactured records used the same format/source,
+        // so they cannot be distinguished safely. Paid access is re-verified each app session.
+        prefs.edit()
+            .remove(KEY_PRODUCT_ID)
+            .remove(KEY_STATUS)
+            .remove(KEY_EXPIRY_MILLIS)
+            .remove(KEY_AUTO_RENEW)
+            .remove(KEY_VERIFICATION_MILLIS)
+            .remove(KEY_SOURCE)
+            .apply()
+        return null
     }
 
     private fun saveCachedEntitlement(entitlement: VerifiedEntitlement) {
-        prefs.edit()
-            .putString(KEY_PRODUCT_ID, entitlement.productId)
-            .putString(KEY_STATUS, entitlement.status)
-            .putLong(KEY_EXPIRY_MILLIS, entitlement.expiryTimestampMillis)
-            .putBoolean(KEY_AUTO_RENEW, entitlement.autoRenewEnabled)
-            .putLong(KEY_VERIFICATION_MILLIS, entitlement.verificationTimestampMillis)
-            .putString(KEY_SOURCE, entitlement.source)
-            .apply()
-
+        // Session-only cache: persisted legacy records were not provably backend-issued.
         _cachedEntitlement.value = entitlement
     }
 
@@ -125,6 +113,24 @@ class PlayEntitlementRepository(
         return AppAccessState.TrialActive(daysRemaining, trial.endsAtMillis)
     }
 
+    private fun paidAccessState(entitlement: VerifiedEntitlement, nowMillis: Long): AppAccessState? {
+        if (!entitlement.isValidAt(nowMillis)) return null
+        return when (entitlement.status) {
+            "ACTIVE" -> AppAccessState.Subscribed(entitlement.expiryTimestampMillis)
+            "TRIAL_ACTIVE" -> {
+                val daysRemaining = maxOf(
+                    1,
+                    ((entitlement.expiryTimestampMillis - nowMillis) / MILLIS_PER_DAY).toInt()
+                )
+                AppAccessState.TrialActive(daysRemaining, entitlement.expiryTimestampMillis)
+            }
+            "CANCELLED_ACTIVE" -> AppAccessState.SubscriptionActiveUntilExpiry(entitlement.expiryTimestampMillis)
+            "GRACE_PERIOD" -> AppAccessState.GracePeriod
+            "PENDING" -> AppAccessState.PaymentPending
+            else -> null
+        }
+    }
+
     private suspend fun resolveAccessState(
         subState: SubscriptionState,
         cached: VerifiedEntitlement?
@@ -132,18 +138,7 @@ class PlayEntitlementRepository(
         val now = System.currentTimeMillis()
 
         // 1. Check if cached verified entitlement is valid
-        if (cached != null && cached.isValidAt(now)) {
-            return when (cached.status) {
-                "ACTIVE" -> AppAccessState.Subscribed(cached.expiryTimestampMillis)
-                "TRIAL_ACTIVE" -> {
-                    val daysRemaining = maxOf(1, ((cached.expiryTimestampMillis - now) / (24L * 60L * 60L * 1000L)).toInt())
-                    AppAccessState.TrialActive(daysRemaining, cached.expiryTimestampMillis)
-                }
-                "CANCELLED_ACTIVE" -> AppAccessState.SubscriptionActiveUntilExpiry(cached.expiryTimestampMillis)
-                "GRACE_PERIOD" -> AppAccessState.GracePeriod
-                else -> AppAccessState.Subscribed(cached.expiryTimestampMillis)
-            }
-        }
+        cached?.let { paidAccessState(it, now) }?.let { return it }
 
         // 2. Process Play Billing subState
         when (subState) {
@@ -156,15 +151,7 @@ class PlayEntitlementRepository(
                 )
                 if (verifySuccess) {
                     val updatedCached = _cachedEntitlement.value
-                    if (updatedCached != null && updatedCached.isValidAt(now)) {
-                        return when (updatedCached.status) {
-                            "TRIAL_ACTIVE" -> {
-                                val daysRemaining = maxOf(1, ((updatedCached.expiryTimestampMillis - now) / (24L * 60L * 60L * 1000L)).toInt())
-                                AppAccessState.TrialActive(daysRemaining, updatedCached.expiryTimestampMillis)
-                            }
-                            else -> AppAccessState.Subscribed(updatedCached.expiryTimestampMillis)
-                        }
-                    }
+                    updatedCached?.let { paidAccessState(it, now) }?.let { return it }
                 }
             }
             is SubscriptionState.PurchasePending -> {

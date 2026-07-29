@@ -6,6 +6,11 @@ import com.example.billing.AccountTrialClient
 import com.example.billing.AccountTrialResult
 import com.example.billing.AppAccessState
 import com.example.billing.PlayEntitlementRepository
+import com.example.billing.EntitlementVerificationClient
+import com.example.billing.VerificationResult
+import com.example.billing.VerifiedEntitlement
+import com.example.billing.SubscriptionState
+import com.example.billing.CommercialConfig
 import com.example.data.StrengthDatabase
 import com.example.data.StrengthRepository
 import kotlinx.coroutines.CoroutineScope
@@ -74,11 +79,90 @@ class SecureAccountTrialTest {
         assertTrue(!entitlementRepository.appAccessState.value.hasAppAccess)
     }
 
-    private fun createRepository(uid: String, client: FakeAccountTrialClient) =
+    @Test
+    fun accountTrialRemainsUsableWhenPaidVerificationIsUnavailable() = runBlocking {
+        val now = System.currentTimeMillis()
+        val trialClient = FakeAccountTrialClient(
+            AccountTrialResult.Active("uid-d", now, now + 30L * DAY, now)
+        )
+        billingRepository.setFakeState(
+            SubscriptionState.PurchasedUnverified(null, "real-token", CommercialConfig.PRODUCT_ID_ANNUAL, now, true)
+        )
+        val entitlementRepository = createRepository(
+            "uid-d",
+            trialClient,
+            FakeVerificationClient(VerificationResult.NetworkError)
+        )
+
+        waitUntil { entitlementRepository.appAccessState.value is AppAccessState.TrialActive }
+        assertTrue(entitlementRepository.appAccessState.value.hasAppAccess)
+    }
+
+    @Test
+    fun backendVerifiedPaidEntitlementRetainsPriorityOverTrial() = runBlocking {
+        val now = System.currentTimeMillis()
+        val trialClient = FakeAccountTrialClient(
+            AccountTrialResult.Active("uid-e", now, now + 30L * DAY, now)
+        )
+        billingRepository.setFakeState(
+            SubscriptionState.PurchasedUnverified(null, "real-token", CommercialConfig.PRODUCT_ID_ANNUAL, now, true)
+        )
+        val paid = VerifiedEntitlement(
+            CommercialConfig.PRODUCT_ID_ANNUAL,
+            "ACTIVE",
+            now + 365L * DAY,
+            true,
+            now,
+            "GOOGLE_PLAY_BACKEND"
+        )
+        val entitlementRepository = createRepository(
+            "uid-e",
+            trialClient,
+            FakeVerificationClient(VerificationResult.Success(paid))
+        )
+
+        waitUntil { entitlementRepository.appAccessState.value is AppAccessState.Subscribed }
+        assertEquals(0, trialClient.calls)
+    }
+
+    @Test
+    fun nonAccessPaidStatusDoesNotOverrideActiveAccountTrial() = runBlocking {
+        val now = System.currentTimeMillis()
+        val trialClient = FakeAccountTrialClient(
+            AccountTrialResult.Active("uid-f", now, now + 30L * DAY, now)
+        )
+        billingRepository.setFakeState(
+            SubscriptionState.PurchasedUnverified(null, "real-token", CommercialConfig.PRODUCT_ID_ANNUAL, now, true)
+        )
+        val held = VerifiedEntitlement(
+            CommercialConfig.PRODUCT_ID_ANNUAL,
+            "ACCOUNT_HOLD",
+            now + DAY,
+            false,
+            now,
+            "GOOGLE_PLAY_BACKEND"
+        )
+        val entitlementRepository = createRepository(
+            "uid-f",
+            trialClient,
+            FakeVerificationClient(VerificationResult.Success(held))
+        )
+
+        waitUntil { entitlementRepository.appAccessState.value is AppAccessState.TrialActive }
+        assertEquals(1, trialClient.calls)
+    }
+
+    private fun createRepository(
+        uid: String,
+        client: FakeAccountTrialClient,
+        verificationClient: EntitlementVerificationClient? = null
+    ) =
         PlayEntitlementRepository(
             context = context,
             billingRepository = billingRepository,
             repository = repository,
+            verificationClient = verificationClient
+                ?: FakeVerificationClient(VerificationResult.NetworkError),
             accountTrialClient = client,
             currentUidProvider = { uid }
         )
@@ -99,6 +183,16 @@ class SecureAccountTrialTest {
             calls += 1
             return result
         }
+    }
+
+    private class FakeVerificationClient(
+        private val result: VerificationResult
+    ) : EntitlementVerificationClient {
+        override suspend fun verifyPurchase(
+            purchaseToken: String,
+            productId: String,
+            orderId: String?
+        ) = result
     }
 
     companion object {

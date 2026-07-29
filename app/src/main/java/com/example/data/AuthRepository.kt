@@ -150,17 +150,15 @@ class AuthRepository(
             var fUid: String? = null
             
             if (firebaseAuth != null) {
-                try {
-                    val credential = GoogleAuthProvider.getCredential(idToken, null)
-                    val authResult = com.google.android.gms.tasks.Tasks.await(firebaseAuth!!.signInWithCredential(credential))
-                    val firebaseUser = authResult.user
-                    if (firebaseUser != null) {
-                        userId = firebaseUser.uid
-                        fUid = firebaseUser.uid
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Firebase signInWithCredential failed, using local Google profile fallback.", e)
+                val credential = GoogleAuthProvider.getCredential(idToken, null)
+                val authResult = com.google.android.gms.tasks.Tasks.await(firebaseAuth!!.signInWithCredential(credential))
+                val firebaseUser = requireNotNull(authResult.user) {
+                    "Firebase Google authentication returned no user"
                 }
+                userId = firebaseUser.uid
+                fUid = firebaseUser.uid
+            } else {
+                Log.w(TAG, "Firebase is genuinely unconfigured; creating a local-only Google profile without cloud entitlement.")
             }
 
             val finalDisplayName = displayName ?: email?.substringBefore("@") ?: "Google User"

@@ -35,6 +35,8 @@ class ProfileViewModel(
         entitlementRepository.refreshAccessState()
     }
 
+    fun refreshAccessState() = entitlementRepository.refreshAccessState()
+
     // Settings StateFlows using modern database-backed UserPreferencesRepository
     val preferencesRepository = UserPreferencesRepository(repository.dao)
 

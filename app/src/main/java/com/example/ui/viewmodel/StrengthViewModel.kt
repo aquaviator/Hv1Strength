@@ -470,6 +470,7 @@ class StrengthViewModel(
 
     fun launchPurchaseFlow(activity: android.app.Activity): Boolean = profileViewModel.launchPurchaseFlow(activity)
     fun restorePurchases() = profileViewModel.restorePurchases()
+    fun refreshAccessState() = profileViewModel.refreshAccessState()
 
     suspend fun exportData() = profileViewModel.exportData()
     suspend fun exportDataToCsv() = profileViewModel.exportDataToCsv()

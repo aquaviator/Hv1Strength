@@ -26,6 +26,34 @@ import com.example.billing.CommercialConfig
 import com.example.data.AuthState
 import com.example.ui.viewmodel.StrengthViewModel
 
+internal data class SubscriptionAccessContent(
+    val title: String,
+    val body: String,
+    val showsPurchaseRequirement: Boolean
+)
+
+internal fun subscriptionAccessContent(state: AppAccessState): SubscriptionAccessContent {
+    return when (state) {
+        AppAccessState.VerificationUnavailable -> SubscriptionAccessContent(
+            title = "ACCESS VERIFICATION UNAVAILABLE",
+            body = "Human Strength cannot currently verify your account access. Check your connection and try again.",
+            showsPurchaseRequirement = false
+        )
+        AppAccessState.Expired -> SubscriptionAccessContent(
+            title = "YOUR TRIAL HAS ENDED",
+            body = "Your training history, logged workouts, and custom routines are safe. Continue training with Human Strength for £24/year.",
+            showsPurchaseRequirement = true
+        )
+        else -> SubscriptionAccessContent(
+            title = "UNLOCK HUMAN STRENGTH",
+            body = "Access all training modules, preserve local & cloud sync data, and build your custom routines with Human Strength.",
+            showsPurchaseRequirement = true
+        )
+    }
+}
+
+internal fun retryAccessVerification(refresh: () -> Unit) = refresh()
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubscriptionAccessScreen(
@@ -81,20 +109,10 @@ fun SubscriptionAccessScreen(
                 }
             }
 
-            val titleText = if (appAccessState is com.example.billing.AppAccessState.Expired) {
-                "YOUR TRIAL HAS ENDED"
-            } else {
-                "UNLOCK HUMAN STRENGTH"
-            }
-
-            val bodyText = if (appAccessState is com.example.billing.AppAccessState.Expired) {
-                "Your training history, logged workouts, and custom routines are safe. Continue training with Human Strength for £24/year."
-            } else {
-                "Access all training modules, preserve local & cloud sync data, and build your custom routines with Human Strength."
-            }
+            val content = subscriptionAccessContent(appAccessState)
 
             Text(
-                text = titleText,
+                text = content.title,
                 style = MaterialTheme.typography.headlineSmall.copy(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
@@ -104,11 +122,28 @@ fun SubscriptionAccessScreen(
             )
 
             Text(
-                text = bodyText,
+                text = content.body,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
+
+            if (!content.showsPurchaseRequirement) {
+                Button(
+                    onClick = { retryAccessVerification(viewModel::refreshAccessState) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("verification_retry_button"),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "Try Again",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+                return@Column
+            }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),

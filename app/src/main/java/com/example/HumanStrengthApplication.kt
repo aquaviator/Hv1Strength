@@ -30,9 +30,18 @@ class HumanStrengthApplication : Application(), Configuration.Provider {
     }
 
     private fun initializeFirebase() {
-        // Disable Firebase entirely to prevent ProviderInstaller/Phenotype API crash on the streaming emulator.
-        isFirebaseConfigured = false
-        Log.w(TAG, "Firebase initialization disabled to prevent emulator crashes. Running in offline fallback mode.")
+        isFirebaseConfigured = determineFirebaseAvailability {
+            val firebaseApp = FirebaseApp.getApps(this).firstOrNull()
+                ?: FirebaseApp.initializeApp(this)
+            if (firebaseApp != null) {
+                Log.i(TAG, "Firebase initialized for project ${firebaseApp.options.projectId}")
+                initializeAppCheck(BuildConfig.DEBUG)
+                true
+            } else {
+                Log.w(TAG, "Firebase configuration was not found. Cloud authentication is unavailable.")
+                false
+            }
+        }
     }
 
     private fun initializeAppCheck(isDebug: Boolean) {
@@ -98,5 +107,14 @@ class HumanStrengthApplication : Application(), Configuration.Provider {
         // Dynamic flag indicating if Firebase configuration is missing
         var isFirebaseConfigured: Boolean = false
             private set
+
+        internal fun determineFirebaseAvailability(initializer: () -> Boolean): Boolean {
+            return try {
+                initializer()
+            } catch (error: Exception) {
+                Log.e(TAG, "Firebase initialization failed. Cloud authentication is unavailable.", error)
+                false
+            }
+        }
     }
 }

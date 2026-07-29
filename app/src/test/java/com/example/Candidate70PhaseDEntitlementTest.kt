@@ -115,16 +115,18 @@ class Candidate70PhaseDEntitlementTest {
     }
 
     @Test
-    fun testSignOutPreservesPlayEntitlement() = runBlocking {
+    fun testLookingTokenDoesNotCreatePaidEntitlement() = runBlocking {
         authRepository.signInAnonymously()
         
-        val verificationClient = PlayEntitlementVerificationClient(context)
+        val verificationClient = PlayEntitlementVerificationClient(context, connectionFactory = {
+            throw java.io.IOException("Backend unavailable")
+        })
         val verifyResult = verificationClient.verifyPurchase(
             purchaseToken = "token_signout_test",
             productId = CommercialConfig.PRODUCT_ID_ANNUAL,
             orderId = "GPA.1111-2222-3333-44444"
         )
-        assertTrue("Expected VerificationResult.Success but was $verifyResult", verifyResult is VerificationResult.Success)
+        assertFalse("Test-looking token must not create paid access", verifyResult is VerificationResult.Success)
 
         authRepository.signOut(keepLocalData = true)
         val authState = authRepository.authState.value

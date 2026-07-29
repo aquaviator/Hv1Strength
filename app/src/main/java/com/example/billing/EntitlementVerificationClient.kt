@@ -34,7 +34,10 @@ interface EntitlementVerificationClient {
  */
 class PlayEntitlementVerificationClient(
     private val context: Context,
-    private val endpointUrl: String = CommercialConfig.VERIFICATION_ENDPOINT_URL
+    private val endpointUrl: String = CommercialConfig.VERIFICATION_ENDPOINT_URL,
+    private val connectionFactory: (URL) -> HttpURLConnection = {
+        it.openConnection() as HttpURLConnection
+    }
 ) : EntitlementVerificationClient {
 
     private val TAG = "EntitlementVerification"
@@ -58,25 +61,11 @@ class PlayEntitlementVerificationClient(
             return@withContext VerificationResult.Failed("Invalid purchase token or product ID")
         }
 
-        if (purchaseToken.startsWith("token_") || purchaseToken.startsWith("test_")) {
-            val now = System.currentTimeMillis()
-            return@withContext VerificationResult.Success(
-                VerifiedEntitlement(
-                    productId = productId,
-                    status = "ACTIVE",
-                    expiryTimestampMillis = now + 365L * 24L * 60L * 60L * 1000L,
-                    autoRenewEnabled = true,
-                    verificationTimestampMillis = now,
-                    source = "GOOGLE_PLAY_BACKEND"
-                )
-            )
-        }
-
         safeLogI(TAG, "Submitting purchase token to hv1-platform verification endpoint: $endpointUrl")
 
         try {
             val url = URL(endpointUrl)
-            val conn = (url.openConnection() as HttpURLConnection).apply {
+            val conn = connectionFactory(url).apply {
                 requestMethod = "POST"
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 setRequestProperty("Accept", "application/json")
@@ -100,53 +89,51 @@ class PlayEntitlementVerificationClient(
             val responseCode = conn.responseCode
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 val responseText = conn.inputStream.bufferedReader().use { it.readText() }
-                val json = JSONObject(responseText)
-
-                val verifiedEntitlement = VerifiedEntitlement(
-                    productId = json.optString("productId", productId),
-                    status = json.optString("status", "ACTIVE"),
-                    expiryTimestampMillis = json.optLong("expiryTimestampMillis", System.currentTimeMillis() + 365L * 24 * 60 * 60 * 1000),
-                    autoRenewEnabled = json.optBoolean("autoRenewEnabled", true),
-                    verificationTimestampMillis = json.optLong("verificationTimestampMillis", System.currentTimeMillis()),
-                    source = json.optString("source", "GOOGLE_PLAY_BACKEND")
-                )
+                val verifiedEntitlement = parseVerifiedEntitlement(responseText, productId)
+                    ?: return@withContext VerificationResult.Failed("Malformed backend entitlement response")
                 safeLogI(TAG, "Backend verification response successful: status=${verifiedEntitlement.status}")
                 return@withContext VerificationResult.Success(verifiedEntitlement)
             } else if (responseCode in 400..499) {
                 val errorText = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $responseCode"
                 safeLogW(TAG, "Backend rejected verification request ($responseCode): $errorText")
                 return@withContext VerificationResult.Failed("Verification failed ($responseCode): $errorText")
-            } else if (responseCode <= 0) {
-                // Offline or uninitialized network connection in test / isolated environment
-                safeLogW(TAG, "Backend server returned invalid response code ($responseCode), applying offline fallback")
-                val now = System.currentTimeMillis()
-                val verifiedEntitlement = VerifiedEntitlement(
-                    productId = productId,
-                    status = "ACTIVE",
-                    expiryTimestampMillis = now + 365L * 24L * 60L * 60L * 1000L,
-                    autoRenewEnabled = true,
-                    verificationTimestampMillis = now,
-                    source = "GOOGLE_PLAY_BACKEND"
-                )
-                return@withContext VerificationResult.Success(verifiedEntitlement)
             } else {
                 safeLogW(TAG, "Backend server returned HTTP $responseCode")
                 return@withContext VerificationResult.NetworkError
             }
         } catch (e: Exception) {
-            safeLogW(TAG, "Network or HTTP exception during backend verification. Using offline fallback boundary", e)
-            // If network unreachable, return Success with verified entitlement fallback
-            val now = System.currentTimeMillis()
-            val verifiedEntitlement = VerifiedEntitlement(
-                productId = productId,
-                status = "ACTIVE",
-                expiryTimestampMillis = now + 365L * 24L * 60L * 60L * 1000L,
-                autoRenewEnabled = true,
-                verificationTimestampMillis = now,
-                source = "GOOGLE_PLAY_BACKEND"
-            )
-            return@withContext VerificationResult.Success(verifiedEntitlement)
+            safeLogW(TAG, "Network or HTTP exception during backend verification", e)
+            return@withContext VerificationResult.NetworkError
         }
+    }
+
+    private fun parseVerifiedEntitlement(responseText: String, expectedProductId: String): VerifiedEntitlement? {
+        return runCatching {
+            val json = JSONObject(responseText)
+            val productId = json.getString("productId")
+            val status = json.getString("status")
+            val expiryTimestampMillis = json.getLong("expiryTimestampMillis")
+            val autoRenewEnabled = json.getBoolean("autoRenewEnabled")
+            val verificationTimestampMillis = json.getLong("verificationTimestampMillis")
+            val source = json.getString("source")
+            val allowedStatuses = setOf(
+                "ACTIVE", "TRIAL_ACTIVE", "CANCELLED_ACTIVE", "GRACE_PERIOD",
+                "ACCOUNT_HOLD", "PAUSED", "EXPIRED", "REVOKED", "PENDING"
+            )
+            require(productId == expectedProductId)
+            require(status in allowedStatuses)
+            require(expiryTimestampMillis > 0L)
+            require(verificationTimestampMillis > 0L)
+            require(source == "GOOGLE_PLAY_BACKEND")
+            VerifiedEntitlement(
+                productId = productId,
+                status = status,
+                expiryTimestampMillis = expiryTimestampMillis,
+                autoRenewEnabled = autoRenewEnabled,
+                verificationTimestampMillis = verificationTimestampMillis,
+                source = source
+            )
+        }.getOrNull()
     }
 }
 
