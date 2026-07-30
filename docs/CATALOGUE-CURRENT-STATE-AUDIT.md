@@ -1,7 +1,7 @@
 # Human Strength Catalogue — Current-State Audit
 
-Audit date: 2026-07-27  
-Audited worktree: `C:\Projects\StudioProjects\Hv1Strength-Catalogue`  
+Audit date: 2026-07-27
+Audited worktree: `C:\Projects\StudioProjects\Hv1Strength-Catalogue`
 Scope: forensic current state only; no implementation, branch switch, merge, catalogue regeneration, migration, or deployment.
 
 ## Executive summary
