@@ -374,8 +374,8 @@ def build_release(
             for finding in findings[:5]
         )
         raise RuntimeBuildError(f"Schema v2 validation failed: {summary}")
-    if row_count != 53:
-        raise RuntimeBuildError(f"Expected 53 Schema v2 rows, found {row_count}.")
+    if row_count != 57:
+        raise RuntimeBuildError(f"Expected 57 Schema v2 rows, found {row_count}.")
 
     rows = read_csv_rows(manifest)
     rows_by_key = {row.get("catalogue_key", ""): row for row in rows}

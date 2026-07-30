@@ -62,3 +62,9 @@ measurement_schema_version,catalogue_key,mode_id,is_default,load_semantics,min_r
 1,burpee,repetitions,true,bodyweight,2
 1,burpee,timed_work,false,bodyweight,2
 1,downward_dog,timed_hold,true,bodyweight,2
+1,standing_calf_raise,bodyweight_reps,true,bodyweight,2
+1,standing_calf_raise,weighted_reps,false,added_load,2
+1,dumbbell_rear_delt_fly,external_load_reps,true,external_load,2
+1,barbell_skull_crusher,external_load_reps,true,external_load,2
+1,hanging_leg_raise,bodyweight_reps,true,bodyweight,2
+1,hanging_leg_raise,weighted_reps,false,added_load,2

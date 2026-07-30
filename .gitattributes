@@ -1,3 +1,4 @@
 catalogue/**/*.csv text eol=lf
 catalogue/runtime/*.json text eol=lf
 catalogue/runtime/*.schema.json text eol=lf
+catalogue/mapping/*.json text eol=lf
