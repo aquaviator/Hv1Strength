@@ -144,3 +144,10 @@ Suspicious biomechanical combinations are warnings unless a rule protects struct
 ## 4. Production boundary
 
 Schema v2.0 is versioned catalogue architecture. It allocates no production IDs, changes no runtime model, creates no Firestore document, and performs no Room migration. Any future export remains separately authorised.
+
+## 5. Measurement semantics extension
+
+Exercise logging semantics are governed by the normalized companion tables documented
+in `MEASUREMENT-SEMANTICS-v1.md`. They are part of the Schema v2 authoring authority
+and are validated alongside the main manifest. Classification, anatomy and equipment
+must not be used as substitutes for explicit measurement modes.

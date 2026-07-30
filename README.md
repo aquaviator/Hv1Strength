@@ -40,6 +40,7 @@ This will:
 
 Expected result:
 
-- 33 regression tests pass
+- 63 Python catalogue regression tests pass
 - Schema v1 validation passes
-- Schema v2 validation passes
+- Schema v2 and measurement-semantics validation passes
+- Runtime Contract v2 fixture is byte-reproducible

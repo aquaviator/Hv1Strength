@@ -1,0 +1,13 @@
+value,slug,status,description,notes,sort_order
+Count,count,Active,Canonical unit for discrete repetitions or counts,,10
+Kilograms,kilograms,Active,Canonical mass unit,,20
+Seconds,seconds,Active,Canonical duration unit,,30
+Metres,metres,Active,Canonical linear and vertical distance unit,,40
+RPE Scale,rpe_scale,Active,Dimensionless Human RPE scale,,50
+Kilocalories,kilocalories,Active,Canonical estimated energy unit,Reserved for future runtime consumers,60
+Watts,watts,Active,Canonical mechanical power unit,Reserved for future runtime consumers,70
+Repetitions Per Minute,repetitions_per_minute,Active,Canonical cadence unit,Reserved for future runtime consumers,80
+Beats Per Minute,beats_per_minute,Active,Canonical heart-rate unit,Reserved for future runtime consumers,90
+Resistance Level,resistance_level,Active,Dimensionless machine resistance level,Reserved for future runtime consumers,100
+Metres Per Second,metres_per_second,Active,Canonical speed unit,Derived initially,110
+Seconds Per Metre,seconds_per_metre,Active,Canonical pace unit,Derived initially,120

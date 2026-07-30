@@ -19,6 +19,7 @@ sealed class CatalogueImportException(message: String) : IllegalArgumentExceptio
     class ChecksumMismatch : CatalogueImportException("Runtime catalogue checksum does not match its payload")
     class RecordCountMismatch : CatalogueImportException("Runtime catalogue record_count does not match exercises")
     class InvalidIdentity(message: String) : CatalogueImportException(message)
+    class InvalidMeasurementMode(message: String) : CatalogueImportException(message)
     class UnknownRelationship(source: String, target: String) :
         CatalogueImportException("Unknown relationship target $target from $source")
 }
@@ -32,7 +33,7 @@ class PilotCatalogueImporter(
 ) {
     private val dao = database.catalogueStagingDao()
     private val envelopeAdapter = moshi.adapter<RuntimeCatalogueEnvelope>()
-    private val classificationAdapter = moshi.adapter<RuntimeClassificationDto>()
+    private val semanticsAdapter = moshi.adapter<RuntimeExerciseSemanticsDto>()
     private val anatomyAdapter = moshi.adapter<RuntimeAnatomyDto>()
     private val equipmentAdapter = moshi.adapter<RuntimeEquipmentDto>()
     private val coachingAdapter = moshi.adapter<RuntimeCoachingDto>()
@@ -89,6 +90,7 @@ class PilotCatalogueImporter(
         }
         val idSet = ids.toSet()
         envelope.exercises.forEach { exercise ->
+            validateMeasurementModes(exercise)
             exercise.relationships.forEach { relationship ->
                 if (relationship.targetCanonicalId !in idSet) {
                     throw CatalogueImportException.UnknownRelationship(
@@ -99,6 +101,91 @@ class PilotCatalogueImporter(
         }
         return envelope
     }
+
+    private fun validateMeasurementModes(exercise: RuntimeExerciseDto) {
+        val modes = exercise.measurementModes
+        if (modes.isEmpty() || modes.count { it.isDefault } != 1) {
+            throw CatalogueImportException.InvalidMeasurementMode(
+                "${exercise.canonicalId} requires exactly one default measurement mode"
+            )
+        }
+        if (modes.map { it.modeId }.any { it.isBlank() } ||
+            modes.map { it.modeId }.toSet().size != modes.size
+        ) {
+            throw CatalogueImportException.InvalidMeasurementMode(
+                "${exercise.canonicalId} measurement mode IDs must be non-empty and unique"
+            )
+        }
+        modes.forEach { mode ->
+            if (mode.measurementSchemaVersion != MEASUREMENT_SCHEMA_VERSION) {
+                throw CatalogueImportException.InvalidMeasurementMode(
+                    "${exercise.canonicalId}/${mode.modeId} has unsupported measurement schema"
+                )
+            }
+            if (mode.loadSemantics !in LOAD_SEMANTICS) {
+                throw CatalogueImportException.InvalidMeasurementMode(
+                    "${exercise.canonicalId}/${mode.modeId} has unknown load semantics"
+                )
+            }
+            val fields = mode.required + mode.optional
+            if (fields.isEmpty() || fields.map { it.measurement }.toSet().size != fields.size) {
+                throw CatalogueImportException.InvalidMeasurementMode(
+                    "${exercise.canonicalId}/${mode.modeId} has empty or duplicate measurements"
+                )
+            }
+            fields.forEach { field ->
+                val expectedUnit = CANONICAL_UNITS[field.measurement]
+                    ?: throw CatalogueImportException.InvalidMeasurementMode(
+                        "${exercise.canonicalId}/${mode.modeId} has unknown measurement ${field.measurement}"
+                    )
+                if (field.unit != expectedUnit) {
+                    throw CatalogueImportException.InvalidMeasurementMode(
+                        "${exercise.canonicalId}/${mode.modeId} has invalid unit for ${field.measurement}"
+                    )
+                }
+            }
+            val measurements = fields.map { it.measurement }.toSet()
+            when (mode.loadSemantics) {
+                "external_load", "added_load" -> requireMeasurement(exercise, mode, measurements, "load")
+                "assistance" -> {
+                    requireMeasurement(exercise, mode, measurements, "assistance")
+                    if ("load" in measurements) invalidCombination(exercise, mode)
+                }
+                "none", "bodyweight" -> if (measurements.any { it == "load" || it == "assistance" }) {
+                    invalidCombination(exercise, mode)
+                }
+            }
+            mode.derivedMetrics.forEach { metric ->
+                if (metric !in DERIVED_METRICS ||
+                    !measurements.containsAll(setOf("distance", "duration"))
+                ) {
+                    throw CatalogueImportException.InvalidMeasurementMode(
+                        "${exercise.canonicalId}/${mode.modeId} has invalid derived metric $metric"
+                    )
+                }
+            }
+        }
+    }
+
+    private fun requireMeasurement(
+        exercise: RuntimeExerciseDto,
+        mode: RuntimeMeasurementModeDto,
+        measurements: Set<String>,
+        required: String
+    ) {
+        if (required !in measurements) {
+            throw CatalogueImportException.InvalidMeasurementMode(
+                "${exercise.canonicalId}/${mode.modeId} requires $required"
+            )
+        }
+    }
+
+    private fun invalidCombination(
+        exercise: RuntimeExerciseDto,
+        mode: RuntimeMeasurementModeDto
+    ): Nothing = throw CatalogueImportException.InvalidMeasurementMode(
+        "${exercise.canonicalId}/${mode.modeId} has contradictory load semantics"
+    )
 
     private fun checksumMatches(json: String, expected: String): Boolean {
         val root = JSONTokener(json).nextValue() as? JSONObject ?: return false
@@ -137,7 +224,12 @@ class PilotCatalogueImporter(
         exercise.classification.laterality,
         exercise.classification.compoundOrIsolation,
         exercise.classification.difficulty,
-        classificationAdapter.toJson(exercise.classification),
+        semanticsAdapter.toJson(
+            RuntimeExerciseSemanticsDto(
+                classification = exercise.classification,
+                measurementModes = exercise.measurementModes
+            )
+        ),
         anatomyAdapter.toJson(exercise.anatomy),
         equipmentAdapter.toJson(exercise.equipment),
         coachingAdapter.toJson(exercise.coaching),
@@ -157,9 +249,32 @@ class PilotCatalogueImporter(
         }.distinct()
 
     companion object {
-        const val SUPPORTED_CONTRACT = 1
+        const val SUPPORTED_CONTRACT = 2
+        const val MEASUREMENT_SCHEMA_VERSION = 1
         const val PILOT_CHANNEL = "pilot_staging"
-        const val PILOT_ASSET = "pilot-staging-v1.json"
+        const val PILOT_ASSET = "pilot-staging-v2.json"
+
+        val CANONICAL_UNITS = mapOf(
+            "reps" to "count",
+            "load" to "kilograms",
+            "duration" to "seconds",
+            "distance" to "metres",
+            "rpe" to "rpe_scale",
+            "assistance" to "kilograms",
+            "calories" to "kilocalories",
+            "power" to "watts",
+            "cadence" to "repetitions_per_minute",
+            "heart_rate" to "beats_per_minute",
+            "resistance" to "resistance_level",
+            "speed" to "metres_per_second",
+            "pace" to "seconds_per_metre",
+            "count" to "count",
+            "vertical_distance" to "metres"
+        )
+        val LOAD_SEMANTICS = setOf(
+            "none", "external_load", "added_load", "assistance", "bodyweight"
+        )
+        val DERIVED_METRICS = setOf("pace", "speed")
 
         fun loadFixture(context: Context): String =
             context.assets.open(PILOT_ASSET).bufferedReader(Charsets.UTF_8).use { it.readText() }

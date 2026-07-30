@@ -1,0 +1,16 @@
+value,slug,status,description,notes,sort_order
+Repetitions,reps,Active,Discrete completed repetitions,,10
+Load,load,Active,Mass applied or moved under the declared load semantics,,20
+Duration,duration,Active,Elapsed effort duration,,30
+Distance,distance,Active,Linear distance completed,,40
+Rate of Perceived Exertion,rpe,Active,User-reported effort on the Human RPE scale,,50
+Assistance,assistance,Active,Mass-equivalent assistance reducing effective bodyweight load,,60
+Calories,calories,Active,Estimated energy expenditure,Reserved for future runtime consumers,70
+Power,power,Active,Mechanical power output,Reserved for future runtime consumers,80
+Cadence,cadence,Active,Repeated movement frequency,Reserved for future runtime consumers,90
+Heart Rate,heart_rate,Active,Heart beats per minute,Reserved for future runtime consumers,100
+Resistance,resistance,Active,Machine-specific resistance setting,Reserved for future runtime consumers,110
+Speed,speed,Active,Distance travelled per unit time,Normally derived from distance and duration,120
+Pace,pace,Active,Time required per unit distance,Normally derived from distance and duration,130
+Count,count,Active,Generic discrete count not semantically equivalent to repetitions,Reserved for future runtime consumers,140
+Vertical Distance,vertical_distance,Active,Vertical distance or elevation completed,Reserved for future runtime consumers,150

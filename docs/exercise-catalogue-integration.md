@@ -376,6 +376,19 @@ The executable Pilot contract is:
 - generated staging fixture: `catalogue/runtime/pilot-staging-v1.json`;
 - regression coverage: `tests/test_build_runtime_catalogue.py`.
 
+Runtime Contract v1 and its fixture remain immutable compatibility artefacts.
+Measurement Semantics v1 is published through explicit Runtime Contract v2:
+
+- JSON Schema: `catalogue/runtime/runtime-catalogue-contract-v2.schema.json`;
+- generated staging fixture: `catalogue/runtime/pilot-staging-v2.json`;
+- normalized authoring tables: `catalogue/measurement/`;
+- governed measurement vocabularies: `catalogue/reference/v2/`;
+- validation: `tools/catalogue/measurement_semantics.py`;
+- regression coverage: `tests/test_measurement_semantics.py`.
+
+Runtime v2 adds explicit per-exercise measurement modes, canonical units, load
+semantics and derived metrics without exposing application presentation controls.
+
 Generate the fixture with:
 
 ```powershell

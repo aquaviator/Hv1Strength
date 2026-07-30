@@ -1,0 +1,3 @@
+value,slug,status,description,notes,sort_order
+Pace,pace,Active,Derived time per distance,Requires duration and distance capability,10
+Speed,speed,Active,Derived distance per time,Requires duration and distance capability,20

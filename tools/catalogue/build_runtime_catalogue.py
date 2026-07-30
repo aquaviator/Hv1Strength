@@ -13,8 +13,13 @@ from pathlib import Path
 from typing import Any
 
 from validate_catalogue import split_values, validate_v2
+from measurement_semantics import (
+    RUNTIME_CONTRACT_VERSION,
+    runtime_modes,
+    validate_measurement_semantics,
+)
 
-RUNTIME_CONTRACT_VERSION = 1
+MAPPING_CONTRACT_VERSION = 1
 PILOT_KEYS = (
     "push_up",
     "barbell_bench_press",
@@ -60,6 +65,7 @@ REQUIRED_RUNTIME_EXERCISE_FIELDS = {
     "equipment",
     "coaching",
     "relationships",
+    "measurement_modes",
 }
 
 
@@ -113,7 +119,7 @@ def load_mapping(path: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeBuildError(f"Could not read canonical ID mapping {path}: {exc}") from exc
 
-    if data.get("runtime_contract_version") != RUNTIME_CONTRACT_VERSION:
+    if data.get("runtime_contract_version") != MAPPING_CONTRACT_VERSION:
         raise RuntimeBuildError(
             f"Unsupported runtime contract version in mapping: "
             f"{data.get('runtime_contract_version')!r}"
@@ -254,6 +260,7 @@ def transform_exercise(
     mapping: dict[str, dict[str, str]],
     all_source_keys: set[str],
     lookups: dict[str, dict[str, str]],
+    measurement_modes_by_key: dict[str, tuple],
 ) -> dict[str, Any]:
     aliases = build_aliases(row)
     keywords = sorted(
@@ -319,6 +326,9 @@ def transform_exercise(
             mapping,
             all_source_keys,
         ),
+        "measurement_modes": runtime_modes(
+            measurement_modes_by_key[row["catalogue_key"]]
+        ),
     }
     validate_runtime_exercise(exercise)
     return exercise
@@ -340,6 +350,11 @@ def validate_runtime_exercise(exercise: dict[str, Any]) -> None:
         raise RuntimeBuildError(
             f"{exercise['canonical_id']} requires at least one equipment value."
         )
+    modes = exercise["measurement_modes"]
+    if not modes or sum(bool(mode["is_default"]) for mode in modes) != 1:
+        raise RuntimeBuildError(
+            f"{exercise['canonical_id']} requires exactly one default measurement mode."
+        )
 
 
 def build_release(
@@ -347,6 +362,7 @@ def build_release(
     references: Path,
     mapping_path: Path,
     channel: str,
+    measurement_directory: Path | None = None,
 ) -> dict[str, Any]:
     if channel not in CHANNELS:
         raise RuntimeBuildError(f"Unsupported release channel: {channel!r}")
@@ -368,6 +384,25 @@ def build_release(
     missing_source = sorted(set(PILOT_KEYS) - rows_by_key.keys())
     if missing_source:
         raise RuntimeBuildError(f"Pilot source record(s) missing: {', '.join(missing_source)}")
+
+    measurement_directory = (
+        measurement_directory
+        or Path(__file__).resolve().parents[2] / "catalogue" / "measurement"
+    )
+    measurement_findings, measurement_modes_by_key = validate_measurement_semantics(
+        set(rows_by_key),
+        references,
+        measurement_directory / "measurement-modes-v1.csv",
+        measurement_directory / "measurement-mode-fields-v1.csv",
+        measurement_directory / "measurement-mode-derived-v1.csv",
+        required_catalogue_keys=set(PILOT_KEYS),
+    )
+    if measurement_findings:
+        summary = "; ".join(
+            f"{finding.code} row={finding.row} field={finding.field}"
+            for finding in measurement_findings[:5]
+        )
+        raise RuntimeBuildError(f"Measurement semantics validation failed: {summary}")
 
     mapping_data = load_mapping(mapping_path)
     mapping = mapping_data["by_key"]
@@ -393,6 +428,7 @@ def build_release(
             mapping,
             set(rows_by_key),
             lookups,
+            measurement_modes_by_key,
         )
         for row in selected_rows
     ]
@@ -436,6 +472,11 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=workspace / "catalogue" / "runtime" / "canonical-id-map-v1.json",
     )
+    parser.add_argument(
+        "--measurement-directory",
+        type=Path,
+        default=workspace / "catalogue" / "measurement",
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
         "--check",
@@ -450,6 +491,7 @@ def main(argv: list[str] | None = None) -> int:
             args.references,
             args.mapping,
             args.channel,
+            args.measurement_directory,
         )
         output = serialise_release(release)
         if args.check:

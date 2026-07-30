@@ -25,7 +25,8 @@ data class RuntimeExerciseDto(
     val anatomy: RuntimeAnatomyDto,
     val equipment: RuntimeEquipmentDto,
     val coaching: RuntimeCoachingDto,
-    val relationships: List<RuntimeRelationshipDto>
+    val relationships: List<RuntimeRelationshipDto>,
+    @Json(name = "measurement_modes") val measurementModes: List<RuntimeMeasurementModeDto>
 )
 
 @JsonClass(generateAdapter = true)
@@ -78,4 +79,27 @@ data class RuntimeCoachingDto(
 data class RuntimeRelationshipDto(
     val type: String,
     @Json(name = "target_canonical_id") val targetCanonicalId: String
+)
+
+@JsonClass(generateAdapter = true)
+data class RuntimeMeasurementModeDto(
+    @Json(name = "mode_id") val modeId: String,
+    @Json(name = "is_default") val isDefault: Boolean,
+    val required: List<RuntimeMeasurementFieldDto>,
+    val optional: List<RuntimeMeasurementFieldDto>,
+    @Json(name = "load_semantics") val loadSemantics: String,
+    @Json(name = "derived_metrics") val derivedMetrics: List<String>,
+    @Json(name = "measurement_schema_version") val measurementSchemaVersion: Int
+)
+
+@JsonClass(generateAdapter = true)
+data class RuntimeMeasurementFieldDto(
+    val measurement: String,
+    val unit: String
+)
+
+@JsonClass(generateAdapter = true)
+data class RuntimeExerciseSemanticsDto(
+    val classification: RuntimeClassificationDto,
+    @Json(name = "measurement_modes") val measurementModes: List<RuntimeMeasurementModeDto>
 )

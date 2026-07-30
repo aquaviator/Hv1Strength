@@ -19,7 +19,7 @@ SCHEMA = (
     WORKSPACE
     / "catalogue"
     / "runtime"
-    / "runtime-catalogue-contract-v1.schema.json"
+    / "runtime-catalogue-contract-v2.schema.json"
 )
 
 
@@ -79,8 +79,8 @@ class RuntimeCatalogueBuildTests(unittest.TestCase):
 
     def test_runtime_contract_and_required_fields(self):
         schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
-        self.assertEqual(1, schema["properties"]["runtime_contract_version"]["const"])
-        self.assertEqual(1, self.release["runtime_contract_version"])
+        self.assertEqual(2, schema["properties"]["runtime_contract_version"]["const"])
+        self.assertEqual(2, self.release["runtime_contract_version"])
         self.assertEqual("2.0", self.release["schema_version"])
         self.assertEqual("official_catalogue_release", self.release["distribution_scope"])
         for exercise in self.release["exercises"]:
@@ -95,6 +95,27 @@ class RuntimeCatalogueBuildTests(unittest.TestCase):
         self.assertEqual("ex_push_up", mapping["push_up"]["canonical_id"])
         self.assertEqual("new_allocation", mapping["push_up"]["identity_source"])
         self.assertEqual(8, len({value["canonical_id"] for value in mapping.values()}))
+
+    def test_rename_retains_canonical_identity(self):
+        original = runtime.load_mapping(MAPPING)["by_key"]["barbell_bench_press"]["canonical_id"]
+        renamed = self.exercise_by_id(original)
+        self.assertEqual("bench_press", original)
+        self.assertEqual("Barbell Bench Press", renamed["display_name"])
+
+    def test_semantic_replacement_cannot_reuse_canonical_identity(self):
+        def mutate(data):
+            data["entries"].append(
+                {
+                    "catalogue_key": "replacement_press",
+                    "canonical_id": "bench_press",
+                    "identity_source": "new_allocation",
+                }
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.write_mapping(directory, mutate)
+            with self.assertRaisesRegex(runtime.RuntimeBuildError, "Duplicate canonical_id"):
+                runtime.load_mapping(path)
 
     def test_missing_mapping_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -218,6 +239,37 @@ class RuntimeCatalogueBuildTests(unittest.TestCase):
             },
             seated_row["search"]["aliases"],
         )
+
+    def test_runtime_measurement_modes_are_explicit_and_capability_driven(self):
+        bench = self.exercise_by_id("bench_press")
+        self.assertEqual("external_load_reps", bench["measurement_modes"][0]["mode_id"])
+        self.assertTrue(bench["measurement_modes"][0]["is_default"])
+        self.assertEqual("external_load", bench["measurement_modes"][0]["load_semantics"])
+        self.assertEqual(
+            [
+                {"measurement": "load", "unit": "kilograms"},
+                {"measurement": "reps", "unit": "count"},
+            ],
+            bench["measurement_modes"][0]["required"],
+        )
+
+        plank = self.exercise_by_id("plank")
+        self.assertEqual(2, len(plank["measurement_modes"]))
+        timed = next(mode for mode in plank["measurement_modes"] if mode["mode_id"] == "timed_hold")
+        self.assertEqual(
+            [{"measurement": "duration", "unit": "seconds"}],
+            timed["required"],
+        )
+        self.assertIn(
+            {"measurement": "rpe", "unit": "rpe_scale"},
+            timed["optional"],
+        )
+
+        carry = self.exercise_by_id("ex_farmers_carry")
+        mode = carry["measurement_modes"][0]
+        self.assertEqual("metres", next(
+            field["unit"] for field in mode["required"] if field["measurement"] == "distance"
+        ))
 
     def test_official_release_is_separate_from_custom_exercises(self):
         encoded = runtime.serialise_release(self.release).decode("utf-8")

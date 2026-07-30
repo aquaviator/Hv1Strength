@@ -1,0 +1,14 @@
+measurement_schema_version,catalogue_key,mode_id,is_default,load_semantics,min_runtime_contract_version
+1,push_up,bodyweight_reps,true,bodyweight,2
+1,barbell_bench_press,external_load_reps,true,external_load,2
+1,goblet_squat,external_load_reps,true,external_load,2
+1,seated_cable_row,external_load_reps,true,external_load,2
+1,selectorized_chest_press,external_load_reps,true,external_load,2
+1,bulgarian_split_squat,bodyweight_reps,true,bodyweight,2
+1,bulgarian_split_squat,weighted_reps,false,added_load,2
+1,plank,timed_hold,true,bodyweight,2
+1,plank,weighted_timed_hold,false,added_load,2
+1,farmers_carry,loaded_distance,true,external_load,2
+1,pull_up,bodyweight_reps,true,bodyweight,2
+1,pull_up,weighted_reps,false,added_load,2
+1,pull_up,assisted_reps,false,assistance,2

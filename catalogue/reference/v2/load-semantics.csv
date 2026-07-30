@@ -1,0 +1,6 @@
+value,slug,status,description,notes,sort_order
+None,none,Active,Mode has no load interpretation,,10
+External Load,external_load,Active,Recorded load is the external resistance moved or applied,,20
+Added Load,added_load,Active,Recorded load is additional resistance beyond bodyweight,,30
+Assistance,assistance,Active,Recorded assistance reduces effective bodyweight resistance,Must not be interpreted as added load,40
+Bodyweight,bodyweight,Active,Body mass provides the resistance without a recorded zero-load substitution,,50

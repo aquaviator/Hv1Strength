@@ -3,6 +3,7 @@ package com.example.data.catalogue
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
+import androidx.room.ColumnInfo
 
 @Entity(tableName = "catalogue_staging_release", primaryKeys = ["channel"])
 data class CatalogueStagingReleaseEntity(
@@ -25,7 +26,8 @@ data class CatalogueStagingExerciseEntity(
     val laterality: String,
     val compoundOrIsolation: String,
     val difficulty: String,
-    val classificationJson: String,
+    @ColumnInfo(name = "classificationJson")
+    val semanticsJson: String,
     val anatomyJson: String,
     val equipmentJson: String,
     val coachingJson: String,

@@ -14,6 +14,9 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from measurement_semantics import validate_measurement_semantics
+
 V1_REQUIRED_COLUMNS = [
     "catalogue_key", "exercise_family", "parent_exercise", "canonical_name",
     "variation_type", "equipment", "primary_movement_pattern",
@@ -655,6 +658,7 @@ def main(argv=None) -> int:
     parser.add_argument("--schema-version", choices=("1", "2"), required=True)
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--references", type=Path)
+    parser.add_argument("--measurement-directory", type=Path)
     parser.add_argument("--report", type=Path, default=Path("catalogue/catalogue-audit.md"))
     args = parser.parse_args(argv)
 
@@ -666,6 +670,27 @@ def main(argv=None) -> int:
         manifest = args.manifest or workspace / "catalogue" / "candidate-manifest-v2.csv"
         references = args.references or workspace / "catalogue" / "reference" / "v2"
         findings, row_count = validate_v2(manifest, references)
+        measurement_directory = (
+            args.measurement_directory
+            or workspace / "catalogue" / "measurement"
+        )
+        try:
+            _, rows = read_manifest(manifest)
+            catalogue_keys = {
+                (row.get("catalogue_key") or "").strip()
+                for row in rows
+                if (row.get("catalogue_key") or "").strip()
+            }
+        except (OSError, csv.Error):
+            catalogue_keys = set()
+        measurement_findings, _ = validate_measurement_semantics(
+            catalogue_keys,
+            references,
+            measurement_directory / "measurement-modes-v1.csv",
+            measurement_directory / "measurement-mode-fields-v1.csv",
+            measurement_directory / "measurement-mode-derived-v1.csv",
+        )
+        findings = sorted_findings([*findings, *measurement_findings])
 
     report_path = args.report if args.report.is_absolute() else workspace / args.report
     report = markdown_report(manifest, row_count, findings, args.schema_version)

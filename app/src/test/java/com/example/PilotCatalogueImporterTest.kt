@@ -50,7 +50,7 @@ class PilotCatalogueImporterTest {
     @Test
     fun fixtureParsesAndVerifiesAllEightCanonicalIds() {
         val parsed = importer.parseAndVerify(fixture)
-        assertEquals(1, parsed.runtimeContractVersion)
+        assertEquals(2, parsed.runtimeContractVersion)
         assertEquals("pilot_staging", parsed.channel)
         assertEquals(8, parsed.exercises.size)
         assertEquals(
@@ -65,7 +65,7 @@ class PilotCatalogueImporterTest {
 
     @Test
     fun unsupportedContractWrongChannelAndRecordCountAreRejectedBeforeMutation() = runBlocking {
-        val unsupported = changedFixture("runtime_contract_version", 2)
+        val unsupported = changedFixture("runtime_contract_version", 3)
         assertThrows(CatalogueImportException.UnsupportedRuntimeContractVersion::class.java) {
             runBlocking { importer.import(unsupported) }
         }
@@ -112,14 +112,78 @@ class PilotCatalogueImporterTest {
     }
 
     @Test
+    fun measurementModesExposeDefaultsRequirementsUnitsAndLoadSemantics() {
+        val parsed = importer.parseAndVerify(fixture)
+        val bench = parsed.exercises.single { it.canonicalId == "bench_press" }
+        val benchMode = bench.measurementModes.single()
+        assertEquals("external_load_reps", benchMode.modeId)
+        assertTrue(benchMode.isDefault)
+        assertEquals("external_load", benchMode.loadSemantics)
+        assertEquals(
+            setOf("load" to "kilograms", "reps" to "count"),
+            benchMode.required.map { it.measurement to it.unit }.toSet()
+        )
+
+        val plank = parsed.exercises.single { it.canonicalId == "plank" }
+        val timedHold = plank.measurementModes.single { it.modeId == "timed_hold" }
+        assertEquals(listOf("duration"), timedHold.required.map { it.measurement })
+        assertEquals(listOf("rpe"), timedHold.optional.map { it.measurement })
+    }
+
+    @Test
+    fun invalidMeasurementVocabularyUnitAndDefaultAreRejected() {
+        fun invalidFixture(mutator: (JSONObject) -> Unit): String {
+            val root = JSONObject(fixture)
+            val exercise = root.getJSONArray("exercises").getJSONObject(0)
+            mutator(exercise)
+            return resign(root)
+        }
+
+        val unknownMeasurement = invalidFixture { exercise ->
+            exercise.getJSONArray("measurement_modes").getJSONObject(0)
+                .getJSONArray("required").getJSONObject(0)
+                .put("measurement", "unknown")
+        }
+        assertThrows(CatalogueImportException.InvalidMeasurementMode::class.java) {
+            importer.parseAndVerify(unknownMeasurement)
+        }
+
+        val invalidUnit = invalidFixture { exercise ->
+            exercise.getJSONArray("measurement_modes").getJSONObject(0)
+                .getJSONArray("required").getJSONObject(0)
+                .put("unit", "seconds")
+        }
+        assertThrows(CatalogueImportException.InvalidMeasurementMode::class.java) {
+            importer.parseAndVerify(invalidUnit)
+        }
+
+        val noDefault = invalidFixture { exercise ->
+            val modes = exercise.getJSONArray("measurement_modes")
+            for (index in 0 until modes.length()) {
+                modes.getJSONObject(index).put("is_default", false)
+            }
+        }
+        assertThrows(CatalogueImportException.InvalidMeasurementMode::class.java) {
+            importer.parseAndVerify(noDefault)
+        }
+    }
+
+    @Test
     fun importPersistsEightRecordsMetadataAliasesAndNoInventedRelationships() = runBlocking {
         assertEquals(CatalogueImportOutcome.IMPORTED, importer.import(fixture))
         val dao = database.catalogueStagingDao()
         assertEquals(8, dao.getExercises().size)
         assertEquals(8, dao.getRelease("pilot_staging")?.recordCount)
         assertEquals(
-            "4855f1385f96b8b30a4116d3252639522d4a97746717cd20afefb0b757ebc005",
+            "ec0163bbb867e7776c4915bdc14fbd85bd9287dd618257b6592415fda8ee4b94",
             dao.getRelease("pilot_staging")?.checksum
+        )
+        val plankSemantics = JSONObject(
+            dao.getExercises().single { it.canonicalId == "plank" }.semanticsJson
+        )
+        assertEquals(
+            2,
+            plankSemantics.getJSONArray("measurement_modes").length()
         )
         assertTrue(dao.getAliases().any {
             it.value == "Bench Press" && it.canonicalId == "bench_press" && it.type == "search"

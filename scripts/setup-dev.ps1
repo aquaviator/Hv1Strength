@@ -49,8 +49,7 @@ Write-Host "Installing development dependencies..."
 Write-Host ""
 Write-Host "Running regression tests..."
 .\.venv\Scripts\python.exe -m pytest `
-    tests/test_validate_catalogue.py `
-    tests/test_validate_catalogue_v2.py
+    tests
 
 # Validate catalogue
 Write-Host ""
@@ -64,6 +63,14 @@ Write-Host "Validating Schema v2..."
 .\.venv\Scripts\python.exe `
     tools/catalogue/validate_catalogue.py `
     --schema-version 2
+
+Write-Host ""
+Write-Host "Verifying deterministic Runtime Contract v2 fixture..."
+.\.venv\Scripts\python.exe `
+    tools/catalogue/build_runtime_catalogue.py `
+    --channel pilot_staging `
+    --output catalogue/runtime/pilot-staging-v2.json `
+    --check
 
 Write-Host ""
 Write-Host "==========================================="
