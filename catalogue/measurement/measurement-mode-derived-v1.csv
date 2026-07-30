@@ -1,1 +1,7 @@
 catalogue_key,mode_id,derived_metric
+running,distance_duration,pace
+running,distance_duration,speed
+treadmill_run,distance_duration,pace
+treadmill_run,distance_duration,speed
+row_erg,distance_duration,pace
+row_erg,distance_duration,speed

@@ -54,12 +54,9 @@ class MeasurementSemanticsValidationTests(unittest.TestCase):
         return {finding.code for finding in findings}
 
     def test_current_measurement_authoring_is_valid(self):
-        findings, modes = self.validate(required={
-            "push_up", "barbell_bench_press", "goblet_squat",
-            "seated_cable_row", "selectorized_chest_press",
-            "bulgarian_split_squat", "plank", "farmers_carry",
-        })
+        findings, modes = self.validate(required=CATALOGUE_KEYS)
         self.assertEqual([], findings)
+        self.assertEqual(CATALOGUE_KEYS, set(modes))
         self.assertEqual(3, len(modes["pull_up"]))
         self.assertEqual(1, sum(mode.is_default for mode in modes["pull_up"]))
 
@@ -200,50 +197,56 @@ class MeasurementSemanticsValidationTests(unittest.TestCase):
         findings, _ = self.validate(unknown_semantics)
         self.assertIn("UNKNOWN_LOAD_SEMANTICS", self.codes(findings))
 
-    def test_downward_dog_timed_hold_contract_is_supported(self):
-        def fixture(directory):
-            self.mutate_rows(
-                directory / "measurement-modes-v1.csv",
-                lambda rows: rows.append(
-                    {
-                        "measurement_schema_version": "1",
-                        "catalogue_key": "downward_dog",
-                        "mode_id": "timed_hold",
-                        "is_default": "true",
-                        "load_semantics": "bodyweight",
-                        "min_runtime_contract_version": "2",
-                    }
-                ),
-            )
-            self.mutate_rows(
-                directory / "measurement-mode-fields-v1.csv",
-                lambda rows: rows.extend(
-                    [
-                        {
-                            "catalogue_key": "downward_dog",
-                            "mode_id": "timed_hold",
-                            "measurement": "duration",
-                            "requirement": "required",
-                            "canonical_unit": "seconds",
-                        },
-                        {
-                            "catalogue_key": "downward_dog",
-                            "mode_id": "timed_hold",
-                            "measurement": "rpe",
-                            "requirement": "optional",
-                            "canonical_unit": "rpe_scale",
-                        },
-                    ]
-                ),
-            )
-        findings, modes = self.validate(
-            fixture,
-            catalogue_keys=CATALOGUE_KEYS | {"downward_dog"},
-        )
+    def test_downward_dog_timed_hold_is_governed_catalogue_data(self):
+        findings, modes = self.validate()
         self.assertEqual([], findings)
         mode = modes["downward_dog"][0]
         self.assertTrue(mode.is_default)
         self.assertEqual({"duration", "rpe"}, {field.measurement for field in mode.fields})
+
+    def test_continuous_cardio_modes_are_explicit_and_derived(self):
+        findings, modes = self.validate()
+        self.assertEqual([], findings)
+        for key in ("running", "treadmill_run", "row_erg"):
+            default = next(mode for mode in modes[key] if mode.is_default)
+            self.assertEqual("distance_duration", default.mode_id)
+            self.assertEqual(
+                {"duration", "distance"},
+                {
+                    field.measurement
+                    for field in default.fields
+                    if field.requirement == "required"
+                },
+            )
+            self.assertEqual({"pace", "speed"}, set(default.derived_metrics))
+
+    def test_burpee_supports_repetitions_or_timed_work_without_protocol_data(self):
+        findings, modes = self.validate()
+        self.assertEqual([], findings)
+        self.assertEqual({"repetitions", "timed_work"}, {
+            mode.mode_id for mode in modes["burpee"]
+        })
+        self.assertNotIn("recovery", {
+            field.measurement
+            for mode in modes["burpee"]
+            for field in mode.fields
+        })
+
+    def test_representative_semantics_are_not_inferred_from_classification(self):
+        findings, modes = self.validate()
+        self.assertEqual([], findings)
+        expected_defaults = {
+            "barbell_bench_press": "external_load_reps",
+            "pull_up": "bodyweight_reps",
+            "plank": "timed_hold",
+            "farmers_carry": "loaded_distance",
+            "bulgarian_split_squat": "bodyweight_reps",
+        }
+        for key, expected in expected_defaults.items():
+            self.assertEqual(
+                expected,
+                next(mode.mode_id for mode in modes[key] if mode.is_default),
+            )
 
 
 if __name__ == "__main__":

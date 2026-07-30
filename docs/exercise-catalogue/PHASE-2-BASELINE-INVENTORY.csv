@@ -1,0 +1,49 @@
+group,catalogue_key,canonical_id,canonical_name,classification,movement_pattern,equipment,review_publication_state,measurement_semantics_present,measurement_modes,obvious_ontology_gaps
+assisted,pull_up,,Pull-Up,Back,Vertical Pull,Bodyweight|Pull-Up Bar,Draft,yes,bodyweight_reps|weighted_reps|assisted_reps,canonical ID not allocated; not publication-ready
+bodyweight,bird_dog,,Bird Dog,Abs,Anti-Rotation,Bodyweight|Exercise Mat,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+bodyweight,bulgarian_split_squat,ex_bulgarian_split_squat,Bulgarian Split Squat,Legs,Lunge,Bodyweight|Bench,Draft,yes,bodyweight_reps|weighted_reps,not publication-ready
+bodyweight,dead_bug,,Dead Bug,Abs,Anti-Extension,Bodyweight|Exercise Mat,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+bodyweight,glute_bridge,,Glute Bridge,Legs,Hinge,Bodyweight|Exercise Mat,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+bodyweight,plank,plank,Plank,Abs,Anti-Extension,Bodyweight|Exercise Mat,Draft,yes,timed_hold|weighted_timed_hold,not publication-ready
+bodyweight,push_up,ex_push_up,Push-Up,Chest,Horizontal Push,Bodyweight,Draft,yes,bodyweight_reps,not publication-ready
+bodyweight,side_plank,,Side Plank,Abs,Anti-Lateral Flexion,Bodyweight|Exercise Mat,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+bodyweight,walking_lunge,,Walking Lunge,Legs,Lunge,Bodyweight,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+carry,farmers_carry,ex_farmers_carry,Farmer's Carry,Abs,Carry,Farmer Handles,Draft,yes,loaded_distance,not publication-ready
+carry,front_rack_carry,,Front Rack Carry,Abs,Carry,Kettlebell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+carry,overhead_carry,,Overhead Carry,Abs,Carry,Dumbbell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+carry,suitcase_carry,,Suitcase Carry,Abs,Carry,Dumbbell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+conditioning,sled_pull,,Backward Sled Drag,Conditioning,Locomotion,Sled,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+conditioning,sled_push,,Sled Push,Conditioning,Locomotion,Sled,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,arnold_press,,Arnold Press,Shoulders,Vertical Push,Dumbbell|Bench,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,back_squat,,Back Squat,Legs,Squat,Barbell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,barbell_bench_press,bench_press,Barbell Bench Press,Chest,Horizontal Push,Barbell|Bench,Draft,yes,external_load_reps,not publication-ready
+loaded strength,barbell_bent_over_row,,Barbell Bent-Over Row,Back,Horizontal Pull,Barbell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,barbell_curl,,Barbell Curl,Arms,Elbow Flexion,Barbell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,deadlift,,Deadlift,Legs,Hinge,Barbell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,dumbbell_bench_press,,Dumbbell Bench Press,Chest,Horizontal Push,Dumbbell|Bench,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,dumbbell_curl,,Dumbbell Curl,Arms,Elbow Flexion,Dumbbell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,dumbbell_shoulder_press,,Dumbbell Shoulder Press,Shoulders,Vertical Push,Dumbbell|Bench,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,front_raise,,Front Raise,Shoulders,Vertical Push,Dumbbell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,front_squat,,Front Squat,Legs,Squat,Barbell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,goblet_squat,ex_goblet_squat,Dumbbell Goblet Squat,Legs,Squat,Dumbbell,Draft,yes,external_load_reps,not publication-ready
+loaded strength,good_morning,,Good Morning,Legs,Hinge,Barbell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,hammer_curl,,Hammer Curl,Arms,Elbow Flexion,Dumbbell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,hip_thrust,,Hip Thrust,Legs,Hinge,Barbell|Bench,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,incline_dumbbell_bench_press,,Incline Dumbbell Bench Press,Chest,Horizontal Push,Dumbbell|Bench,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,lateral_raise,,Lateral Raise,Shoulders,Vertical Push,Dumbbell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,overhead_press,,Overhead Press,Shoulders,Vertical Push,Barbell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,overhead_triceps_extension,,Overhead Triceps Extension,Arms,Elbow Extension,Dumbbell|Bench,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,preacher_curl,,Barbell Preacher Curl,Arms,Elbow Flexion,Barbell|Bench,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,romanian_deadlift,,Romanian Deadlift,Legs,Hinge,Barbell,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,single_arm_dumbbell_row,,Single-Arm Dumbbell Row,Back,Horizontal Pull,Dumbbell|Bench,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+loaded strength,trap_bar_deadlift,,Trap Bar Deadlift,Legs,Hinge,Trap Bar,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+machine-based,cable_chest_fly,,Cable Chest Fly,Chest,Horizontal Push,Cable Machine,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+machine-based,cable_crunch,,Cable Crunch,Abs,Trunk Flexion,Cable Machine|Exercise Mat,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+machine-based,chest_supported_machine_row,,Plate-Loaded Chest-Supported Row,Back,Horizontal Pull,Plate Loaded Machine,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+machine-based,lat_pulldown,,Lat Pulldown,Back,Vertical Pull,Cable Machine,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+machine-based,leg_press,,Leg Press,Legs,Squat,Leg Press Machine,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+machine-based,machine_shoulder_press,,Machine Shoulder Press,Shoulders,Vertical Push,Selectorized Machine,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+machine-based,pallof_press,,Pallof Press,Abs,Anti-Rotation,Cable Machine,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready
+machine-based,seated_cable_row,ex_seated_cable_row,Seated Cable Row,Back,Horizontal Pull,Cable Machine,Draft,yes,external_load_reps,not publication-ready
+machine-based,selectorized_chest_press,ex_selectorized_chest_press,Selectorized Chest Press,Chest,Horizontal Push,Selectorized Machine,Draft,yes,external_load_reps,not publication-ready
+machine-based,triceps_pushdown,,Triceps Pushdown,Arms,Elbow Extension,Cable Machine,Draft,no,,measurement semantics missing; canonical ID not allocated; not publication-ready

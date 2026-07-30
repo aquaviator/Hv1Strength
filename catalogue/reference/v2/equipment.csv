@@ -17,6 +17,7 @@ Trap Bar,trap_bar,Active,Hexagonal or open-frame bar enclosing the lifter,,150
 Landmine,landmine,Active,Anchored barbell sleeve allowing arcing movement,Barbell must also be declared when a barbell is used,160
 Rowing Ergometer,rowing_ergometer,Active,Stationary flywheel rowing device,,170
 Stationary Bike,stationary_bike,Active,Stationary cycle ergometer,,180
+Treadmill,treadmill,Active,Motorised or manually driven belt used for walking or running,,185
 Ski Ergometer,ski_ergometer,Active,Stationary double-pole ski ergometer,,190
 Olympic Lifting Platform,olympic_lifting_platform,Active,Stable platform intended for Olympic lifts and dropped loads,,200
 Strongman Log,strongman_log,Active,Large neutral-grip implement used for strongman pressing,,210
