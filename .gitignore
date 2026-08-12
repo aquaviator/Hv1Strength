@@ -19,3 +19,32 @@ local.properties
 debug.keystore
 my-upload-key.jks
 .robolectric-cache/
+
+# Local tooling and dependency installations
+.venv/
+functions/node_modules/
+.pytest_cache/
+**/__pycache__/
+
+# Firebase/emulator state and local diagnostics
+.firebase/
+firebase-debug.log
+firestore-debug.log
+**/firestore-debug.log
+emulator-startup.log
+app/diagnostic.txt
+
+# Generated release packages and damaged/local wrapper backups
+app/release/
+*.apk
+*.aab
+*.broken
+
+# Signing and credential material (client google-services.json is intentionally
+# not ignored because it is required Android build configuration, not a secret)
+*.jks
+*.keystore
+*.p12
+*.pem
+service-account*.json
+serviceAccount*.json

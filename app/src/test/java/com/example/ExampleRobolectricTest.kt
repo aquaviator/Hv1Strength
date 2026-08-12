@@ -96,10 +96,10 @@ class ExampleRobolectricTest {
         assertEquals(18, id1.length) // human_ + 12 chars
 
         // Deterministic mapping of standard user IDs
-        val mappedOffline = HumanUserIdGenerator.mapUserIdToHumanUserId("offline")
+        val mappedOffline = HumanUserIdGenerator.deriveLegacyHumanIdForMigration("offline")
         assertEquals(HumanUserIdGenerator.getOrGenerateOfflineHumanId(context), mappedOffline)
 
-        val mappedGoogle = HumanUserIdGenerator.mapUserIdToHumanUserId("google_123456")
+        val mappedGoogle = HumanUserIdGenerator.deriveLegacyHumanIdForMigration("google_123456")
         assertTrue(mappedGoogle.startsWith("human_"))
         assertEquals(18, mappedGoogle.length)
     }

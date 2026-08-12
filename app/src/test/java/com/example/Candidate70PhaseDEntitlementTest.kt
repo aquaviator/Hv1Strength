@@ -92,6 +92,9 @@ class Candidate70PhaseDEntitlementTest {
         val profile = UserProfile(
             id = "user_test",
             displayName = "Test Runner",
+            authProvider = "offline",
+            isOfflineUser = true,
+            humanUserId = "human_localtest",
             createdAt = System.currentTimeMillis() - 40L * 24L * 60L * 60L * 1000L,
             lastLoginAt = System.currentTimeMillis()
         ) // 40 days old

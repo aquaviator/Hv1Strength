@@ -85,12 +85,12 @@ class Candidate4HonestAccountExperienceTest {
     }
 
     /**
-     * Test 2: Profile Truthfulness - Dynamic 30-day Free Trial Calculation & Forced Simulation
+     * Test 2: Profile Truthfulness - backend access is not derived from local profile age.
      */
     @Test
     fun testProfileTruthfulnessAndTrialExpiration() {
         runBlocking {
-            // Case A: Joined today -> Trial is ACTIVE (not expired)
+            // Local profile age is presentation data and must not grant or expire entitlement.
             val profileToday = UserProfile(
                 id = "offline",
                 displayName = "Offline User",
@@ -104,15 +104,14 @@ class Candidate4HonestAccountExperienceTest {
             waitUntil { !profileViewModel.isTrialExpired.value }
             assertFalse(profileViewModel.isTrialExpired.value)
 
-            // Case B: Joined 40 days ago -> Trial is EXPIRED
+            // An older local profile must not manufacture an expired backend entitlement.
             val fortyDaysAgo = System.currentTimeMillis() - (40L * 24L * 60L * 60L * 1000L)
             val profileOld = profileToday.copy(createdAt = fortyDaysAgo)
             repository.insertUserProfile(profileOld)
             waitUntil { profileViewModel.activeUserProfile.value?.createdAt == fortyDaysAgo }
-            waitUntil { profileViewModel.isTrialExpired.value }
-            assertTrue(profileViewModel.isTrialExpired.value)
+            assertFalse(profileViewModel.isTrialExpired.value)
 
-            // Case C: Toggle Developer Simulation to true -> Expired instantly
+            // The explicit developer simulation remains deterministic and truthful.
             val profileNew = profileToday.copy(createdAt = System.currentTimeMillis())
             repository.insertUserProfile(profileNew)
             waitUntil { profileViewModel.activeUserProfile.value?.createdAt == profileNew.createdAt }
@@ -238,6 +237,52 @@ class Candidate4HonestAccountExperienceTest {
             assertTrue(csvExport.contains("ex_squat"))
             assertTrue(csvExport.contains("100.0"))
             assertTrue(csvExport.contains("5"))
+        }
+    }
+
+    @Test
+    fun testFormat4ProductionExportImportIsPlannerIdempotent() {
+        runBlocking {
+            val human = "human_ffffffffffffffffffffffffffffffff"
+            repository.insertUserProfile(UserProfile("offline", humanUserId = human, globalId = "profile-backup"))
+            repository.insertExercise(Exercise("backup-custom", "Backup Custom", "Strength", true))
+            repository.insertTemplate(WorkoutTemplate(706, "Backup Routine", "[\"backup-custom\"]", "offline"))
+            repository.insertTemplateExercise(WorkoutTemplateExercise(708, 706, "backup-custom", 0, 90))
+            repository.insertTemplateSets(listOf(WorkoutTemplateSet(709, 708, 0, "WORKING", 5, 8, 80f, 8)))
+            repository.insertSession(WorkoutSession(707, 706, "Backup Routine", 1000, 2000, "offline"))
+            repository.insertLoggedSet(LoggedSet(710, 707, "backup-custom", 1, 5, 80f, true, rpe = 8, actualDuration = 40))
+            repository.insertBodyWeight(BodyWeight(711, 80f, 1000, 15f, 68f, 12f, 23f, "offline"))
+            repository.insertTapeMeasurement(TapeMeasurement(712, 1000, chest = 100f, waist = 80f, userId = "offline"))
+            val plan = TrainingPlan("backup-plan", "offline", human, 706, "missing-routine-global", "Backup Routine",
+                22000, 817, 0b0010100, 22030, 100, 200, revision = 6, originDeviceId = "backup-device")
+            val occurrence = PlannedWorkout("backup-plan:22000", "backup-plan", "offline", human, 706,
+                "missing-routine-global", "Backup Routine", 22001, 22000, 817, "COMPLETED", 2000, 707,
+                reminderEnabled = true, detachedFromSeries = true, createdAt = 110, updatedAt = 210,
+                revision = 8, originDeviceId = "backup-device")
+            database.strengthDao().restorePlannerBackupAtomically(listOf(plan), listOf(occurrence))
+            val backup = profileViewModel.exportData()
+            val root = JSONObject(backup)
+            assertEquals(4, root.getInt("version"))
+            assertEquals(200, root.getJSONArray("training_plans").getJSONObject(0).getLong("updatedAt"))
+            assertEquals("backup-device", root.getJSONArray("planned_workouts").getJSONObject(0).getString("originDeviceId"))
+
+            database.strengthDao().upsertTrainingPlan(plan.copy(routineName = "Corrupted locally"))
+            var successes = 0; var error: String? = null
+            profileViewModel.importData(backup, { successes++ }, { error = it })
+            waitUntil { successes == 1 || error != null }
+            profileViewModel.importData(backup, { successes++ }, { error = it })
+            waitUntil { successes == 2 || error != null }
+            assertNull(error)
+            assertEquals("Backup Routine", database.strengthDao().getTrainingPlan("backup-plan")!!.routineName)
+            assertEquals(1, database.strengthDao().getAllTrainingPlansForBackup("offline").count { it.id == "backup-plan" })
+            assertEquals(1, database.strengthDao().getAllPlannedWorkoutsForBackup("offline").count { it.id == occurrence.id })
+            assertEquals(8, database.strengthDao().getPlannedWorkout(occurrence.id)!!.revision)
+            assertNotNull(repository.getExerciseById("backup-custom"))
+            assertEquals(listOf(706), repository.getTemplatesForUser("offline").first().filter { it.id == 706 }.map { it.id })
+            assertEquals(listOf(707), repository.getSessionsForUser("offline").first().filter { it.id == 707 }.map { it.id })
+            assertEquals(listOf(710), repository.getLoggedSetsForUser("offline").first().filter { it.id == 710 }.map { it.id })
+            assertEquals(711, repository.getBodyWeightsForUser("offline").first().single { it.id == 711 }.id)
+            assertEquals(712, repository.getTapeMeasurementsForUser("offline").first().single { it.id == 712 }.id)
         }
     }
 }
