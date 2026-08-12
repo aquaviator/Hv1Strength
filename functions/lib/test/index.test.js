@@ -301,16 +301,9 @@ describe("Hv1 Platform Production Entitlement Backend Unit Tests", () => {
             assert_1.default.notStrictEqual(result.error.code, undefined);
         }
     });
-    // 24. Deterministic Java String hashCode for humanUserId derivation
-    it("24. should compute deterministic hashCode matching Kotlin for humanUserId derivation", () => {
-        const hash = (0, index_1.getJavaStringHashCode)("user_12345");
-        assert_1.default.strictEqual(typeof hash, "number");
-        const humanId = "human_" + hash.toString().replace("-", "n").padEnd(12, "x").substring(0, 12);
-        assert_1.default.ok(humanId.startsWith("human_"));
-    });
     // 25. FIRESTORE_USER_SUBCOLLECTIONS scope completeness
-    it("25. should identify all 10 user-owned subcollections for complete cloud purge", () => {
-        assert_1.default.strictEqual(index_1.FIRESTORE_USER_SUBCOLLECTIONS.length, 10);
+    it("25. should identify all 12 user-owned subcollections for complete cloud purge", () => {
+        assert_1.default.strictEqual(index_1.FIRESTORE_USER_SUBCOLLECTIONS.length, 12);
         assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("profile"));
         assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("sessions"));
         assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("loggedSets"));
@@ -321,24 +314,30 @@ describe("Hv1 Platform Production Entitlement Backend Unit Tests", () => {
         assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("templateExercises"));
         assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("templateSets"));
         assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("processedCommands"));
+        assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("trainingPlans"));
+        assert_1.default.ok(index_1.FIRESTORE_USER_SUBCOLLECTIONS.includes("plannedWorkouts"));
     });
     // 26. Mock Firestore Purge execution
     it("26. should purge all subcollections and root user doc in Firestore mock", async () => {
         let deletedCount = 0;
         const deletedPaths = [];
+        const served = new Set();
         const mockDb = {
             collection: (colName) => ({
                 doc: (docId) => ({
                     collection: (subName) => ({
-                        get: async () => ({
-                            empty: false,
-                            docs: [
-                                { ref: `users/${docId}/${subName}/doc1` },
-                                { ref: `users/${docId}/${subName}/doc2` }
-                            ]
-                        })
+                        limit: (_count) => ({ get: async () => {
+                                if (served.has(subName))
+                                    return { empty: true, docs: [] };
+                                served.add(subName);
+                                return { empty: false, docs: [
+                                        { ref: `users/${docId}/${subName}/doc1` },
+                                        { ref: `users/${docId}/${subName}/doc2` }
+                                    ] };
+                            } })
                     }),
-                    get: async () => ({ exists: true }),
+                    get: async () => ({ exists: true, data: () => colName === "accounts" ?
+                            { humanUserId: "human_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } : {} }),
                     delete: async () => {
                         deletedPaths.push(`users/${docId}`);
                         deletedCount++;
@@ -353,9 +352,51 @@ describe("Hv1 Platform Production Entitlement Backend Unit Tests", () => {
                 commit: async () => { }
             })
         };
-        const res = await (0, index_1.purgeUserCloudData)(mockDb, "test_uid", "human_test123");
-        assert_1.default.strictEqual(res.deletedSubcollections.length, 10);
-        assert_1.default.strictEqual(res.totalDocumentsDeleted, 21); // 20 subdocs + 1 root doc
+        const res = await (0, index_1.purgeUserCloudData)(mockDb, "test_uid", "human_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        assert_1.default.strictEqual(res.deletedSubcollections.length, 12);
+        assert_1.default.strictEqual(res.totalDocumentsDeleted, 26); // 24 subdocs + root + forward binding
+    });
+    it("27. planner purge batches beyond 400 and remains retryable after interruption", async () => {
+        const human = "human_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const store = new Map();
+        const path = (collection) => `users/${human}/${collection}`;
+        store.set(path("trainingPlans"), new Set(Array.from({ length: 401 }, (_, i) => `plan-${i}`)));
+        store.set(path("plannedWorkouts"), new Set(Array.from({ length: 805 }, (_, i) => `occ-${i}`)));
+        store.set(`users`, new Set([human]));
+        store.set(`accounts`, new Set(["test_uid"]));
+        const ref = (collection, id) => ({ _collection: collection, id, path: `${collection}/${id}`,
+            collection: (sub) => collectionRef(`${collection}/${id}/${sub}`),
+            get: async () => ({ exists: store.get(collection)?.has(id) ?? false,
+                data: () => collection === "accounts" ? { humanUserId: human } : {} }),
+            delete: async () => { store.get(collection)?.delete(id); } });
+        const collectionRef = (collection) => ({
+            doc: (id) => ref(collection, id),
+            limit: (count) => ({ get: async () => {
+                    const ids = Array.from(store.get(collection) ?? []).slice(0, count);
+                    return { empty: ids.length === 0, docs: ids.map(id => ({ ref: ref(collection, id) })) };
+                } })
+        });
+        const mockDb = {
+            collection: collectionRef,
+            batch: () => {
+                const pending = [];
+                return {
+                    delete: (document) => pending.push(document),
+                    commit: async () => pending.forEach(document => store.get(document.path.substring(0, document.path.lastIndexOf("/")))?.delete(document.id))
+                };
+            }
+        };
+        await assert_1.default.rejects((0, index_1.purgeUserCloudData)(mockDb, "test_uid", human, {
+            afterBatch: (_collection, batches) => { if (batches === 2)
+                throw new Error("synthetic interruption"); }
+        }), /synthetic interruption/);
+        assert_1.default.ok((store.get(path("plannedWorkouts"))?.size ?? 0) > 0);
+        const result = await (0, index_1.purgeUserCloudData)(mockDb, "test_uid", human);
+        assert_1.default.strictEqual(store.get(path("trainingPlans"))?.size, 0);
+        assert_1.default.strictEqual(store.get(path("plannedWorkouts"))?.size, 0);
+        assert_1.default.ok(result.totalDocumentsDeleted > 0);
+        const replay = await (0, index_1.purgeUserCloudData)(mockDb, "test_uid", human);
+        assert_1.default.strictEqual(replay.totalDocumentsDeleted, 0);
     });
 });
 //# sourceMappingURL=index.test.js.map

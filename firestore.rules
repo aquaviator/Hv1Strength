@@ -1,14 +1,65 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Enforce authentication and strict owner access control on all user documents
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-      
-      match /{document=**} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+    function isAuthenticated() { return request.auth != null; }
+    function accountBinding() {
+      return get(/databases/$(database)/documents/accounts/$(request.auth.uid));
+    }
+    function ownsHumanRoot(humanUserId) {
+      let root = get(/databases/$(database)/documents/users/$(humanUserId));
+      return isAuthenticated()
+        && accountBinding().data.status == "ACTIVE"
+        && accountBinding().data.schemaVersion == 1
+        && accountBinding().data.humanUserId == humanUserId
+        && root.data.status == "ACTIVE"
+        && root.data.schemaVersion == 1
+        && root.data.ownerFirebaseUid == request.auth.uid;
+    }
+    function createsOwnedPlannerRecord(humanUserId) {
+      return request.resource.data.humanUserId == humanUserId;
+    }
+    function updatesOwnedPlannerRecord(humanUserId) {
+      return resource.data.humanUserId == humanUserId
+        && request.resource.data.humanUserId == humanUserId;
+    }
+
+    match /accounts/{uid} {
+      allow get: if isAuthenticated() && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+      match /entitlements/{document=**} { allow read, write: if false; }
+    }
+
+    match /users/{humanUserId} {
+      // HIIT uses this single-document read as its trusted-identity sync gate.
+      // Listing Human roots and all client root mutations remain forbidden.
+      allow get: if ownsHumanRoot(humanUserId);
+      allow list, create, update, delete: if false;
+      match /profile/{document} { allow read, write: if ownsHumanRoot(humanUserId); }
+      match /weight/{document} { allow read, write: if ownsHumanRoot(humanUserId); }
+      match /tape/{document} { allow read, write: if ownsHumanRoot(humanUserId); }
+      match /customExercises/{document} { allow read, write: if ownsHumanRoot(humanUserId); }
+      match /templates/{document} { allow read, write: if ownsHumanRoot(humanUserId); }
+      match /templateExercises/{document} { allow read, write: if ownsHumanRoot(humanUserId); }
+      match /templateSets/{document} { allow read, write: if ownsHumanRoot(humanUserId); }
+      match /sessions/{document} { allow read, write: if ownsHumanRoot(humanUserId); }
+      match /loggedSets/{document} { allow read, write: if ownsHumanRoot(humanUserId); }
+      match /processedCommands/{document} { allow read, write: if ownsHumanRoot(humanUserId); }
+      match /trainingPlans/{document} {
+        allow read, delete: if ownsHumanRoot(humanUserId);
+        allow create: if ownsHumanRoot(humanUserId) && createsOwnedPlannerRecord(humanUserId);
+        allow update: if ownsHumanRoot(humanUserId) && updatesOwnedPlannerRecord(humanUserId);
+      }
+      match /plannedWorkouts/{document} {
+        allow read, delete: if ownsHumanRoot(humanUserId);
+        allow create: if ownsHumanRoot(humanUserId) && createsOwnedPlannerRecord(humanUserId);
+        allow update: if ownsHumanRoot(humanUserId) && updatesOwnedPlannerRecord(humanUserId);
       }
     }
+
+    match /legacyIdentityEvidence/{document=**} { allow read, write: if false; }
+    match /entitlements/{document=**} { allow read, write: if false; }
+    match /trialPolicies/{document=**} { allow read, write: if false; }
+    match /platform_config/{document=**} { allow read, write: if false; }
+    match /{document=**} { allow read, write: if false; }
   }
 }

@@ -32,12 +32,15 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.rtdnHandler = exports.initializeAccountTrial = exports.verifyPurchase = exports.FIRESTORE_USER_SUBCOLLECTIONS = exports.MILLIS_PER_DAY = exports.ACCOUNT_TRIAL_DOCUMENT_ID = exports.TRIAL_POLICY_PATH = exports.FUNCTION_REGION = exports.EXPECTED_PRODUCT_ID = exports.EXPECTED_PACKAGE_NAME = void 0;
+exports.deleteUserAccount = exports.rtdnHandler = exports.initializeAccountTrial = exports.verifyPurchase = exports.FIRESTORE_USER_SUBCOLLECTIONS = exports.MILLIS_PER_DAY = exports.ACCOUNT_TRIAL_DOCUMENT_ID = exports.TRIAL_POLICY_PATH = exports.FUNCTION_REGION = exports.EXPECTED_PRODUCT_ID = exports.EXPECTED_PACKAGE_NAME = exports.ensureHumanIdentity = void 0;
 exports.parseTrialPolicy = parseTrialPolicy;
 exports.getPurchaseDocId = getPurchaseDocId;
-exports.getJavaStringHashCode = getJavaStringHashCode;
 exports.purgeUserCloudData = purgeUserCloudData;
+exports.deleteAuthorizedUserAccount = deleteAuthorizedUserAccount;
 exports.getPlayDeveloperClient = getPlayDeveloperClient;
 exports.mapPlayStateToEntitlementStatus = mapPlayStateToEntitlementStatus;
 exports.verifyTokenWithGooglePlay = verifyTokenWithGooglePlay;
@@ -47,10 +50,26 @@ const logger = __importStar(require("firebase-functions/logger"));
 const admin = __importStar(require("firebase-admin"));
 const googleapis_1 = require("googleapis");
 const crypto = __importStar(require("crypto"));
+const identity_1 = require("./identity");
+__exportStar(require("./identity"), exports);
 if (!admin.apps.length) {
     admin.initializeApp();
 }
 const db = admin.firestore();
+exports.ensureHumanIdentity = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid)
+        throw new https_1.HttpsError("unauthenticated", "Firebase authentication is required");
+    try {
+        const legacyHumanUserId = await (0, identity_1.resolveVerifiedLegacyHumanId)(db, uid);
+        const result = await (0, identity_1.ensureHumanIdentityForUid)(db, uid, legacyHumanUserId);
+        return { humanUserId: result.humanUserId, status: result.status, schemaVersion: result.schemaVersion };
+    }
+    catch (error) {
+        logger.warn("Human identity initialization rejected", { code: error instanceof identity_1.IdentityError ? error.code : "IDENTITY_UNAVAILABLE" });
+        throw new https_1.HttpsError("failed-precondition", "Human identity is unavailable");
+    }
+});
 exports.EXPECTED_PACKAGE_NAME = "com.aistudio.humanstrength.kfqjza";
 exports.EXPECTED_PRODUCT_ID = "human_strength_annual";
 exports.FUNCTION_REGION = "europe-west1";
@@ -80,19 +99,6 @@ function getPurchaseDocId(purchaseToken) {
     const hash = crypto.createHash("sha256").update(purchaseToken).digest("hex");
     return `play_${hash.substring(0, 32)}`;
 }
-/**
- * Deterministic Java String hashCode calculation in JS/TS.
- * Matches Kotlin String.hashCode() behavior for deriving humanUserId from uid.
- */
-function getJavaStringHashCode(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = (hash << 5) - hash + char;
-        hash |= 0; // Convert to 32-bit signed integer
-    }
-    return hash;
-}
 exports.FIRESTORE_USER_SUBCOLLECTIONS = [
     "profile",
     "sessions",
@@ -103,28 +109,47 @@ exports.FIRESTORE_USER_SUBCOLLECTIONS = [
     "templates",
     "templateExercises",
     "templateSets",
-    "processedCommands"
+    "processedCommands",
+    "trainingPlans",
+    "plannedWorkouts"
 ];
 /**
  * Purges all user-owned Firestore documents and subcollections under users/{humanUserId}.
  * Enforces ownership boundary derived from authenticated user context.
  */
-async function purgeUserCloudData(firestoreDb, uid, targetHumanUserId) {
+async function purgeUserCloudData(firestoreDb, uid, targetHumanUserId, testHooks = {}) {
+    if (!uid || !/^human_[a-f0-9]{32}$/.test(targetHumanUserId)) {
+        throw new Error("Deletion identity is malformed");
+    }
     let totalDeleted = 0;
     const deletedSubcollections = [];
+    const batchSize = testHooks.batchSize ?? 400;
+    if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 400) {
+        throw new Error("Deletion batch size must be between 1 and 400");
+    }
+    let committedBatches = 0;
     const userDocRef = firestoreDb.collection("users").doc(targetHumanUserId);
     for (const subColl of exports.FIRESTORE_USER_SUBCOLLECTIONS) {
         const subCollRef = userDocRef.collection(subColl);
-        const snapshot = await subCollRef.get();
-        if (!snapshot.empty) {
+        let collectionDeleted = false;
+        while (true) {
+            // Stay below Firestore's 500-operation batch limit. Re-querying makes a
+            // partially completed purge naturally retryable and idempotent.
+            const snapshot = await subCollRef.limit(batchSize).get();
+            if (snapshot.empty)
+                break;
             const batch = firestoreDb.batch();
             snapshot.docs.forEach((doc) => {
                 batch.delete(doc.ref);
-                totalDeleted++;
             });
             await batch.commit();
-            deletedSubcollections.push(subColl);
+            totalDeleted += snapshot.docs.length;
+            committedBatches++;
+            await testHooks.afterBatch?.(subColl, committedBatches);
+            collectionDeleted = true;
         }
+        if (collectionDeleted)
+            deletedSubcollections.push(subColl);
     }
     // Delete top-level user document
     const userDocSnapshot = await userDocRef.get();
@@ -132,7 +157,30 @@ async function purgeUserCloudData(firestoreDb, uid, targetHumanUserId) {
         await userDocRef.delete();
         totalDeleted++;
     }
+    // The forward binding is deliberately last: it remains available while any
+    // Human-root data still needs an authorized, retryable purge.
+    const accountRef = firestoreDb.collection("accounts").doc(uid);
+    const account = await accountRef.get();
+    if (account.exists) {
+        const data = account.data();
+        if (data?.humanUserId !== targetHumanUserId)
+            throw new Error("Deletion binding changed during purge");
+        await accountRef.delete();
+        totalDeleted++;
+    }
     return { deletedSubcollections, totalDocumentsDeleted: totalDeleted };
+}
+async function deleteAuthorizedUserAccount(firestoreDb, auth, uid, testHooks = {}) {
+    const humanUserId = await (0, identity_1.trustedHumanIdForUid)(firestoreDb, uid);
+    const purge = await purgeUserCloudData(firestoreDb, uid, humanUserId, testHooks);
+    try {
+        await auth.deleteUser(uid);
+    }
+    catch (error) {
+        if (error?.code !== "auth/user-not-found")
+            throw error;
+    }
+    return { humanUserId, ...purge };
 }
 /**
  * Creates an authorized Google Play Developer API client if service credentials exist.
@@ -548,34 +596,22 @@ exports.deleteUserAccount = (0, https_1.onRequest)({ region: exports.FUNCTION_RE
         return;
     }
     const uid = decodedToken.uid;
-    const { humanUserId: bodyHumanUserId } = req.body || {};
-    let humanUserId = bodyHumanUserId;
-    if (!humanUserId || typeof humanUserId !== "string" || !humanUserId.startsWith("human_")) {
-        const hash = getJavaStringHashCode(uid).toString().replace("-", "n").padEnd(12, "x").substring(0, 12);
-        humanUserId = `human_${hash}`;
-    }
+    (0, identity_1.assertNoClientDeletionTarget)(req.body);
     try {
-        logger.info(`Initiating cloud data purge for user ${uid} (humanUserId=${humanUserId})`);
-        const purgeResult = await purgeUserCloudData(db, uid, humanUserId);
-        // Delete Firebase Authentication identity
-        try {
-            await admin.auth().deleteUser(uid);
-            logger.info(`Successfully deleted Firebase Auth user ${uid}`);
-        }
-        catch (authErr) {
-            logger.warn(`Firebase Auth user deletion produced warning/error for ${uid}:`, authErr?.message || authErr);
-        }
+        logger.info("Initiating authorized cloud data purge");
+        const purgeResult = await deleteAuthorizedUserAccount(db, admin.auth(), uid);
+        logger.info("Successfully deleted Firebase Auth user");
         res.status(200).json({
             success: true,
             message: "Cloud account and all associated Firestore data successfully deleted",
-            humanUserId,
+            humanUserId: purgeResult.humanUserId,
             deletedSubcollections: purgeResult.deletedSubcollections,
             totalDocumentsDeleted: purgeResult.totalDocumentsDeleted
         });
     }
     catch (err) {
-        logger.error(`Error deleting user account ${uid}:`, err?.message || err);
-        res.status(500).json({ code: "INTERNAL_ERROR", message: err?.message || "Failed to purge cloud user data" });
+        logger.error("Error deleting user account", { code: err?.code || "PURGE_FAILED" });
+        res.status(500).json({ code: "INTERNAL_ERROR", message: "Failed to purge cloud user data" });
     }
 });
 //# sourceMappingURL=index.js.map
