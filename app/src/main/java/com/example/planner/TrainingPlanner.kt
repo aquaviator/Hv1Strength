@@ -40,7 +40,8 @@ object TrainingPlanner {
                 userId = plan.userId, humanUserId = plan.humanUserId,
                 templateId = plan.templateId, templateGlobalId = plan.templateGlobalId,
                 routineName = plan.routineName, scheduledEpochDay = epochDay,
-                originalEpochDay = epochDay, preferredMinuteOfDay = plan.preferredMinuteOfDay
+                originalEpochDay = epochDay, preferredMinuteOfDay = plan.preferredMinuteOfDay,
+                createdAt = plan.createdAt, updatedAt = plan.updatedAt
             )
         }
     }

@@ -279,7 +279,12 @@ fun MainAppScreen(
 
     val navigateToTab = remember(navController, currentRoute, currentTab) {
         { targetRoute: String ->
-            val hasWorkoutInBackStack = navController.currentBackStack.value.any { it.destination.route == "workout" }
+            val hasWorkoutInBackStack = try {
+                navController.getBackStackEntry("workout")
+                true
+            } catch (_: IllegalArgumentException) {
+                false
+            }
             if (currentTab == targetRoute) {
                 // Tap current tab while on child route -> return to that tab's root
                 if (currentRoute != targetRoute) {

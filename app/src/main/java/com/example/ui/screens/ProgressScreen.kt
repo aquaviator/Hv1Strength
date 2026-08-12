@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.border
 import androidx.compose.ui.window.Dialog
@@ -156,7 +157,7 @@ fun ProgressScreen(
                             }
                             Column {
                                 Text(
-                                    "${String.format("%.1f", streakStats.monthlyConsistencyPct)}%",
+                        "${String.format(Locale.getDefault(), "%.1f", streakStats.monthlyConsistencyPct)}%",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -229,7 +230,7 @@ fun ProgressScreen(
                                         val cellIndex = r * 7 + c
                                         val dayOfMonth = cellIndex - paddingOffset + 1
                                         if (dayOfMonth in 1..monthMaxDays) {
-                                            val dateStr = String.format("%04d-%02d-%02d", year, month + 1, dayOfMonth)
+                val dateStr = String.format(Locale.ROOT, "%04d-%02d-%02d", year, month + 1, dayOfMonth)
                                             val isWorkedOut = streakStats.workoutDates.contains(dateStr)
 
                                             Box(
@@ -692,7 +693,7 @@ fun WeightProgressTab(
                             entry.bmi?.let { bmiVal ->
                                 Column {
                                     Text("BMI", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(String.format("%.1f", bmiVal), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text(String.format(Locale.getDefault(), "%.1f", bmiVal), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -1320,7 +1321,7 @@ fun StrengthLineChart(
 
         // Render Max value label
         drawContext.canvas.nativeCanvas.drawText(
-            String.format("%.1f", maxValue),
+                    String.format(Locale.getDefault(), "%.1f", maxValue),
             marginX - 16f,
             30f,
             textPaint
@@ -1328,7 +1329,7 @@ fun StrengthLineChart(
 
         // Render Mid value label
         drawContext.canvas.nativeCanvas.drawText(
-            String.format("%.1f", (maxValue + minValue) / 2f),
+                    String.format(Locale.getDefault(), "%.1f", (maxValue + minValue) / 2f),
             marginX - 16f,
             (graphHeight / 2f) + 10f,
             textPaint
@@ -1336,7 +1337,7 @@ fun StrengthLineChart(
 
         // Render Min value label
         drawContext.canvas.nativeCanvas.drawText(
-            String.format("%.1f", minValue),
+                    String.format(Locale.getDefault(), "%.1f", minValue),
             marginX - 16f,
             graphHeight - 6f,
             textPaint

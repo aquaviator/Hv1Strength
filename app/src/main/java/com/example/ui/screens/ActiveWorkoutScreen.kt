@@ -33,6 +33,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -247,9 +248,9 @@ fun ActiveWorkoutScreen(
             val mins = (seconds % 3600) / 60
             val secs = seconds % 60
             elapsedTime = if (hrs > 0) {
-                String.format("%02d:%02d:%02d", hrs, mins, secs)
+        String.format(Locale.getDefault(), "%02d:%02d:%02d", hrs, mins, secs)
             } else {
-                String.format("%02d:%02d", mins, secs)
+        String.format(Locale.getDefault(), "%02d:%02d", mins, secs)
             }
             delay(1000)
         }
