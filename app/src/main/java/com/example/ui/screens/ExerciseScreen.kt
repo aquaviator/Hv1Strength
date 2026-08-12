@@ -4,6 +4,8 @@ import android.text.format.DateFormat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,6 +28,7 @@ import com.example.data.Exercise
 import com.example.data.LoggedSet
 import com.example.data.WorkoutSession
 import com.example.data.UserProfile
+import com.example.catalogue.*
 import com.example.ui.viewmodel.StrengthViewModel
 import java.util.*
 
@@ -36,14 +40,25 @@ fun ExerciseScreen(
 ) {
     val exercises by viewModel.exercises.collectAsState()
     val sessions by viewModel.sessions.collectAsState()
+    val allLoggedSets by viewModel.allLoggedSets.collectAsState()
     val favoriteExercises by viewModel.favoriteExercises.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All") }
+    var selectedEquipment by remember { mutableStateOf("All") }
+    var selectedCapability by remember { mutableStateOf<MeasurementCapability?>(null) }
+    var showCustomOnly by remember { mutableStateOf<Boolean?>(null) }
+    var selectedSection by rememberSaveable { mutableStateOf(LibrarySection.ALL) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val catalogue = remember { ExerciseCatalogueRuntime.snapshot ?: ExerciseCatalogueRuntime.load(context) }
+    val catalogueById = remember(catalogue) { catalogue.exercises.associateBy { it.id } }
+    val cataloguePrefs = remember { context.getSharedPreferences("strength_catalogue", android.content.Context.MODE_PRIVATE) }
+    val lastReconciled = remember(catalogue) { cataloguePrefs.getLong("last_reconciled", 0L) }
 
     var showCreateExerciseDialog by remember { mutableStateOf(false) }
     var customExerciseName by remember { mutableStateOf("") }
     var customExerciseCategory by remember { mutableStateOf("Chest") }
+    var customTrackingProfile by remember { mutableStateOf(com.example.catalogue.CustomTrackingProfile.REPS_LOAD) }
 
     var selectedExerciseForHistory by remember { mutableStateOf<Exercise?>(null) }
 
@@ -97,8 +112,16 @@ fun ExerciseScreen(
                 }
             )
 
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LibrarySection.entries.forEach { section ->
+                    FilterChip(selected = selectedSection == section, onClick = { selectedSection = section },
+                        label = { Text(section.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                        modifier = Modifier.testTag("exercise_section_${section.name.lowercase()}"))
+                }
+            }
+
             // Muscle Category Pill Tabs
-            val categories = listOf("All", "Chest", "Back", "Legs", "Shoulders", "Arms", "Abs")
+            val categories = remember(catalogue) { listOf("All") + catalogue.exercises.map { it.category }.distinct().sorted() }
             ScrollableTabRow(
                 selectedTabIndex = categories.indexOf(selectedCategory).coerceAtLeast(0),
                 edgePadding = 0.dp,
@@ -114,13 +137,40 @@ fun ExerciseScreen(
                 }
             }
 
-            // Exercise List
-            val filteredExercises = remember(searchQuery, selectedCategory, exercises) {
-                exercises.filter { ex ->
-                    val matchesSearch = ex.name.contains(searchQuery, ignoreCase = true)
-                    val matchesCat = selectedCategory == "All" || ex.category == selectedCategory
-                    matchesSearch && matchesCat
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("All", "barbell", "dumbbell", "kettlebell", "cable", "machine", "bodyweight", "resistance band").forEach { value ->
+                    FilterChip(selected = selectedEquipment == value, onClick = { selectedEquipment = value }, label = { Text(value.replaceFirstChar { it.uppercase() }) })
                 }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(selected = showCustomOnly == null, onClick = { showCustomOnly = null }, label = { Text("All") })
+                FilterChip(selected = showCustomOnly == false, onClick = { showCustomOnly = false }, label = { Text("Built-in") })
+                FilterChip(selected = showCustomOnly == true, onClick = { showCustomOnly = true }, label = { Text("Custom") })
+                FilterChip(selected = selectedCapability == MeasurementCapability.DURATION,
+                    onClick = { selectedCapability = if (selectedCapability == MeasurementCapability.DURATION) null else MeasurementCapability.DURATION },
+                    label = { Text("Timed") })
+            }
+
+            Text(
+                "Catalogue ${catalogue.metadata.catalogueVersion} · ${catalogue.metadata.exerciseCount} exercises · ${catalogue.metadata.sourceId} · " +
+                    (if (catalogue.validation.valid) "Verified" else "Fallback active") +
+                    (if (lastReconciled > 0L) " · Updated ${android.text.format.DateFormat.getMediumDateFormat(context).format(java.util.Date(lastReconciled))}" else ""),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (catalogue.validation.valid) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag("catalogue_diagnostics")
+            )
+
+            // Exercise List
+            val filteredExercises = remember(searchQuery, selectedCategory, selectedEquipment, selectedCapability, showCustomOnly, selectedSection, exercises, catalogue, sessions, allLoggedSets, favoriteExercises) {
+                discoverExercises(exercises, catalogueById, favoriteExercises, recentExerciseIds(sessions, allLoggedSets),
+                    ExerciseDiscoveryFilters(query = searchQuery, category = selectedCategory.takeUnless { it == "All" },
+                        equipment = selectedEquipment.takeUnless { it == "All" }, capability = selectedCapability,
+                        section = if (showCustomOnly == true) LibrarySection.CUSTOM else selectedSection))
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("${filteredExercises.size} exercises", style = MaterialTheme.typography.labelMedium, modifier = Modifier.testTag("exercise_result_count"))
+                TextButton(onClick = { searchQuery = ""; selectedCategory = "All"; selectedEquipment = "All"; selectedCapability = null; showCustomOnly = null; selectedSection = LibrarySection.ALL }) { Text("Clear filters") }
             }
 
             if (filteredExercises.isEmpty()) {
@@ -301,6 +351,17 @@ fun ExerciseScreen(
                         }
                     }
 
+                    Text("Track", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        com.example.catalogue.CustomTrackingProfile.entries.chunked(2).forEach { profiles ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                profiles.forEach { profile ->
+                                    FilterChip(selected = customTrackingProfile == profile, onClick = { customTrackingProfile = profile }, label = { Text(profile.label) })
+                                }
+                            }
+                        }
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End,
@@ -315,7 +376,8 @@ fun ExerciseScreen(
                                 if (customExerciseName.isNotBlank()) {
                                     viewModel.createCustomExercise(
                                         customExerciseName,
-                                        customExerciseCategory
+                                        customExerciseCategory,
+                                        customTrackingProfile
                                     )
                                     showCreateExerciseDialog = false
                                 }
@@ -341,7 +403,7 @@ fun ExerciseScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(450.dp),
+                    .heightIn(max = 620.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
@@ -374,6 +436,21 @@ fun ExerciseScreen(
                     }
 
                     Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+                    val details = exerciseDetails(exercise, catalogueById[exercise.id])
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.testTag("exercise_details_metadata")) {
+                        Text(details.source, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        Text("Primary: ${details.primaryMuscles.joinToString().ifBlank { "Not specified" }}", style = MaterialTheme.typography.bodySmall)
+                        if (details.secondaryMuscles.isNotEmpty()) Text("Secondary: ${details.secondaryMuscles.joinToString()}", style = MaterialTheme.typography.bodySmall)
+                        Text("Equipment: ${details.equipment.joinToString().ifBlank { "No equipment specified" }}", style = MaterialTheme.typography.bodySmall)
+                        Text("Tracks: ${details.measurements.joinToString()}", style = MaterialTheme.typography.bodySmall)
+                        Text("Movement: ${details.laterality.replaceFirstChar { it.uppercase() }}", style = MaterialTheme.typography.bodySmall)
+                        details.replacementId?.let { Text("Replacement available: ${catalogueById[it]?.name ?: it}", style = MaterialTheme.typography.bodySmall) }
+                    }
+                    OutlinedButton(onClick = { viewModel.toggleFavoriteExercise(exercise.id) }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(if (favoriteExercises.contains(exercise.id)) Icons.Default.Star else Icons.Default.StarBorder, contentDescription = null)
+                        Spacer(Modifier.width(8.dp)); Text(if (favoriteExercises.contains(exercise.id)) "Remove favourite" else "Add favourite")
+                    }
 
                     Text(
                         "Previous Weights & Sets Logs",

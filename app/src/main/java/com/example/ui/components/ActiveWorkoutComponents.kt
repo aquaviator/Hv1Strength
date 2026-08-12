@@ -478,9 +478,17 @@ fun ActiveExerciseCard(
     // RPE
     rpe: Int?,
     onRpeChange: (Int?) -> Unit,
+    capabilities: com.example.catalogue.ResolvedExerciseCapabilities,
+    durationSeconds: Int?,
+    onDurationChange: (Int) -> Unit,
+    distance: Float?,
+    onDistanceChange: (Float) -> Unit,
     // Previous Session
     prevSummary: String,
     daysAgoText: String?,
+    onCopyPrevious: (() -> Unit)? = null,
+    nextSuggestion: String? = null,
+    onApplySuggestion: (() -> Unit)? = null,
     // Coaching Notes
     coachingCues: String?,
     onCuesClick: () -> Unit,
@@ -630,14 +638,14 @@ fun ActiveExerciseCard(
 
             HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
 
-            // 4. Weight & Reps matched pair (side-by-side columns)
+            // 4. Capability-driven measurements
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Weight column
+                if (capabilities.load) {
                 TrainingStepper(
-                    label = "Weight",
+                    label = capabilities.weightLabel,
                     value = if (isEditingWeight) weightInputText else com.example.core.util.UnitConverter.formatWeight(weight.toDouble(), isMetric),
                     onValueChange = { input ->
                         weightInputText = input
@@ -658,8 +666,9 @@ fun ActiveExerciseCard(
                     subtext = weightSource,
                     modifier = Modifier.weight(1f)
                 )
+                }
 
-                // Repetitions column
+                if (capabilities.repetitions) {
                 TrainingStepper(
                     label = "Repetitions",
                     value = if (isEditingReps) repsInputText else "$reps reps",
@@ -682,6 +691,17 @@ fun ActiveExerciseCard(
                     subtext = "Tap to type",
                     modifier = Modifier.weight(1f)
                 )
+                }
+                if (capabilities.duration) {
+                    TrainingStepper(label = "Duration", value = "${durationSeconds ?: 0} sec", onValueChange = { it.toIntOrNull()?.takeIf { n -> n > 0 }?.let(onDurationChange) },
+                        isEditing = false, onEditToggle = {}, onDecrement = { onDurationChange(((durationSeconds ?: 1) - 5).coerceAtLeast(1)) },
+                        onIncrement = { onDurationChange((durationSeconds ?: 0) + 5) }, keyboardType = KeyboardType.Number, subtext = "Seconds", modifier = Modifier.weight(1f))
+                }
+                if (capabilities.distance) {
+                    TrainingStepper(label = "Distance", value = "${distance ?: 0f} ${if (isMetric) "km" else "mi"}", onValueChange = { it.toFloatOrNull()?.takeIf { n -> n >= 0f }?.let(onDistanceChange) },
+                        isEditing = false, onEditToggle = {}, onDecrement = { onDistanceChange(((distance ?: 0f) - 0.1f).coerceAtLeast(0f)) },
+                        onIncrement = { onDistanceChange((distance ?: 0f) + 0.1f) }, keyboardType = KeyboardType.Decimal, subtext = "Distance", modifier = Modifier.weight(1f))
+                }
             }
 
             HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
@@ -712,6 +732,21 @@ fun ActiveExerciseCard(
                             tint = SlateMutedText.copy(alpha = 0.6f),
                             modifier = Modifier.size(16.dp)
                         )
+                    }
+                    if (prevSummary.isNotBlank() && prevSummary != "No prior history" && onCopyPrevious != null) {
+                        TextButton(onClick = onCopyPrevious, modifier = Modifier.testTag("copy_previous_set")) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp)); Text("Copy previous set")
+                        }
+                    }
+                    if (nextSuggestion != null) {
+                        Text("SUGGESTED NEXT TARGET", style = MaterialTheme.typography.labelSmall, color = HumanPrimaryAccent)
+                        Text(nextSuggestion, style = MaterialTheme.typography.bodySmall, color = Color.White)
+                        if (onApplySuggestion != null) {
+                            TextButton(onClick = onApplySuggestion, modifier = Modifier.testTag("apply_suggestion")) {
+                                Text("Apply suggestion")
+                            }
+                        }
                     }
 
                     Row(
@@ -821,7 +856,7 @@ fun ActiveExerciseCard(
             HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
 
             // 6. RPE Effort Control (minimized and cleanly integrated)
-            EffortControl(
+            if (capabilities.rpe) EffortControl(
                 rpe = rpe,
                 onRpeChange = onRpeChange,
                 modifier = Modifier.fillMaxWidth()

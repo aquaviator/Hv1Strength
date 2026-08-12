@@ -33,13 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.credentials.CredentialManager
-import androidx.credentials.GetCredentialRequest
-import androidx.credentials.GetCredentialResponse
-import androidx.credentials.CustomCredential
 import com.example.BuildConfig
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.example.ui.viewmodel.StrengthViewModel
 import com.example.data.AuthState
 import kotlinx.coroutines.launch
@@ -54,12 +48,10 @@ fun WelcomeScreen(
     val coroutineScope = rememberCoroutineScope()
     val authState by viewModel.authState.collectAsState()
     
-    val sharedPrefs = remember { context.getSharedPreferences("strength_settings", Context.MODE_PRIVATE) }
     val defaultClientId = remember(context) {
         val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
-        if (resId != 0) context.getString(resId) else "596361666131-4bdc26e3rrupaag2cn3tqcmlqdcdjqs8.apps.googleusercontent.com"
+        if (resId != 0) context.getString(resId) else ""
     }
-    var webClientId by remember { mutableStateOf(sharedPrefs.getString("google_web_client_id", defaultClientId) ?: defaultClientId) }
 
     var showSimulationDialog by remember { mutableStateOf(false) }
     var simEmail by remember { mutableStateOf("athlete.active@gmail.com") }
@@ -67,6 +59,30 @@ fun WelcomeScreen(
     
     var showSignInErrorDialog by remember { mutableStateOf(false) }
     var signInErrorMessage by remember { mutableStateOf("") }
+    val beginGoogleSignIn: () -> Unit = {
+        coroutineScope.launch {
+            try {
+                val credential = requestExplicitGoogleCredential(context, defaultClientId)
+                viewModel.signInWithGoogle(credential.idToken, credential.displayName, credential.id, credential.profilePictureUri?.toString())
+            } catch (e: androidx.credentials.exceptions.GetCredentialCancellationException) {
+                Toast.makeText(context, "Google sign-in cancelled", Toast.LENGTH_SHORT).show()
+            } catch (e: androidx.credentials.exceptions.NoCredentialException) {
+                signInErrorMessage = "No Google account is available for sign-in on this device."
+                showSignInErrorDialog = true
+            } catch (e: MalformedGoogleCredentialException) {
+                signInErrorMessage = "Google returned an invalid sign-in response. Please try again."
+                showSignInErrorDialog = true
+            } catch (e: GoogleSignInConfigurationException) {
+                signInErrorMessage = e.message ?: "Google sign-in is not configured for this build."
+                showSignInErrorDialog = true
+            } catch (e: Exception) {
+                Log.e("WelcomeScreen", "Google Sign-In failed (${e.javaClass.simpleName})")
+                signInErrorMessage = if (e is java.io.IOException || e.cause is java.io.IOException) "Network unavailable. Check your connection and try again."
+                    else "Google sign-in could not be completed. Please try again."
+                showSignInErrorDialog = true
+            }
+        }
+    }
     
     // Check if we are already authenticated or in offline mode, and navigate if so
     LaunchedEffect(authState) {
@@ -137,34 +153,7 @@ fun WelcomeScreen(
             } else {
                 // Primary Action Button: Sign In with Google (Premium Pure White with Black Text)
                 Button(
-                    onClick = {
-                        coroutineScope.launch {
-                            try {
-                                val credentialManager = CredentialManager.create(context)
-                                val googleIdOption = GetGoogleIdOption.Builder()
-                                    .setFilterByAuthorizedAccounts(false)
-                                    .setServerClientId(webClientId)
-                                    .setAutoSelectEnabled(true)
-                                    .build()
-
-                                val request = GetCredentialRequest.Builder()
-                                    .addCredentialOption(googleIdOption)
-                                    .build()
-
-                                val response = credentialManager.getCredential(context, request)
-                                handleCredentialResponse(response, viewModel)
-                            } catch (e: Exception) {
-                                val errorMsg = e.localizedMessage ?: e.message ?: "Unknown error"
-                                Log.e("WelcomeScreen", "Google Sign-In failed", e)
-                                if (e.javaClass.simpleName.contains("Cancel") || errorMsg.contains("cancel", ignoreCase = true)) {
-                                    Toast.makeText(context, "Sign-In Cancelled", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    signInErrorMessage = errorMsg
-                                    showSignInErrorDialog = true
-                                }
-                            }
-                        }
-                    },
+                    onClick = beginGoogleSignIn,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp)
@@ -221,7 +210,7 @@ fun WelcomeScreen(
     }
 
     // Google Sign-In Simulation Dialog for development / headless environments
-    if (BuildConfig.DEBUG && showSimulationDialog) {
+    if (developerGoogleSignInToolsVisible(BuildConfig.DEBUG) && showSimulationDialog) {
         AlertDialog(
             onDismissRequest = { showSimulationDialog = false },
             title = {
@@ -308,7 +297,7 @@ fun WelcomeScreen(
                             style = MaterialTheme.typography.bodyMedium
                         )
 
-                        if (BuildConfig.DEBUG) {
+                        if (developerGoogleSignInToolsVisible(BuildConfig.DEBUG)) {
                             Card(
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                                 modifier = Modifier.fillMaxWidth()
@@ -354,7 +343,7 @@ fun WelcomeScreen(
                         }
                     }
 
-                    if (BuildConfig.DEBUG) {
+                    if (developerGoogleSignInToolsVisible(BuildConfig.DEBUG)) {
                         Card(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                             modifier = Modifier.fillMaxWidth()
@@ -455,24 +444,6 @@ fun WelcomeScreen(
                             }
                         }
 
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-
-                        Text(
-                            text = "Verify Web Client ID (or in Settings):",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        OutlinedTextField(
-                            value = webClientId,
-                            onValueChange = {
-                                webClientId = it
-                                sharedPrefs.edit().putString("google_web_client_id", it).apply()
-                            },
-                            label = { Text("Google Web Client ID") },
-                            modifier = Modifier.fillMaxWidth(),
-                            textStyle = MaterialTheme.typography.bodySmall
-                        )
                     }
                 }
             },
@@ -481,7 +452,7 @@ fun WelcomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (BuildConfig.DEBUG) {
+                    if (developerGoogleSignInToolsVisible(BuildConfig.DEBUG)) {
                         Button(
                             modifier = Modifier.fillMaxWidth(),
                             onClick = {
@@ -495,35 +466,7 @@ fun WelcomeScreen(
                     
                     OutlinedButton(
                         modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            showSignInErrorDialog = false
-                            coroutineScope.launch {
-                                try {
-                                    val credentialManager = CredentialManager.create(context)
-                                    val googleIdOption = GetGoogleIdOption.Builder()
-                                        .setFilterByAuthorizedAccounts(false)
-                                        .setServerClientId(webClientId)
-                                        .setAutoSelectEnabled(true)
-                                        .build()
-
-                                    val request = GetCredentialRequest.Builder()
-                                        .addCredentialOption(googleIdOption)
-                                        .build()
-
-                                    val response = credentialManager.getCredential(context, request)
-                                    handleCredentialResponse(response, viewModel)
-                                } catch (e: Exception) {
-                                    val errorMsg = e.localizedMessage ?: e.message ?: "Unknown error"
-                                    Log.e("WelcomeScreen", "Google Sign-In retry failed", e)
-                                    if (e.javaClass.simpleName.contains("Cancel") || errorMsg.contains("cancel", ignoreCase = true)) {
-                                        Toast.makeText(context, "Sign-In Cancelled", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        signInErrorMessage = errorMsg
-                                        showSignInErrorDialog = true
-                                    }
-                                }
-                            }
-                        }
+                        onClick = { showSignInErrorDialog = false; beginGoogleSignIn() }
                     ) {
                         Text("Retry Google Sign-In")
                     }
@@ -537,26 +480,6 @@ fun WelcomeScreen(
                 }
             }
         )
-    }
-}
-
-private fun handleCredentialResponse(
-    response: GetCredentialResponse,
-    viewModel: StrengthViewModel
-) {
-    val credential = response.credential
-    if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-        try {
-            val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-            viewModel.signInWithGoogle(
-                idToken = googleIdTokenCredential.idToken,
-                displayName = googleIdTokenCredential.displayName,
-                email = googleIdTokenCredential.id,
-                photoUrl = googleIdTokenCredential.profilePictureUri?.toString()
-            )
-        } catch (e: Exception) {
-            Log.e("WelcomeScreen", "Failed to parse Google ID Token credential", e)
-        }
     }
 }
 

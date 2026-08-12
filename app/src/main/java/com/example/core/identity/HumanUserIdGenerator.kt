@@ -31,7 +31,8 @@ object HumanUserIdGenerator {
         return id
     }
 
-    fun mapUserIdToHumanUserId(userId: String?, context: Context? = null): String {
+    /** Historical database migration only. Never authorizes authenticated cloud identity. */
+    internal fun deriveLegacyHumanIdForMigration(userId: String?, context: Context? = null): String {
         if (userId.isNullOrEmpty() || userId == "offline") {
             return getOrGenerateOfflineHumanId(context)
         }

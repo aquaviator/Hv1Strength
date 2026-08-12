@@ -814,6 +814,18 @@ fun ExercisePrescriptionCard(
                     SetPrescriptionEditor(
                         templateExercise = templateExercise,
                         intention = intention,
+                        capabilities = com.example.catalogue.ExerciseCapabilityResolver.resolve(
+                            androidx.compose.ui.platform.LocalContext.current,
+                            exerciseObj,
+                            com.example.catalogue.LegacyMeasurements(
+                                reps = templateExercise.sets.firstOrNull()?.targetRepsMin,
+                                load = templateExercise.sets.firstOrNull()?.targetWeight,
+                                durationSeconds = templateExercise.sets.firstOrNull()?.targetDurationSeconds,
+                                distance = templateExercise.sets.firstOrNull()?.targetDistance,
+                                rpe = templateExercise.sets.firstOrNull()?.targetRpe,
+                                tempo = templateExercise.sets.firstOrNull()?.tempo
+                            )
+                        ),
                         isMetric = isMetric,
                         onUpdate = onUpdate
                     )
@@ -1193,6 +1205,7 @@ fun ExerciseCardHeader(
 fun SetPrescriptionEditor(
     templateExercise: TemplateExerciseState,
     intention: ExerciseIntention,
+    capabilities: com.example.catalogue.ResolvedExerciseCapabilities,
     isMetric: Boolean,
     onUpdate: (TemplateExerciseState) -> Unit
 ) {
@@ -1259,6 +1272,7 @@ fun SetPrescriptionEditor(
                 }
             }
 
+            if (capabilities.repetitions) {
             // 2. Reps target bounds card
             Column(
                 modifier = Modifier
@@ -1344,7 +1358,9 @@ fun SetPrescriptionEditor(
                     }
                 }
             }
+            }
 
+            if (capabilities.load) {
             // 3. Starting weight stepper card
             Column(
                 modifier = Modifier
@@ -1391,6 +1407,24 @@ fun SetPrescriptionEditor(
                     ) {
                         Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp), tint = Color.White)
                     }
+                }
+            }
+            }
+        }
+
+        if (capabilities.duration || capabilities.distance) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (capabilities.duration) {
+                    val current = templateExercise.sets.firstOrNull()?.targetDurationSeconds ?: 60
+                    CapabilityTargetStepper("DURATION", "$current sec", Modifier.weight(1f),
+                        onMinus = { onUpdate(templateExercise.copy(sets = templateExercise.sets.map { it.copy(targetDurationSeconds = (current - 5).coerceAtLeast(5)) })) },
+                        onPlus = { onUpdate(templateExercise.copy(sets = templateExercise.sets.map { it.copy(targetDurationSeconds = current + 5) })) })
+                }
+                if (capabilities.distance) {
+                    val current = templateExercise.sets.firstOrNull()?.targetDistance ?: 1f
+                    CapabilityTargetStepper("DISTANCE", "$current ${if (isMetric) "km" else "mi"}", Modifier.weight(1f),
+                        onMinus = { onUpdate(templateExercise.copy(sets = templateExercise.sets.map { it.copy(targetDistance = (current - 0.1f).coerceAtLeast(0f)) })) },
+                        onPlus = { onUpdate(templateExercise.copy(sets = templateExercise.sets.map { it.copy(targetDistance = current + 0.1f) })) })
                 }
             }
         }
@@ -1516,25 +1550,42 @@ fun SetPrescriptionEditor(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Reps input display
+                        if (capabilities.repetitions) {
                         Text(
                             text = "${ts.targetRepsMin ?: 8}-${ts.targetRepsMax ?: 12} reps",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
+                        }
                         
-                        // Weight input display
+                        if (capabilities.load) {
                         Text(
-                            text = if (ts.targetWeight != null) com.example.core.util.UnitConverter.formatWeight(ts.targetWeight!!.toDouble(), isMetric) else "No Weight",
+                            text = if (ts.targetWeight != null) "${capabilities.weightLabel}: ${com.example.core.util.UnitConverter.formatWeight(ts.targetWeight!!.toDouble(), isMetric)}" else "No ${capabilities.weightLabel.lowercase()}",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = KineticAccent
                         )
+                        }
+                        if (capabilities.duration && ts.targetDurationSeconds != null) Text("${ts.targetDurationSeconds}s", fontSize = 12.sp, color = Color.White)
+                        if (capabilities.distance && ts.targetDistance != null) Text("${ts.targetDistance} ${if (isMetric) "km" else "mi"}", fontSize = 12.sp, color = KineticAccent)
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CapabilityTargetStepper(label: String, value: String, modifier: Modifier, onMinus: () -> Unit, onPlus: () -> Unit) {
+    Row(modifier.background(SlateBackground, RoundedCornerShape(12.dp)).padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        IconButton(onClick = onMinus) { Icon(Icons.Default.Remove, "Decrease $label") }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = SlateMutedText)
+            Text(value, fontWeight = FontWeight.Bold, color = Color.White)
+        }
+        IconButton(onClick = onPlus) { Icon(Icons.Default.Add, "Increase $label") }
     }
 }
 

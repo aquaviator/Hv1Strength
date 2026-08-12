@@ -54,9 +54,12 @@ data class ActiveWorkoutState(
     val isMetric: Boolean = true,
     val stateVersion: Int = 1,
     val workoutSource: String = "ROUTINE",
+    val workoutOwnerUserId: String = "offline",
+    val workoutOwnerHumanUserId: String = "",
     val casualSupersets: List<CasualSuperset> = emptyList(),
     val dismissedSupersets: Set<String> = emptySet(),
-    val pendingSupersetSuggestion: PendingSupersetSuggestion? = null
+    val pendingSupersetSuggestion: PendingSupersetSuggestion? = null,
+    val plannedOccurrenceId: String? = null
 )
 
 data class ActiveSet(
@@ -138,7 +141,16 @@ class StrengthViewModel(
     val profileViewModel = ProfileViewModel(repository, context, authViewModel)
     val routineViewModel = RoutineViewModel(repository, context, authViewModel)
     val activeWorkoutViewModel = ActiveWorkoutViewModel(repository, context, authViewModel)
+    val plannerViewModel = PlannerViewModel(repository, authViewModel, activeWorkoutViewModel, context)
     val historyViewModel = HistoryViewModel(repository, context, authViewModel, routineViewModel)
+
+    val plannedWorkouts get() = plannerViewModel.occurrences
+    val plannerAdherence get() = plannerViewModel.adherence
+
+    fun scheduleRoutine(template: WorkoutTemplate, date: java.time.LocalDate, minuteOfDay: Int? = null,
+                        weekdays: Set<java.time.DayOfWeek> = emptySet(), end: java.time.LocalDate? = null, reminder: Boolean = false) =
+        plannerViewModel.schedule(template, date, minuteOfDay, weekdays, end, reminder)
+    fun startPlannedWorkout(item: PlannedWorkout) = plannerViewModel.start(item, templates.value.firstOrNull { it.id == item.templateId })
 
     // Backing undo system properties (held in the orchestrating ViewModel)
     private var lastDeletedSet: Pair<String, Pair<Int, ActiveSet>>? = null
@@ -362,7 +374,7 @@ class StrengthViewModel(
     fun saveTemplate(templateId: Int?, name: String, exercises: List<TemplateExerciseState>, onComplete: () -> Unit = {}) =
         routineViewModel.saveTemplate(templateId, name, exercises, onComplete)
 
-    fun createCustomExercise(name: String, category: String) = routineViewModel.createCustomExercise(name, category)
+    fun createCustomExercise(name: String, category: String, profile: com.example.catalogue.CustomTrackingProfile = com.example.catalogue.CustomTrackingProfile.REPS_LOAD) = routineViewModel.createCustomExercise(name, category, profile)
     fun deleteCustomExercise(id: String) = routineViewModel.deleteCustomExercise(id)
 
     // Delegated History properties & functions

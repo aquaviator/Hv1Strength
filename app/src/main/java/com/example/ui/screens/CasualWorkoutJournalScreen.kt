@@ -46,6 +46,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
+import com.example.catalogue.ExerciseCatalogueRuntime
+import com.example.catalogue.exerciseMatches
 
 object CasualTheme {
     val Background = Color(0xFF111315)          // Deep graphite
@@ -70,6 +72,8 @@ fun CasualWorkoutJournalScreen(
 ) {
     val exercisesDb by viewModel.exercises.collectAsState()
     val isMetric by viewModel.isMetric.collectAsState()
+    val favouriteExercises by viewModel.favoriteExercises.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     var elapsedTime by remember { mutableStateOf("00:00") }
     var showAddExerciseDialog by remember { mutableStateOf(false) }
@@ -608,12 +612,14 @@ fun CasualWorkoutJournalScreen(
                             }
                         }
 
-                        val filteredExercises = remember(exercisesDb, searchQuery, selectedCategory) {
+                        val pickerCatalogue = remember { ExerciseCatalogueRuntime.snapshot ?: ExerciseCatalogueRuntime.load(context) }
+                        val pickerById = remember(pickerCatalogue) { pickerCatalogue.exercises.associateBy { it.id } }
+                        val filteredExercises = remember(exercisesDb, searchQuery, selectedCategory, favouriteExercises) {
                             exercisesDb.filter { ex ->
-                                val matchesSearch = ex.name.contains(searchQuery, ignoreCase = true)
+                                val matchesSearch = exerciseMatches(ex, searchQuery, pickerById[ex.id])
                                 val matchesCategory = selectedCategory == "All" || ex.category.equals(selectedCategory, ignoreCase = true)
                                 matchesSearch && matchesCategory
-                            }
+                            }.sortedWith(compareByDescending<Exercise> { it.id in favouriteExercises }.thenBy { it.name })
                         }
 
                         LazyColumn(

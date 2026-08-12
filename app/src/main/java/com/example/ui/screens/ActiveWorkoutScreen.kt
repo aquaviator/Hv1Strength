@@ -45,6 +45,9 @@ import com.example.ui.components.*
 import com.example.ui.theme.*
 import androidx.compose.animation.core.tween
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import com.example.catalogue.ExerciseCatalogueRuntime
+import com.example.catalogue.exerciseMatches
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,6 +60,7 @@ fun ActiveWorkoutScreen(
     val isCompletingWorkout by viewModel.isCompletingWorkout.collectAsState()
     val exercisesDb by viewModel.exercises.collectAsState()
     val allLoggedSets by viewModel.allLoggedSets.collectAsState()
+    val favouriteExercises by viewModel.favoriteExercises.collectAsState()
 
     val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(viewModel.activeWorkoutEvents) {
@@ -110,6 +114,27 @@ fun ActiveWorkoutScreen(
     val isRestTimerPaused by viewModel.isRestTimerPaused.collectAsState()
     val restTimerDuration by viewModel.restTimerDuration.collectAsState()
     val isMetric by viewModel.isMetric.collectAsState()
+    val achievementSnackbar = remember { SnackbarHostState() }
+    val uiScope = rememberCoroutineScope()
+    val achievementPrefs = remember(activeWorkout.activeSessionId) { context.getSharedPreferences("workout_record_events_${activeWorkout.activeSessionId}", android.content.Context.MODE_PRIVATE) }
+    val recordLedger = remember(activeWorkout.activeSessionId) {
+        com.example.domain.RecordEventLedger(achievementPrefs.getStringSet("acknowledged", emptySet()).orEmpty())
+    }
+
+    val needsNotificationPermission = android.os.Build.VERSION.SDK_INT >= 33 &&
+        androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+    val permissionPrefs = remember { context.getSharedPreferences("workout_notification_permission", android.content.Context.MODE_PRIVATE) }
+    var showNotificationExplanation by remember { mutableStateOf(needsNotificationPermission && !permissionPrefs.getBoolean("explained", false)) }
+    val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { permissionPrefs.edit().putBoolean("explained", true).apply() }
+    if (showNotificationExplanation) {
+        AlertDialog(onDismissRequest = { showNotificationExplanation = false; permissionPrefs.edit().putBoolean("explained", true).apply() },
+            title = { Text("Keep your workout visible") },
+            text = { Text("Allow notifications to keep your active workout and rest timer visible while the app is in the background. You can continue without them, with reduced background visibility.") },
+            confirmButton = { TextButton(onClick = { showNotificationExplanation = false; permissionPrefs.edit().putBoolean("explained", true).apply(); notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS) }) { Text("Continue") } },
+            dismissButton = { TextButton(onClick = { showNotificationExplanation = false; permissionPrefs.edit().putBoolean("explained", true).apply() }) { Text("Not now") } })
+    }
 
     // Accordion expansion state
     var doneExpanded by remember { mutableStateOf(false) }
@@ -231,6 +256,7 @@ fun ActiveWorkoutScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(achievementSnackbar) },
         modifier = Modifier.fillMaxSize()
     ) { innerPadding ->
         Column(
@@ -251,6 +277,15 @@ fun ActiveWorkoutScreen(
                 onAddExerciseClick = { showAddExerciseDialog = true },
                 onRenameWorkout = { viewModel.renameActiveWorkout(it) }
             )
+            AssistChip(onClick = {
+                if (needsNotificationPermission) {
+                    val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        android.net.Uri.parse("package:${context.packageName}"))
+                    context.startActivity(intent)
+                }
+            }, label = { Text(if (needsNotificationPermission) "Background protection limited · Enable notifications" else "Protected in background") },
+                leadingIcon = { Icon(if (needsNotificationPermission) Icons.Default.NotificationsOff else Icons.Default.Shield, null) },
+                modifier = Modifier.testTag("background_protection_status"))
 
             LazyColumn(
                 modifier = Modifier
@@ -635,6 +670,34 @@ fun ActiveWorkoutScreen(
                             },
                             label = "ExerciseTransition"
                         ) { targetExerciseId ->
+                            val setCapabilities = com.example.catalogue.ExerciseCapabilityResolver.resolve(
+                                context, activeEx,
+                                com.example.catalogue.LegacyMeasurements(
+                                    reps = currentActiveFlatSet.set.reps,
+                                    load = currentActiveFlatSet.set.weight,
+                                    durationSeconds = currentActiveFlatSet.set.actualDuration,
+                                    distance = currentActiveFlatSet.set.actualDistance,
+                                    rpe = currentActiveFlatSet.set.rpe,
+                                    tempo = currentActiveFlatSet.set.tempo
+                                )
+                            )
+                            val performanceHistory = allLoggedSets.filter { it.exerciseId == activeEx.id }.map { logged ->
+                                com.example.domain.PerformanceSet(
+                                    stableId = logged.globalId.ifBlank { "local_${logged.id}" }, sessionId = logged.sessionId.toString(),
+                                    exerciseId = logged.exerciseId, profileId = "active", sessionEndedAt = logged.createdAt,
+                                    setNumber = logged.setNumber, setType = logged.setType, completed = logged.isCompleted,
+                                    deleted = logged.deletedAt != null, loadKg = logged.weight.toDouble(), repetitions = logged.reps,
+                                    durationSeconds = logged.actualDuration, distanceMetres = logged.actualDistance?.toDouble(), rpe = logged.rpe
+                                )
+                            }
+                            val previousWorkingSets = com.example.domain.WorkoutPerformanceEngine.previousSession(
+                                performanceHistory, "active", activeEx.id, activeWorkout.activeSessionId
+                            ).filter { it.setType != "WARMUP" }
+                            val previousForSet = previousWorkingSets.getOrNull(currentSetIndex) ?: previousWorkingSets.lastOrNull()
+                            val suggestion = com.example.domain.WorkoutPerformanceEngine.suggestion(previousWorkingSets, setCapabilities.values)
+                            val suggestionEnvelope = com.example.domain.SuggestionEnvelope(
+                                activeEx.id, com.example.domain.WorkoutPerformanceEngine.capabilitySignature(setCapabilities.values),
+                                com.example.domain.WorkoutPerformanceEngine.historyFingerprint(previousWorkingSets), suggestion)
                             ActiveExerciseCard(
                                 exerciseName = activeEx.name,
                                 category = activeEx.category,
@@ -698,6 +761,23 @@ fun ActiveWorkoutScreen(
                                     )
                                 },
                                 rpe = activeRpe,
+                                capabilities = setCapabilities,
+                                durationSeconds = currentActiveFlatSet.set.actualDuration,
+                                onDurationChange = { newDuration ->
+                                    viewModel.updateSet(activeEx.id, currentSetIndex, activeReps, activeWeight, currentActiveFlatSet.set.isCompleted,
+                                        activeRpe, newDuration, currentActiveFlatSet.set.actualDistance, currentActiveFlatSet.set.setType,
+                                        currentActiveFlatSet.set.targetRepsMin, currentActiveFlatSet.set.targetRepsMax, currentActiveFlatSet.set.targetWeight,
+                                        currentActiveFlatSet.set.targetRpe, currentActiveFlatSet.set.targetDuration, currentActiveFlatSet.set.targetDistance,
+                                        currentActiveFlatSet.set.tempo, currentActiveFlatSet.set.notes)
+                                },
+                                distance = currentActiveFlatSet.set.actualDistance,
+                                onDistanceChange = { newDistance ->
+                                    viewModel.updateSet(activeEx.id, currentSetIndex, activeReps, activeWeight, currentActiveFlatSet.set.isCompleted,
+                                        activeRpe, currentActiveFlatSet.set.actualDuration, newDistance, currentActiveFlatSet.set.setType,
+                                        currentActiveFlatSet.set.targetRepsMin, currentActiveFlatSet.set.targetRepsMax, currentActiveFlatSet.set.targetWeight,
+                                        currentActiveFlatSet.set.targetRpe, currentActiveFlatSet.set.targetDuration, currentActiveFlatSet.set.targetDistance,
+                                        currentActiveFlatSet.set.tempo, currentActiveFlatSet.set.notes)
+                                },
                                 onRpeChange = { newRpe ->
                                     activeRpe = newRpe
                                     viewModel.updateSet(
@@ -722,12 +802,56 @@ fun ActiveWorkoutScreen(
                                 },
                                 prevSummary = exProfile?.bestSet ?: "No prior history",
                                 daysAgoText = daysAgoText,
+                                onCopyPrevious = previousForSet?.let { source -> {
+                                    val copied = com.example.domain.WorkoutPerformanceEngine.copyValues(source, setCapabilities.values)
+                                    val copiedWeight = copied.loadKg?.toFloat() ?: activeWeight
+                                    val copiedReps = copied.repetitions ?: activeReps
+                                    activeWeight = copiedWeight; activeReps = copiedReps
+                                    viewModel.updateSet(activeEx.id, currentSetIndex, copiedReps, copiedWeight, false,
+                                        copied.rpe ?: activeRpe, copied.durationSeconds ?: currentActiveFlatSet.set.actualDuration,
+                                        copied.distanceMetres?.toFloat() ?: currentActiveFlatSet.set.actualDistance, currentActiveFlatSet.set.setType,
+                                        currentActiveFlatSet.set.targetRepsMin, currentActiveFlatSet.set.targetRepsMax, currentActiveFlatSet.set.targetWeight,
+                                        currentActiveFlatSet.set.targetRpe, currentActiveFlatSet.set.targetDuration, currentActiveFlatSet.set.targetDistance,
+                                        currentActiveFlatSet.set.tempo, currentActiveFlatSet.set.notes)
+                                } },
+                                nextSuggestion = suggestion.reason,
+                                onApplySuggestion = if (suggestion.kind == com.example.domain.SuggestionKind.NONE) null else {{
+                                    val targets = setsList.map { target -> com.example.domain.EditableTarget(activeEx.id, target.isCompleted,
+                                        com.example.domain.CopiedSetValues(target.weight.toDouble(), target.reps, target.actualDuration, target.actualDistance?.toDouble(), target.rpe, false)) }
+                                    when (val result = com.example.domain.WorkoutPerformanceEngine.applySuggestion(
+                                        suggestionEnvelope, activeEx.id, setCapabilities.values,
+                                        com.example.domain.WorkoutPerformanceEngine.historyFingerprint(previousWorkingSets), targets)) {
+                                        is com.example.domain.SuggestionApplyResult.Applied -> {
+                                            val target = setsList[result.index]; val values = result.target.values
+                                            val suggestedWeight = suggestion.assistanceKg?.toFloat() ?: values.loadKg?.toFloat() ?: target.weight
+                                            viewModel.updateSet(activeEx.id, result.index, values.repetitions ?: target.reps, suggestedWeight, false,
+                                                values.rpe ?: target.rpe, values.durationSeconds ?: target.actualDuration,
+                                                values.distanceMetres?.toFloat() ?: target.actualDistance, target.setType, target.targetRepsMin, target.targetRepsMax,
+                                                target.targetWeight, target.targetRpe, target.targetDuration, target.targetDistance, target.tempo, target.notes)
+                                            focusedSetIndexOverride = result.index
+                                            uiScope.launch { achievementSnackbar.showSnackbar(result.explanation) }
+                                        }
+                                        is com.example.domain.SuggestionApplyResult.Unavailable -> uiScope.launch { achievementSnackbar.showSnackbar(result.reason) }
+                                    }
+                                }},
                                 coachingCues = currentActiveFlatSet.set.notes,
                                 onCuesClick = { showCuesDialog = true },
                                 completeSetEnabled = !isSubmittingSet,
                                 onCompleteSetClick = {
                                     if (!isSubmittingSet) {
                                         isSubmittingSet = true
+                                        val completedPerformance = com.example.domain.PerformanceSet(
+                                            stableId = "${activeWorkout.activeSessionId}:${activeEx.id}:$currentSetIndex",
+                                            sessionId = activeWorkout.activeSessionId, exerciseId = activeEx.id, profileId = "active",
+                                            sessionEndedAt = System.currentTimeMillis(), setNumber = currentSetIndex + 1,
+                                            setType = currentActiveFlatSet.set.setType, completed = true,
+                                            loadKg = activeWeight.toDouble().takeIf { com.example.catalogue.MeasurementCapability.LOAD in setCapabilities.values },
+                                            addedWeightKg = activeWeight.toDouble().takeIf { com.example.catalogue.MeasurementCapability.WEIGHTED_BODYWEIGHT in setCapabilities.values },
+                                            assistanceKg = activeWeight.toDouble().takeIf { com.example.catalogue.MeasurementCapability.ASSISTED_LOAD in setCapabilities.values },
+                                            repetitions = activeReps, durationSeconds = currentActiveFlatSet.set.actualDuration,
+                                            distanceMetres = currentActiveFlatSet.set.actualDistance?.toDouble(), rpe = activeRpe)
+                                        val achievement = recordLedger.consume(com.example.domain.WorkoutPerformanceEngine.liveRecordEvent(
+                                            activeWorkout.activeSessionId, "${activeEx.id}:$currentSetIndex", completedPerformance, performanceHistory))
                                         viewModel.updateSet(
                                             exerciseId = activeEx.id,
                                             setIndex = currentSetIndex,
@@ -747,6 +871,10 @@ fun ActiveWorkoutScreen(
                                             tempo = currentActiveFlatSet.set.tempo,
                                             notes = currentActiveFlatSet.set.notes
                                         )
+                                        if (achievement != null) {
+                                            achievementPrefs.edit().putStringSet("acknowledged", recordLedger.acknowledgedIds()).apply()
+                                            uiScope.launch { achievementSnackbar.showSnackbar(achievement.announcement, withDismissAction = true) }
+                                        }
                                         focusedSetIndexOverride = null
                                     }
                                 },
@@ -1174,11 +1302,13 @@ fun ActiveWorkoutScreen(
                             }
                         }
 
+                        val pickerCatalogue = remember { ExerciseCatalogueRuntime.snapshot ?: ExerciseCatalogueRuntime.load(context) }
+                        val pickerById = remember(pickerCatalogue) { pickerCatalogue.exercises.associateBy { it.id } }
                         val filteredExercises = exercisesDb.filter { ex ->
-                            val matchesSearch = ex.name.contains(searchQuery, ignoreCase = true)
+                            val matchesSearch = exerciseMatches(ex, searchQuery, pickerById[ex.id])
                             val matchesCat = selectedCategory == "All" || ex.category == selectedCategory
                             matchesSearch && matchesCat
-                        }
+                        }.sortedWith(compareByDescending<Exercise> { it.id in favouriteExercises }.thenBy { it.name })
 
                         Box(modifier = Modifier.weight(1f)) {
                             if (filteredExercises.isEmpty()) {

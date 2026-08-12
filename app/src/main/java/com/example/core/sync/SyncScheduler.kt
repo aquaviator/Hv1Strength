@@ -6,6 +6,11 @@ import java.util.concurrent.TimeUnit
 
 object SyncScheduler {
 
+    fun cancelCloudSync(context: Context) {
+        WorkManager.getInstance(context).cancelUniqueWork("ImmediateSyncWork")
+        WorkManager.getInstance(context).cancelUniqueWork("PeriodicSyncWork")
+    }
+
     fun scheduleImmediate(context: Context) {
         if (!com.example.HumanStrengthApplication.isFirebaseConfigured) {
             return

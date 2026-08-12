@@ -243,7 +243,7 @@ class ProfileViewModel(
     // Backup & Restore
     suspend fun exportData(): String {
         val root = org.json.JSONObject()
-        root.put("version", 3)
+        root.put("version", 4)
         val uid = authViewModel.activeUserId.value
 
         val exercisesArray = org.json.JSONArray()
@@ -367,6 +367,9 @@ class ProfileViewModel(
         }
         root.put("tape_measurements", tapeArray)
 
+        root.put("training_plans", PlannerBackupCodec.plansJson(if (uid == null) emptyList() else repository.getAllTrainingPlansForBackup(uid)))
+        root.put("planned_workouts", PlannerBackupCodec.occurrencesJson(if (uid == null) emptyList() else repository.getAllPlannedWorkoutsForBackup(uid)))
+
         val settingsObj = org.json.JSONObject()
         settingsObj.put("is_metric", isMetric.value)
         settingsObj.put("theme", theme.value)
@@ -447,6 +450,18 @@ class ProfileViewModel(
                 var failedRecords = 0
 
                 val uid = authViewModel.activeUserId.value
+                val currentProfile = uid?.let { repository.getUserProfile(it) }
+                if ((root.has("training_plans") || root.has("planned_workouts")) && currentProfile == null) {
+                    onError("Planner backup cannot be restored until a trusted profile is active.")
+                    return@launch
+                }
+                val plannerPayload = if (currentProfile != null && uid != null)
+                    PlannerBackupCodec.parse(root, uid, currentProfile.humanUserId) else PlannerBackupCodec.Payload(emptyList(), emptyList())
+                if (plannerPayload.plans.isNotEmpty() || plannerPayload.occurrences.isNotEmpty()) {
+                    repository.dao.restorePlannerBackupAtomically(plannerPayload.plans, plannerPayload.occurrences)
+                    PlannerBackupCodec.eligibleReminders(plannerPayload.occurrences)
+                        .forEach { com.example.planner.PlannerReminderScheduler.schedule(context, it) }
+                }
 
                 // 1. Restore Custom Exercises
                 if (root.has("exercises")) {
@@ -490,6 +505,7 @@ class ProfileViewModel(
 
                             val tId = repository.insertTemplate(
                                 WorkoutTemplate(
+                                    id = obj.optInt("id", 0),
                                     name = name,
                                     exerciseIdsJson = exerciseIdsJson,
                                     userId = uid
@@ -503,6 +519,7 @@ class ProfileViewModel(
                                     val teObj = exArr.getJSONObject(j)
                                     val teId = repository.insertTemplateExercise(
                                         WorkoutTemplateExercise(
+                                            id = teObj.optInt("id", 0),
                                             templateId = tId,
                                             exerciseId = teObj.getString("exerciseId"),
                                             position = teObj.getInt("position"),
@@ -519,6 +536,7 @@ class ProfileViewModel(
                                             val tsObj = setsArr.getJSONObject(k)
                                             setsToInsert.add(
                                                 WorkoutTemplateSet(
+                                                    id = tsObj.optInt("id", 0),
                                                     templateExerciseId = teId,
                                                     position = tsObj.getInt("position"),
                                                     setType = tsObj.optString("setType", "WORKING"),
@@ -554,6 +572,7 @@ class ProfileViewModel(
                             val templateId = if (obj.isNull("templateId")) null else obj.getInt("templateId")
                             val newId = repository.insertSession(
                                 WorkoutSession(
+                                    id = oldId,
                                     templateId = templateId,
                                     templateName = obj.getString("templateName"),
                                     startTime = obj.getLong("startTime"),
@@ -581,6 +600,7 @@ class ProfileViewModel(
 
                             setsToInsert.add(
                                 LoggedSet(
+                                    id = obj.optInt("id", 0),
                                     sessionId = newSessionId,
                                     exerciseId = obj.getString("exerciseId"),
                                     setNumber = obj.getInt("setNumber"),
@@ -617,9 +637,13 @@ class ProfileViewModel(
                             val obj = arr.getJSONObject(i)
                             repository.insertBodyWeight(
                                 BodyWeight(
+                                    id = obj.optInt("id", 0),
                                     userId = uid,
                                     weight = obj.getDouble("weight").toFloat(),
                                     bodyFat = if (obj.isNull("bodyFat")) null else obj.getDouble("bodyFat").toFloat(),
+                                    leanMass = if (obj.isNull("leanMass")) null else obj.getDouble("leanMass").toFloat(),
+                                    fatMass = if (obj.isNull("fatMass")) null else obj.getDouble("fatMass").toFloat(),
+                                    bmi = if (obj.isNull("bmi")) null else obj.getDouble("bmi").toFloat(),
                                     date = obj.getLong("date")
                                 )
                             )
@@ -638,6 +662,7 @@ class ProfileViewModel(
                             val obj = arr.getJSONObject(i)
                             repository.insertTapeMeasurement(
                                 TapeMeasurement(
+                                    id = obj.optInt("id", 0),
                                     userId = uid,
                                     chest = if (obj.isNull("chest")) null else obj.getDouble("chest").toFloat(),
                                     bicepLeft = if (obj.isNull("bicepLeft")) null else obj.getDouble("bicepLeft").toFloat(),

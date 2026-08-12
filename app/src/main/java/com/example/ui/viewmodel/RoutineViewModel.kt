@@ -27,18 +27,24 @@ class RoutineViewModel(
         repository.getTemplatesForUser(userId)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Favorite Exercises Support
-    val favoriteExercises = MutableStateFlow(prefs.getStringSet("favorite_exercises", emptySet()) ?: emptySet())
+    // Durable local favourites are isolated by the active local/cloud profile.
+    private fun favouriteKey(userId: String) = com.example.catalogue.favouritePreferenceKey(userId)
+    private val _favoriteOverride = MutableStateFlow<Pair<String, Set<String>>?>(null)
+    val favoriteExercises: StateFlow<Set<String>> = combine(authViewModel.activeUserId, _favoriteOverride) { userId, override ->
+        if (override?.first == userId) override.second else {
+            val scoped = prefs.getStringSet(favouriteKey(userId), null)
+            if (scoped != null) scoped.toSet()
+            else if (userId == "offline") (prefs.getStringSet("favorite_exercises", emptySet()) ?: emptySet()).toSet()
+            else emptySet()
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     fun toggleFavoriteExercise(exerciseId: String) {
-        val current = favoriteExercises.value.toMutableSet()
-        if (current.contains(exerciseId)) {
-            current.remove(exerciseId)
-        } else {
-            current.add(exerciseId)
-        }
-        prefs.edit().putStringSet("favorite_exercises", current).apply()
-        favoriteExercises.value = current
+        val current = com.example.catalogue.toggledFavourite(favoriteExercises.value, exerciseId)
+        prefs.edit().putStringSet(favouriteKey(authViewModel.activeUserId.value), current).apply()
+        // State refresh is driven by the profile flow; emit an equivalent profile
+        // transition so the responsive UI does not require a process restart.
+        _favoriteOverride.value = authViewModel.activeUserId.value to current
     }
 
     fun createTemplate(name: String, exerciseIds: List<String>) {
@@ -201,7 +207,7 @@ class RoutineViewModel(
         }
     }
 
-    fun createCustomExercise(name: String, category: String) {
+    fun createCustomExercise(name: String, category: String, profile: com.example.catalogue.CustomTrackingProfile = com.example.catalogue.CustomTrackingProfile.REPS_LOAD) {
         viewModelScope.launch {
             val customId = "custom_${java.util.UUID.randomUUID()}"
             val exercise = Exercise(
@@ -212,6 +218,7 @@ class RoutineViewModel(
                 humanUserId = authViewModel.activeUserId.value
             )
             repository.insertExercise(exercise)
+            com.example.catalogue.ExerciseCapabilityResolver.persistCustom(context, customId, profile)
         }
     }
 

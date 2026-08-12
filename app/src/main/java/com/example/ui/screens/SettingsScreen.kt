@@ -29,6 +29,10 @@ import com.example.ui.viewmodel.StrengthViewModel
 import com.example.BuildConfig
 import com.example.data.AuthState
 import com.example.data.UserProfile
+import com.example.catalogue.ExerciseCatalogueRuntime
+import com.example.core.sync.SyncManager
+import com.example.ui.components.ExperienceStatusCard
+import com.example.ui.presentation.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +67,18 @@ fun SettingsScreen(
     var exportedCsvText by remember { mutableStateOf("") }
 
     val userProfile by viewModel.activeUserProfile.collectAsState()
+    val authState by viewModel.authState.collectAsState()
+    val accessState by viewModel.appAccessState.collectAsState()
+    val activeWorkout by viewModel.activeWorkoutState.collectAsState()
+    val syncStatus by SyncManager.currentStatus.collectAsState()
+    val pendingChanges by SyncManager.queueSize.collectAsState()
+    val syncError by SyncManager.lastError.collectAsState()
+    val catalogue = remember { ExerciseCatalogueRuntime.snapshot ?: ExerciseCatalogueRuntime.load(context) }
+    val notificationsGranted = remember {
+        android.os.Build.VERSION.SDK_INT < 33 || androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.POST_NOTIFICATIONS
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
 
     Scaffold(
         topBar = {
@@ -82,7 +98,6 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             // Account Profile Section
-            val authState by viewModel.authState.collectAsState()
             SettingsSectionCard(title = "ACCOUNT & PROFILE") {
                 val profile = (authState as? AuthState.Authenticated)?.profile
                 val subtitle = if (profile != null) {
@@ -96,10 +111,43 @@ fun SettingsScreen(
                     subtitle = subtitle,
                     onClick = onNavigateToProfile
                 )
+                ExperienceStatusCard(authenticationPresentation(authState), "settings_account_status", onAction = onNavigateToProfile)
+                ExperienceStatusCard(
+                    syncPresentation(authState, syncStatus, pendingChanges, syncError),
+                    "settings_sync_status",
+                    onAction = if (BuildConfig.DEBUG) onNavigateToSyncDebug else null
+                )
+            }
+
+            SettingsSectionCard(title = "MEMBERSHIP") {
+                ExperienceStatusCard(membershipStatus(accessState), "settings_membership_status", onAction = onNavigateToProfile)
+                SettingsClickableRow(Icons.Default.Restore, "Restore purchases", "Ask Google Play to re-check purchases", onClick = { viewModel.restorePurchases() })
+            }
+
+            SettingsSectionCard(title = "BACKGROUND WORKOUT") {
+                ExperienceStatusCard(
+                    backgroundPresentation(notificationsGranted, activeWorkout != null),
+                    "settings_background_status",
+                    onAction = if (!notificationsGranted) {{
+                        val intent = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        context.startActivity(intent)
+                    }} else null
+                )
+            }
+
+            SettingsSectionCard(title = "EXERCISE LIBRARY") {
+                val governedIds = catalogue.exercises.map { it.id }.toSet()
+                val customCount = viewModel.exercises.collectAsState().value.count { it.id !in governedIds }
+                ExperienceStatusCard(
+                    cataloguePresentation(catalogue.metadata.catalogueVersion, catalogue.exercises.size, customCount, catalogue.validation.valid, catalogue.fallbackActive),
+                    "settings_catalogue_status"
+                )
+                if (BuildConfig.DEBUG) SettingsInfoRow(Icons.Default.Fingerprint, "Catalogue checksum", catalogue.metadata.payloadChecksum)
             }
 
             // General Settings Card
-            SettingsSectionCard(title = "GENERAL") {
+            SettingsSectionCard(title = "WORKOUT") {
                 // Metric Unit Toggle
                 SettingsToggleRow(
                     icon = Icons.Default.Straighten,
@@ -269,7 +317,7 @@ fun SettingsScreen(
             }
 
             // Data & Backup section
-            SettingsSectionCard(title = "DATABASE BACKUP & EXPORT") {
+            SettingsSectionCard(title = "DATA") {
                 // Export JSON
                 SettingsClickableRow(
                     icon = Icons.Default.CloudDownload,
@@ -309,7 +357,7 @@ fun SettingsScreen(
             }
 
             // About Application Info Card
-            SettingsSectionCard(title = "ABOUT HUMAN V1") {
+            SettingsSectionCard(title = "HELP & LEGAL") {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -353,7 +401,7 @@ fun SettingsScreen(
 
             // Developer Tools Section Card
             if (BuildConfig.DEBUG) {
-                SettingsSectionCard(title = "DEVELOPER TOOLS") {
+                SettingsSectionCard(title = "ADVANCED · DEVELOPER SIMULATION") {
                     SettingsInfoRow(
                         icon = Icons.Default.Settings,
                         title = "Room Database Schema",
@@ -385,8 +433,8 @@ fun SettingsScreen(
 
                     SettingsClickableRow(
                         icon = Icons.Default.VpnKey,
-                        title = "Google Web Client ID",
-                        subtitle = "Configure OAuth Client ID for live Google Sign-In",
+                        title = "Developer-only Google client ID",
+                        subtitle = "Debug diagnostics only; sign-in always uses the generated build value",
                         onClick = { showClientIdDialog = true }
                     )
 
@@ -394,7 +442,7 @@ fun SettingsScreen(
                         var tempClientId by remember { mutableStateOf(currentClientId) }
                         AlertDialog(
                             onDismissRequest = { showClientIdDialog = false },
-                            title = { Text("Google Web Client ID") },
+                            title = { Text("Developer-only Google client ID") },
                             text = {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("Enter your OAuth Web Client ID from the Google/Firebase Console to test live authentication:", style = MaterialTheme.typography.bodyMedium)
@@ -422,8 +470,13 @@ fun SettingsScreen(
                                 }
                             },
                             dismissButton = {
-                                TextButton(onClick = { showClientIdDialog = false }) {
-                                    Text("Cancel")
+                                Row {
+                                    TextButton(onClick = {
+                                        sharedPrefs.edit().remove("google_web_client_id").apply()
+                                        currentClientId = defaultClientId
+                                        showClientIdDialog = false
+                                    }) { Text("Reset to generated default") }
+                                    TextButton(onClick = { showClientIdDialog = false }) { Text("Cancel") }
                                 }
                             }
                         )

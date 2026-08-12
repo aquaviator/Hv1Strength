@@ -5,7 +5,107 @@ import com.example.core.identity.HumanUserIdGenerator
 import com.example.core.identity.DeviceIdGenerator
 import kotlinx.coroutines.flow.Flow
 
-class StrengthRepository(val dao: StrengthDao, private val context: android.content.Context? = null) {
+class StrengthRepository(val dao: StrengthDao, private val context: android.content.Context? = null,
+    private val deviceIdOverride: String? = null) {
+
+    private fun deviceId(): String = deviceIdOverride ?: DeviceIdGenerator.getOrGenerateDeviceId()
+
+    fun getPlannedWorkoutsForUser(userId: String): Flow<List<PlannedWorkout>> = dao.getPlannedWorkoutsForUser(userId)
+    suspend fun getPlannedWorkout(id: String): PlannedWorkout? = dao.getPlannedWorkout(id)
+    suspend fun getTrainingPlan(id: String): TrainingPlan? = dao.getTrainingPlan(id)
+    suspend fun getTrainingPlansForUser(userId: String): List<TrainingPlan> = dao.getTrainingPlansForUser(userId)
+    suspend fun getAllTrainingPlansForBackup(userId: String): List<TrainingPlan> = dao.getAllTrainingPlansForBackup(userId)
+    suspend fun getAllPlannedWorkoutsForBackup(userId: String): List<PlannedWorkout> = dao.getAllPlannedWorkoutsForBackup(userId)
+
+    suspend fun createTrainingPlan(plan: TrainingPlan, occurrences: List<PlannedWorkout>) {
+        require(plan.userId.isNotBlank() && plan.humanUserId.isNotBlank())
+        val deviceId = deviceId()
+        val storedPlan = plan.copy(globalId = plan.id, originDeviceId = deviceId)
+        dao.upsertTrainingPlan(storedPlan)
+        val storedOccurrences = occurrences.map { it.copy(globalId = it.id, originDeviceId = deviceId) }
+        dao.insertPlannedWorkouts(storedOccurrences)
+        enqueueCommand("PlannerCreated", "TRAINING_PLAN", storedPlan.globalId, storedPlan.humanUserId, "{}")
+        storedOccurrences.forEach { enqueueCommand("PlannerOccurrenceCreated", "PLANNED_WORKOUT", it.globalId, it.humanUserId, "{}") }
+    }
+
+    suspend fun updatePlannedWorkout(item: PlannedWorkout, expectedUserId: String) {
+        require(item.userId == expectedUserId && dao.ownsPlannedWorkout(item.id, expectedUserId) == 1)
+        val existing = dao.getPlannedWorkout(item.id) ?: return
+        require(dao.countSeriesDateCollision(item.seriesId, item.scheduledEpochDay, item.id) == 0) {
+            "A workout in this recurring series is already scheduled for that date"
+        }
+        val updated = item.copy(userId = expectedUserId, humanUserId = existing.humanUserId,
+            globalId = existing.globalId, revision = existing.revision + 1, syncStatus = "PENDING_UPLOAD",
+            originDeviceId = deviceId(), updatedAt = System.currentTimeMillis())
+        dao.upsertPlannedWorkout(updated)
+        enqueueCommand("PlannerOccurrenceUpdated", "PLANNED_WORKOUT", updated.globalId, updated.humanUserId, "{}")
+    }
+
+    suspend fun deletePlannedWorkout(id: String, userId: String) {
+        val item = dao.getPlannedWorkout(id) ?: return
+        require(item.userId == userId)
+        val now = System.currentTimeMillis()
+        dao.softDeletePlannedWorkout(id, userId, now)
+        if (item.status != "COMPLETED") enqueueCommand("PlannerOccurrenceDeleted", "PLANNED_WORKOUT", item.globalId, item.humanUserId, "{}")
+    }
+    suspend fun deleteFuturePlannedWorkouts(seriesId: String, userId: String, fromEpochDay: Long) {
+        val items = dao.getFuturePlannedWorkouts(seriesId, userId, fromEpochDay)
+        val now = System.currentTimeMillis()
+        dao.softDeleteFuturePlannedWorkouts(seriesId, userId, fromEpochDay, now)
+        items.forEach { enqueueCommand("PlannerOccurrenceDeleted", "PLANNED_WORKOUT", it.globalId, it.humanUserId, "{}") }
+    }
+
+    suspend fun completePlannedWorkout(id: String, ownerUserId: String, completedAt: Long, sessionId: Int) {
+        if (dao.ownsPlannedWorkout(id, ownerUserId) == 1) {
+            dao.updatePlannedWorkoutStatus(id, "COMPLETED", completedAt, sessionId, completedAt)
+            dao.getPlannedWorkout(id)?.let { enqueueCommand("PlannerOccurrenceCompleted", "PLANNED_WORKOUT", it.globalId, it.humanUserId, "{}") }
+        }
+    }
+
+    suspend fun replaceFutureTrainingPlan(
+        plan: TrainingPlan,
+        fromEpochDay: Long,
+        existingFuture: List<PlannedWorkout>,
+        replacements: List<PlannedWorkout>
+    ) {
+        require(existingFuture.all { it.userId == plan.userId && it.humanUserId == plan.humanUserId })
+        require(replacements.all { it.userId == plan.userId && it.humanUserId == plan.humanUserId })
+        val now = System.currentTimeMillis()
+        val storedPlan = (dao.getTrainingPlan(plan.id) ?: plan).let { old -> plan.copy(
+            humanUserId = old.humanUserId, globalId = old.globalId, createdAt = old.createdAt,
+            revision = old.revision + 1, updatedAt = now, syncStatus = "PENDING_UPLOAD",
+            originDeviceId = deviceId()
+        ) }
+        dao.upsertTrainingPlan(storedPlan)
+        enqueueCommand("PlannerSeriesUpdated", "TRAINING_PLAN", storedPlan.globalId, storedPlan.humanUserId, "{}")
+
+        val desiredIds = replacements.mapTo(hashSetOf()) { it.id }
+        existingFuture.filter { it.status == "PLANNED" && it.id !in desiredIds }.forEach { obsolete ->
+            dao.softDeletePlannedWorkout(obsolete.id, obsolete.userId, now)
+            enqueueCommand("PlannerOccurrenceDeleted", "PLANNED_WORKOUT", obsolete.globalId, obsolete.humanUserId, "{}")
+        }
+        replacements.forEach { replacement ->
+            val old = dao.getPlannedWorkout(replacement.id)
+            val stored = replacement.copy(
+                globalId = old?.globalId ?: replacement.id, createdAt = old?.createdAt ?: now,
+                revision = (old?.revision ?: 0) + 1, deletedAt = null, updatedAt = now,
+                syncStatus = "PENDING_UPLOAD", originDeviceId = deviceId()
+            )
+            dao.upsertPlannedWorkout(stored)
+            enqueueCommand("PlannerOccurrenceUpdated", "PLANNED_WORKOUT", stored.globalId, stored.humanUserId, "{}")
+        }
+    }
+
+    private suspend fun resolveHumanUserId(userId: String?, supplied: String? = null): String {
+        if (userId.isNullOrBlank() || userId == "offline") {
+            return supplied?.takeIf { it.isNotBlank() }
+                ?: HumanUserIdGenerator.getOrGenerateOfflineHumanId(context)
+        }
+        val profile = dao.getUserProfile(userId)
+        return profile?.humanUserId?.takeIf { com.example.data.isValidAuthoritativeHumanId(it) }
+            ?: supplied?.takeIf { com.example.data.isValidAuthoritativeHumanId(it) }
+            ?: throw IllegalStateException("Trusted Human identity is unresolved for authenticated user")
+    }
 
     // Helper for command queue enqueuing
     private suspend fun enqueueCommand(
@@ -15,7 +115,7 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
         humanUserId: String,
         payloadJson: String
     ) {
-        val deviceId = DeviceIdGenerator.getOrGenerateDeviceId()
+        val deviceId = deviceId()
         val randomPart = java.util.UUID.randomUUID().toString().replace("-", "").lowercase().take(12)
         val command = CommandQueueEntity(
             id = 0,
@@ -39,7 +139,7 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
 
     suspend fun insertUserProfile(profile: UserProfile) {
         val now = System.currentTimeMillis()
-        val hUserId = HumanUserIdGenerator.mapUserIdToHumanUserId(profile.id)
+        val hUserId = resolveHumanUserId(profile.id, profile.humanUserId)
         val deviceId = DeviceIdGenerator.getOrGenerateDeviceId()
         val finalProfile = if (profile.globalId.isEmpty()) {
             profile.copy(
@@ -96,7 +196,7 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
 
     suspend fun insertBodyWeight(weight: BodyWeight) {
         val now = System.currentTimeMillis()
-        val hUserId = HumanUserIdGenerator.mapUserIdToHumanUserId(weight.userId)
+        val hUserId = resolveHumanUserId(weight.userId, weight.humanUserId)
         val deviceId = DeviceIdGenerator.getOrGenerateDeviceId()
         val isNew = weight.id == 0
         val finalWeight = if (isNew) {
@@ -159,7 +259,7 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
 
     suspend fun insertTapeMeasurement(measurement: TapeMeasurement) {
         val now = System.currentTimeMillis()
-        val hUserId = HumanUserIdGenerator.mapUserIdToHumanUserId(measurement.userId)
+        val hUserId = resolveHumanUserId(measurement.userId, measurement.humanUserId)
         val deviceId = DeviceIdGenerator.getOrGenerateDeviceId()
         val isNew = measurement.id == 0
         val finalMeasurement = if (isNew) {
@@ -280,7 +380,7 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
 
     suspend fun insertTemplate(template: WorkoutTemplate): Long {
         val now = System.currentTimeMillis()
-        val hUserId = HumanUserIdGenerator.mapUserIdToHumanUserId(template.userId)
+        val hUserId = resolveHumanUserId(template.userId, template.humanUserId)
         val deviceId = DeviceIdGenerator.getOrGenerateDeviceId()
         val isNew = template.id == 0
         val finalTemplate = if (isNew) {
@@ -343,7 +443,7 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
 
     suspend fun insertSession(session: WorkoutSession): Long {
         val now = System.currentTimeMillis()
-        val hUserId = HumanUserIdGenerator.mapUserIdToHumanUserId(session.userId)
+        val hUserId = resolveHumanUserId(session.userId, session.humanUserId)
         val deviceId = DeviceIdGenerator.getOrGenerateDeviceId()
         val isNew = session.id == 0
         
@@ -550,8 +650,9 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
 
 
     // Bulk linking
-    suspend fun linkExistingDataToUser(userId: String) {
-        val hUserId = HumanUserIdGenerator.mapUserIdToHumanUserId(userId)
+    suspend fun linkExistingDataToUser(userId: String, authoritativeHumanUserId: String) {
+        require(com.example.data.isValidAuthoritativeHumanId(authoritativeHumanUserId))
+        val hUserId = authoritativeHumanUserId
         dao.linkBodyWeightToUser(userId, hUserId)
         dao.linkTapeMeasurementToUser(userId, hUserId)
         dao.linkWorkoutTemplatesToUser(userId, hUserId)
@@ -786,6 +887,8 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
     suspend fun getTemplateSetByGlobalId(globalId: String): WorkoutTemplateSet? = dao.getTemplateSetByGlobalId(globalId)
     suspend fun getSessionByGlobalId(globalId: String): WorkoutSession? = dao.getSessionByGlobalId(globalId)
     suspend fun getLoggedSetByGlobalId(globalId: String): LoggedSet? = dao.getLoggedSetByGlobalId(globalId)
+    suspend fun getTrainingPlanByGlobalId(globalId: String): TrainingPlan? = dao.getTrainingPlanByGlobalId(globalId)
+    suspend fun getPlannedWorkoutByGlobalId(globalId: String): PlannedWorkout? = dao.getPlannedWorkoutByGlobalId(globalId)
 
     // Sync helpers
     suspend fun markProfileSynced(id: String, timestamp: Long) = dao.markProfileSynced(id, timestamp)
@@ -797,6 +900,13 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
     suspend fun markTemplateSetSynced(id: Int, timestamp: Long) = dao.markTemplateSetSynced(id, timestamp)
     suspend fun markSessionSynced(id: Int, timestamp: Long) = dao.markSessionSynced(id, timestamp)
     suspend fun markLoggedSetSynced(id: Int, timestamp: Long) = dao.markLoggedSetSynced(id, timestamp)
+    suspend fun markTrainingPlanSynced(id: String, timestamp: Long) = dao.markTrainingPlanSynced(id, timestamp)
+    suspend fun markPlannedWorkoutSynced(id: String, timestamp: Long) = dao.markPlannedWorkoutSynced(id, timestamp)
+    suspend fun reconcileRemoteCompletion(id: String, completedAt: Long?, sessionId: Int?, revision: Long, updatedAt: Long) =
+        dao.reconcileRemoteCompletion(id, completedAt, sessionId, revision, updatedAt)
+    suspend fun reconcileRemoteTombstone(id: String, deletedAt: Long, revision: Long, updatedAt: Long) =
+        dao.reconcileRemoteTombstone(id, deletedAt, revision, updatedAt)
+    suspend fun markPlannedWorkoutConflict(id: String, diagnostic: String) = dao.markPlannedWorkoutConflict(id, diagnostic)
 
     // ==========================================
     // ACTIVE WORKOUT BACKUP SUPPORT

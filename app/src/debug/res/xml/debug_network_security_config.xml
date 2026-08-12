@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Debug-only: numeric Android-emulator gateway hosts cannot be scoped reliably
+         with domain-config matching. Production variants do not package this file. -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

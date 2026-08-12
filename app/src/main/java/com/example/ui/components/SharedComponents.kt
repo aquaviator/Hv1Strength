@@ -12,6 +12,39 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.presentation.ExperienceStatus
+import com.example.ui.presentation.ExperienceTone
+
+@Composable
+fun ExperienceStatusCard(status: ExperienceStatus, tag: String, onAction: (() -> Unit)? = null) {
+    val container = when (status.tone) {
+        ExperienceTone.POSITIVE -> MaterialTheme.colorScheme.primaryContainer
+        ExperienceTone.ATTENTION -> MaterialTheme.colorScheme.tertiaryContainer
+        ExperienceTone.BLOCKED -> MaterialTheme.colorScheme.errorContainer
+        ExperienceTone.NEUTRAL -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag(tag),
+        colors = CardDefaults.cardColors(containerColor = container),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(status.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(status.detail, style = MaterialTheme.typography.bodySmall)
+            }
+            if (status.actionLabel != null && onAction != null) {
+                TextButton(onClick = onAction, modifier = Modifier.minimumInteractiveComponentSize()) {
+                    Text(status.actionLabel)
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun PrimaryButton(

@@ -5,15 +5,18 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -1010,18 +1013,35 @@ fun StrengthProgressTab(
     onSelectExerciseClick: () -> Unit,
     isMetric: Boolean = true
 ) {
-    // Generate progression points: max weight lifted per session over time
-    val strengthDataPoints = remember(completedSets, sessions) {
-        val groupedBySession = completedSets.groupBy { it.sessionId }
-        groupedBySession.mapNotNull { (sessionId, setsList) ->
-            val sessionDate = sessions.find { it.id == sessionId }?.startTime ?: return@mapNotNull null
-            val maxWeight = setsList.maxOfOrNull { it.weight } ?: 0f
-            if (maxWeight > 0f) Pair(sessionDate, maxWeight) else null
-        }.sortedBy { it.first }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val capabilities = remember(selectedExercise) { com.example.catalogue.ExerciseCapabilityResolver.resolve(context, selectedExercise).values }
+    val metricOptions = remember(capabilities) { com.example.domain.WorkoutPerformanceEngine.metricOptions(capabilities) }
+    var selectedMetric by rememberSaveable(selectedExercise.id) { mutableStateOf(metricOptions.firstOrNull()) }
+    LaunchedEffect(metricOptions) { if (selectedMetric !in metricOptions) selectedMetric = metricOptions.firstOrNull() }
+    val history = remember(completedSets, sessions, capabilities) {
+        completedSets.mapNotNull { logged ->
+            val ended = sessions.find { it.id == logged.sessionId }?.startTime ?: return@mapNotNull null
+            com.example.domain.PerformanceSet(
+                stableId = logged.globalId.ifBlank { "local_${logged.id}" }, sessionId = logged.sessionId.toString(), exerciseId = logged.exerciseId,
+                profileId = "active", sessionEndedAt = ended, setNumber = logged.setNumber, setType = logged.setType,
+                completed = logged.isCompleted, deleted = logged.deletedAt != null,
+                loadKg = logged.weight.toDouble().takeIf { com.example.catalogue.MeasurementCapability.LOAD in capabilities },
+                addedWeightKg = logged.weight.toDouble().takeIf { com.example.catalogue.MeasurementCapability.WEIGHTED_BODYWEIGHT in capabilities },
+                assistanceKg = logged.weight.toDouble().takeIf { com.example.catalogue.MeasurementCapability.ASSISTED_LOAD in capabilities },
+                repetitions = logged.reps, durationSeconds = logged.actualDuration, distanceMetres = logged.actualDistance?.toDouble(), rpe = logged.rpe)
+        }
     }
-
-    val personalRecord = remember(completedSets) {
-        completedSets.maxOfOrNull { it.weight } ?: 0f
+    val series = remember(history, selectedMetric) { selectedMetric?.let { com.example.domain.WorkoutPerformanceEngine.trend(history, "active", selectedExercise.id, it) } }
+    fun displayValue(value: Double): Float = when (selectedMetric) {
+        com.example.domain.TrendMetric.LOAD, com.example.domain.TrendMetric.ESTIMATED_1RM,
+        com.example.domain.TrendMetric.ADDED_WEIGHT, com.example.domain.TrendMetric.ASSISTANCE -> (if (isMetric) value else UnitConverter.kgToLb(value)).toFloat()
+        else -> value.toFloat()
+    }
+    val strengthDataPoints = series?.points?.map { it.timestamp to displayValue(it.value) }.orEmpty()
+    val unitLabel = if (series?.unit == "kg") (if (isMetric) "kg" else "lb") else series?.unit.orEmpty()
+    val allTime = series?.points?.let { points ->
+        if (selectedMetric == com.example.domain.TrendMetric.ASSISTANCE || selectedMetric == com.example.domain.TrendMetric.PACE) points.minOfOrNull { it.value }
+        else points.maxOfOrNull { it.value }
     }
 
     LazyColumn(
@@ -1081,13 +1101,13 @@ fun StrengthProgressTab(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            "PERSONAL RECORD",
+                            "ALL-TIME ${selectedMetric?.label?.uppercase() ?: "RESULT"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            if (personalRecord > 0) UnitConverter.formatWeight(personalRecord.toDouble(), isMetric) else "—",
+                            allTime?.let { "${"%.1f".format(displayValue(it))} $unitLabel" } ?: "-",
                             style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.Black
                         )
@@ -1101,13 +1121,13 @@ fun StrengthProgressTab(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            "LOGGED LIFTS",
+                            "RECENT ${selectedMetric?.label?.uppercase() ?: "RESULT"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "${completedSets.size} sets",
+                            series?.points?.lastOrNull()?.let { "${"%.1f".format(displayValue(it.value))} $unitLabel" } ?: "-",
                             style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.Black
                         )
@@ -1128,10 +1148,19 @@ fun StrengthProgressTab(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        "${selectedExercise.name} Lift Progression",
+                        "${selectedExercise.name} Progress",
                         fontWeight = FontWeight.Black,
                         style = MaterialTheme.typography.titleMedium
                     )
+
+                    if (metricOptions.size > 1) {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            metricOptions.forEach { metric ->
+                                FilterChip(selected = selectedMetric == metric, onClick = { selectedMetric = metric }, label = { Text(metric.label) },
+                                    modifier = Modifier.testTag("progress_metric_${metric.name.lowercase()}"))
+                            }
+                        }
+                    }
 
                     if (strengthDataPoints.size < 2) {
                         Box(
@@ -1141,7 +1170,8 @@ fun StrengthProgressTab(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                if (sessions.isEmpty()) "Complete your first workout to unlock analytics." else "Add completed sessions of this exercise to view trend.",
+                                if (strengthDataPoints.isEmpty()) "Complete this exercise in a workout to start ${selectedMetric?.label?.lowercase() ?: "progress"} history."
+                                else "One result logged. Complete another session to show a truthful trend.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center

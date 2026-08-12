@@ -37,6 +37,10 @@ import com.example.data.UserProfile
 import com.example.data.initials
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import com.example.core.sync.SyncManager
+import com.example.ui.components.ExperienceStatusCard
+import com.example.ui.presentation.authenticationPresentation
+import com.example.ui.presentation.syncPresentation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +60,9 @@ fun ProfileScreen(
     val subscriptionState by viewModel.subscriptionState.collectAsState()
     val productInfo by viewModel.productInfo.collectAsState()
     val appAccessState by viewModel.appAccessState.collectAsState()
+    val syncStatus by SyncManager.currentStatus.collectAsState()
+    val pendingChanges by SyncManager.queueSize.collectAsState()
+    val syncError by SyncManager.lastError.collectAsState()
 
     var showSignOutDialog by remember { mutableStateOf(false) }
     var deleteLocalDataOnSignOut by remember { mutableStateOf(false) }
@@ -234,6 +241,8 @@ fun ProfileScreen(
                         ),
                         color = MaterialTheme.colorScheme.primary
                     )
+                    ExperienceStatusCard(authenticationPresentation(authState), "profile_trusted_account_status")
+                    ExperienceStatusCard(syncPresentation(authState, syncStatus, pendingChanges, syncError), "profile_sync_status")
                     Text(
                         text = membership.primaryTitle,
                         fontWeight = FontWeight.Bold,
@@ -285,7 +294,7 @@ fun ProfileScreen(
                         }
                         is com.example.billing.SubscriptionState.PurchasedUnverified -> {
                             Text(
-                                text = "Google Play purchase observed on this device. Final verified entitlement access control will be enabled in Phase D.",
+                                text = "Google Play found this purchase, but trusted verification is still pending. Subscribed access is not shown until verification succeeds.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

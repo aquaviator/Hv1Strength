@@ -24,9 +24,11 @@ import kotlinx.coroutines.launch
         WorkoutTemplateSet::class,
         CommandQueueEntity::class,
         UserPreferences::class,
-        ActiveWorkoutBackup::class
+        ActiveWorkoutBackup::class,
+        TrainingPlan::class,
+        PlannedWorkout::class
     ],
-    version = 9,
+    version = 11,
     exportSchema = false
 )
 abstract class StrengthDatabase : RoomDatabase() {
@@ -301,7 +303,7 @@ abstract class StrengthDatabase : RoomDatabase() {
             val now = System.currentTimeMillis()
 
             fun mapUid(uid: String?): String {
-                return HumanUserIdGenerator.mapUserIdToHumanUserId(uid)
+                return HumanUserIdGenerator.deriveLegacyHumanIdForMigration(uid)
             }
 
             fun genUuid(prefix: String): String {
@@ -685,6 +687,33 @@ abstract class StrengthDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_9_10 = object : androidx.room.migration.Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS `training_plan` (`id` TEXT NOT NULL, `userId` TEXT NOT NULL, `humanUserId` TEXT NOT NULL, `templateId` INTEGER NOT NULL, `templateGlobalId` TEXT NOT NULL, `routineName` TEXT NOT NULL, `firstEpochDay` INTEGER NOT NULL, `preferredMinuteOfDay` INTEGER, `weekdaysMask` INTEGER NOT NULL, `recurrenceEndEpochDay` INTEGER, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))""")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS `planned_workout` (`id` TEXT NOT NULL, `seriesId` TEXT NOT NULL, `userId` TEXT NOT NULL, `humanUserId` TEXT NOT NULL, `templateId` INTEGER NOT NULL, `templateGlobalId` TEXT NOT NULL, `routineName` TEXT NOT NULL, `scheduledEpochDay` INTEGER NOT NULL, `originalEpochDay` INTEGER NOT NULL, `preferredMinuteOfDay` INTEGER, `status` TEXT NOT NULL, `completedAt` INTEGER, `linkedSessionId` INTEGER, `reminderEnabled` INTEGER NOT NULL, `detachedFromSeries` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_planned_workout_userId_scheduledEpochDay` ON `planned_workout` (`userId`, `scheduledEpochDay`)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_planned_workout_seriesId_scheduledEpochDay` ON `planned_workout` (`seriesId`, `scheduledEpochDay`)")
+            }
+        }
+
+        val MIGRATION_10_11 = object : androidx.room.migration.Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                val syncColumns = listOf(
+                    "globalId TEXT NOT NULL DEFAULT ''",
+                    "revision INTEGER NOT NULL DEFAULT 1",
+                    "deletedAt INTEGER",
+                    "syncStatus TEXT NOT NULL DEFAULT 'PENDING_UPLOAD'",
+                    "lastSyncedAt INTEGER",
+                    "conflictState TEXT",
+                    "originDeviceId TEXT NOT NULL DEFAULT ''"
+                )
+                for (table in listOf("training_plan", "planned_workout")) {
+                    syncColumns.forEach { db.execSQL("ALTER TABLE `$table` ADD COLUMN $it") }
+                    db.execSQL("UPDATE `$table` SET globalId = id WHERE globalId = ''")
+                }
+            }
+        }
+
         fun getDatabase(context: Context, scope: CoroutineScope): StrengthDatabase {
             val appCtx = context.applicationContext
             android.util.Log.i("StrengthDatabase", "getDatabase called. Setting appContext references.")
@@ -699,8 +728,8 @@ abstract class StrengthDatabase : RoomDatabase() {
                         StrengthDatabase::class.java,
                         "strength_database"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
-                        .addCallback(StrengthDatabaseCallback(scope))
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                        .addCallback(StrengthDatabaseCallback(appCtx))
                         .build()
                     INSTANCE = instance
                     android.util.Log.i("StrengthDatabase", "Database building completed.")
@@ -711,8 +740,17 @@ abstract class StrengthDatabase : RoomDatabase() {
     }
 
     private class StrengthDatabaseCallback(
-        private val scope: CoroutineScope
+        private val context: Context
     ) : RoomDatabase.Callback() {
+        override fun onOpen(db: SupportSQLiteDatabase) {
+            super.onOpen(db)
+            INSTANCE?.let { database ->
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO).launch {
+                    runCatching { com.example.catalogue.CatalogueReconciler(context, database).reconcile() }
+                        .onFailure { android.util.Log.e("StrengthCatalogue", "Catalogue reconciliation failed; existing library retained", it) }
+                }
+            }
+        }
         override fun onCreate(db: SupportSQLiteDatabase) {
             super.onCreate(db)
             android.util.Log.i("StrengthDatabase", "onCreate callback triggered.")

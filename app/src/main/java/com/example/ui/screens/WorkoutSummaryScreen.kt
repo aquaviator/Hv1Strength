@@ -162,32 +162,17 @@ fun WorkoutSummaryScreen(
             // Calculate personal bests or improvements
             val improvements = remember(enriched.sets, allLoggedSets, exercises) {
                 val exercisesPerformed = completedSets.map { it.exerciseId }.distinct().mapNotNull { id -> exercises.find { it.id == id } }
-                exercisesPerformed.mapNotNull { exercise ->
-                    val todaySets = enriched.sets.filter { it.exerciseId == exercise.id && it.isCompleted }
-                    val priorSets = allLoggedSets
-                        .filter { it.exerciseId == exercise.id && it.isCompleted && it.sessionId != session.id && it.createdAt < session.startTime }
-                        .groupBy { it.sessionId }
-                    
-                    val lastSessionId = priorSets.keys.maxOrNull()
-                    val previousSets = if (lastSessionId != null) priorSets[lastSessionId] ?: emptyList() else emptyList()
-
-                    val todayMaxWeight = todaySets.maxOfOrNull { it.weight } ?: 0f
-                    val previousMaxWeight = previousSets.maxOfOrNull { it.weight } ?: 0f
-                    val todayMaxReps = todaySets.maxOfOrNull { it.reps } ?: 0
-                    val previousMaxReps = previousSets.maxOfOrNull { it.reps } ?: 0
-
-                    val isNewPersonalBest = todayMaxWeight > previousMaxWeight && previousMaxWeight > 0f
-                    val weightDiff = todayMaxWeight - previousMaxWeight
-
-                    if (isNewPersonalBest) {
-                        "${exercise.name}: New Personal Best of ${com.example.core.util.UnitConverter.formatWeight(todayMaxWeight.toDouble(), isMetric)}!"
-                    } else if (weightDiff > 0) {
-                        "${exercise.name}: Improved max weight by +${com.example.core.util.UnitConverter.formatWeight(weightDiff.toDouble(), isMetric)}!"
-                    } else if (todayMaxReps > previousMaxReps && previousMaxReps > 0) {
-                        "${exercise.name}: Improved max reps by +${todayMaxReps - previousMaxReps} reps!"
-                    } else {
-                        null
-                    }
+                fun metric(logged: LoggedSet) = com.example.domain.PerformanceSet(
+                    stableId=logged.globalId.ifBlank { "local_${logged.id}" }, sessionId=logged.sessionId.toString(), exerciseId=logged.exerciseId,
+                    profileId="active", sessionEndedAt=logged.createdAt, setNumber=logged.setNumber, setType=logged.setType,
+                    completed=logged.isCompleted, deleted=logged.deletedAt != null, loadKg=logged.weight.toDouble(), repetitions=logged.reps,
+                    durationSeconds=logged.actualDuration, distanceMetres=logged.actualDistance?.toDouble(), rpe=logged.rpe)
+                exercisesPerformed.flatMap { exercise ->
+                    val today = enriched.sets.filter { it.exerciseId == exercise.id }.map(::metric)
+                    val prior = allLoggedSets.filter { it.exerciseId == exercise.id && it.sessionId != session.id && it.createdAt < session.startTime }.map(::metric)
+                    val records = com.example.domain.WorkoutPerformanceEngine.personalRecords(today, prior, "active", exercise.id)
+                    records.newRecords.map { "${exercise.name}: New $it personal record" } +
+                        records.matchedRecords.take(1).map { "${exercise.name}: Matched $it personal record" }
                 }
             }
 

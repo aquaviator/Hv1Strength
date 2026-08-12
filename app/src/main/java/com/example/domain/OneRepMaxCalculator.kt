@@ -5,7 +5,7 @@ object OneRepMaxCalculator {
      * Estimates 1RM using Epley's formula: 1RM = w * (1 + r / 30)
      */
     fun estimateEpley(weight: Float, reps: Int): Float {
-        if (reps <= 0 || weight < 0f) return 0f
+        if (reps !in 1..12 || weight <= 0f) return 0f
         if (reps == 1) return weight
         return weight * (1f + reps / 30f)
     }

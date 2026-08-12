@@ -2,12 +2,6 @@ package com.example.data
 
 import android.content.Context
 import android.util.Log
-import androidx.credentials.CredentialManager
-import androidx.credentials.GetCredentialRequest
-import androidx.credentials.exceptions.GetCredentialException
-import com.example.core.identity.HumanUserIdGenerator
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import kotlinx.coroutines.CancellationException
@@ -28,10 +22,53 @@ sealed class AuthState {
     data class Error(val message: String) : AuthState()
 }
 
+internal sealed interface ProfileHandoffResolution {
+    data class Ready(val profile: UserProfile) : ProfileHandoffResolution
+    data object IdentityConflict : ProfileHandoffResolution
+}
+
+internal fun appCheckIdentityGate(state: com.example.AppCheckInitializationState): String? = when (state) {
+    com.example.AppCheckInitializationState.READY -> null
+    com.example.AppCheckInitializationState.UNAVAILABLE -> "App Check is unavailable"
+    com.example.AppCheckInitializationState.FAILED -> "App Check initialization failed"
+}
+
+internal fun resolveAuthoritativeProfileHandoff(
+    firebaseUid: String,
+    identity: AuthoritativeHumanIdentity,
+    displayName: String?, email: String?, photoUrl: String?,
+    existingProfile: UserProfile?, offlineProfile: UserProfile?,
+    persistedAuthenticatedHumanUserId: String?,
+    nowMillis: Long = System.currentTimeMillis()
+): ProfileHandoffResolution {
+    if (!isValidAuthoritativeHumanId(identity.humanUserId) ||
+        identity.schemaVersion != SUPPORTED_IDENTITY_SCHEMA_VERSION) return ProfileHandoffResolution.IdentityConflict
+    val existingAuthenticatedId = existingProfile?.takeIf {
+        !it.isOfflineUser && it.firebaseUid == firebaseUid
+    }?.humanUserId?.takeIf { it.isNotBlank() }
+    val persistedId = persistedAuthenticatedHumanUserId?.takeIf { it.isNotBlank() }
+    if ((existingAuthenticatedId != null && existingAuthenticatedId != identity.humanUserId) ||
+        (persistedId != null && persistedId != identity.humanUserId)) return ProfileHandoffResolution.IdentityConflict
+    val safe = existingProfile ?: offlineProfile
+    return ProfileHandoffResolution.Ready(UserProfile(
+        id = firebaseUid, googleUserId = firebaseUid, email = email,
+        displayName = displayName ?: email?.substringBefore("@") ?: "Google User",
+        photoUrl = photoUrl, authProvider = "google", lastLoginAt = nowMillis,
+        humanUserId = identity.humanUserId, firebaseUid = firebaseUid, isOfflineUser = false,
+        dateOfBirth = safe?.dateOfBirth, sex = safe?.sex,
+        trainingExperience = safe?.trainingExperience, heightCm = safe?.heightCm,
+        preferredUnits = safe?.preferredUnits ?: "metric",
+        createdAt = existingProfile?.createdAt ?: nowMillis
+    ))
+}
+
+internal fun trustedAccountDeletionPayload() = org.json.JSONObject()
+
 class AuthRepository(
     private val context: Context,
     private val strengthRepository: StrengthRepository,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val identityClient: HumanIdentityClient = FirebaseHumanIdentityClient()
 ) {
     private val TAG = "AuthRepository"
     private val prefs = context.getSharedPreferences("strength_settings", Context.MODE_PRIVATE)
@@ -92,29 +129,44 @@ class AuthRepository(
                     }
 
                     val userId = firebaseUser.uid
+                    if (prefs.getString("auth_active_user_id", null)?.let { it != userId } == true) {
+                        clearAuthoritativeIdentityState()
+                    }
+                    prefs.edit().putBoolean("auth_profile_handoff_complete", false).apply()
+                    appCheckIdentityGate(com.example.HumanStrengthApplication.appCheckInitializationState)?.let { message ->
+                        Log.e(TAG, "stage=identity_gate result=APP_CHECK_UNAVAILABLE")
+                        clearAuthoritativeIdentityState()
+                        _authState.value = AuthState.Error(message)
+                        return@launch
+                    }
+                    Log.i(TAG, "stage=identity_request result=STARTED")
+                    val identityResult = identityClient.ensureHumanIdentity()
+                    Log.i(TAG, "stage=identity_request result=${identityResult.safeResultName()}")
+                    val identity = (identityResult as? HumanIdentityResult.Success)?.identity
+                    if (identity == null) {
+                        clearAuthoritativeIdentityState()
+                        _authState.value = AuthState.Error(identityResult.safeMessage())
+                        return@launch
+                    }
                     val existingProfile = strengthRepository.getUserProfile(userId)
-                    val profile = existingProfile?.copy(
-                        firebaseUid = userId,
-                        authProvider = "google",
-                        isOfflineUser = false
-                    )
-                        ?: UserProfile(
-                            id = userId,
-                            googleUserId = userId,
-                            email = firebaseUser.email,
-                            displayName = firebaseUser.displayName
-                                ?: firebaseUser.email?.substringBefore("@")
-                                ?: "Google User",
-                            photoUrl = firebaseUser.photoUrl?.toString(),
-                            authProvider = "google",
-                            humanUserId = HumanUserIdGenerator.mapUserIdToHumanUserId(userId),
-                            firebaseUid = userId,
-                            isOfflineUser = false
-                        )
+                    val profile = (resolveAuthoritativeProfileHandoff(
+                        userId, identity, firebaseUser.displayName, firebaseUser.email,
+                        firebaseUser.photoUrl?.toString(), existingProfile,
+                        strengthRepository.getUserProfile("offline"),
+                        prefs.getString("auth_human_user_id", null)
+                    ) as? ProfileHandoffResolution.Ready)?.profile
+                    if (profile == null) {
+                        clearAuthoritativeIdentityState()
+                        _authState.value = AuthState.Error("Human identity binding conflict")
+                        return@launch
+                    }
 
                     strengthRepository.insertUserProfile(profile)
-                    persistGoogleAuthentication(profile)
+                    strengthRepository.linkExistingDataToUser(userId, identity.humanUserId)
+                    persistGoogleAuthentication(profile, identity.schemaVersion)
                     _authState.value = AuthState.Authenticated(profile)
+                    com.example.core.sync.SyncScheduler.scheduleImmediate(context)
+                    com.example.core.sync.SyncScheduler.schedulePeriodic(context)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error restoring Firebase session", e)
                     _authState.value = AuthState.Error(
@@ -130,33 +182,8 @@ class AuthRepository(
         val activeUserId = prefs.getString("auth_active_user_id", "offline") ?: "offline"
 
         if (isLoggedIn && authProvider == "google" && activeUserId != "offline") {
-            _authState.value = AuthState.Loading
-            scope.launch(Dispatchers.IO) {
-                try {
-                    val profile = strengthRepository.getUserProfile(activeUserId)
-                    if (profile != null) {
-                        _authState.value = AuthState.Authenticated(profile)
-                    } else {
-                        // Create fallback profile for Google user if missing in Room
-                        val fallbackProfile = UserProfile(
-                            id = activeUserId,
-                            googleUserId = activeUserId,
-                            email = prefs.getString("auth_email", ""),
-                            displayName = prefs.getString("auth_display_name", "Google User"),
-                            photoUrl = prefs.getString("auth_photo_url", null),
-                            authProvider = "google",
-                            humanUserId = HumanUserIdGenerator.mapUserIdToHumanUserId(activeUserId),
-                            firebaseUid = if (activeUserId.startsWith("google_")) null else activeUserId,
-                            isOfflineUser = false
-                        )
-                        strengthRepository.insertUserProfile(fallbackProfile)
-                        _authState.value = AuthState.Authenticated(fallbackProfile)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error restoring Google session", e)
-                    _authState.value = AuthState.Offline
-                }
-            }
+            clearPersistedAuthentication()
+            _authState.value = AuthState.Error("Firebase authentication is required to restore a Human account")
         } else if (isLoggedIn && authProvider == "offline") {
             _authState.value = AuthState.Offline
         } else {
@@ -172,10 +199,20 @@ class AuthRepository(
             .remove("auth_email")
             .remove("auth_display_name")
             .remove("auth_photo_url")
+            .remove("auth_human_user_id")
+            .remove("auth_identity_status")
+            .remove("auth_identity_schema_version")
+            .putBoolean("auth_profile_handoff_complete", false)
             .apply()
     }
 
-    private fun persistGoogleAuthentication(profile: UserProfile) {
+    private fun clearAuthoritativeIdentityState() {
+        com.example.core.sync.SyncScheduler.cancelCloudSync(context)
+        prefs.edit().remove("auth_human_user_id").remove("auth_identity_status")
+            .remove("auth_identity_schema_version").putBoolean("auth_profile_handoff_complete", false).apply()
+    }
+
+    private fun persistGoogleAuthentication(profile: UserProfile, schemaVersion: Long) {
         prefs.edit()
             .putBoolean("auth_is_logged_in", true)
             .putString("auth_provider", "google")
@@ -183,6 +220,10 @@ class AuthRepository(
             .putString("auth_email", profile.email)
             .putString("auth_display_name", profile.displayName)
             .putString("auth_photo_url", profile.photoUrl)
+            .putString("auth_human_user_id", profile.humanUserId)
+            .putString("auth_identity_status", ACTIVE_IDENTITY_STATUS)
+            .putLong("auth_identity_schema_version", schemaVersion)
+            .putBoolean("auth_profile_handoff_complete", true)
             .apply()
     }
 
@@ -201,7 +242,7 @@ class AuthRepository(
                 displayName = "Offline User",
                 authProvider = "offline",
                 isOfflineUser = true,
-                humanUserId = HumanUserIdGenerator.mapUserIdToHumanUserId("offline"),
+                humanUserId = com.example.core.identity.HumanUserIdGenerator.getOrGenerateOfflineHumanId(context),
                 firebaseUid = null
             )
             strengthRepository.insertUserProfile(offlineProfile)
@@ -225,41 +266,65 @@ class AuthRepository(
                 }
                 userId = firebaseUser.uid
                 fUid = firebaseUser.uid
+                if (prefs.getString("auth_active_user_id", null)?.let { it != userId } == true) {
+                    clearAuthoritativeIdentityState()
+                }
             } else {
                 Log.w(TAG, "Firebase is genuinely unconfigured; creating a local-only Google profile without cloud entitlement.")
             }
 
-            val finalDisplayName = displayName ?: email?.substringBefore("@") ?: "Google User"
             val existingProfile = strengthRepository.getUserProfile(userId)
-            val profile = UserProfile(
-                id = userId,
-                googleUserId = userId,
-                email = email,
-                displayName = finalDisplayName,
-                photoUrl = photoUrl,
-                authProvider = "google",
-                lastLoginAt = System.currentTimeMillis(),
-                humanUserId = HumanUserIdGenerator.mapUserIdToHumanUserId(userId),
-                firebaseUid = fUid,
-                isOfflineUser = false,
-                dateOfBirth = existingProfile?.dateOfBirth,
-                sex = existingProfile?.sex,
-                trainingExperience = existingProfile?.trainingExperience,
-                heightCm = existingProfile?.heightCm,
-                preferredUnits = existingProfile?.preferredUnits ?: "metric",
-                createdAt = existingProfile?.createdAt ?: System.currentTimeMillis()
-            )
+            if (fUid == null) {
+                _authState.value = AuthState.Error("Firebase authentication is required for a Human account")
+                return@withContext null
+            }
+            prefs.edit().putBoolean("auth_profile_handoff_complete", false).apply()
+            appCheckIdentityGate(com.example.HumanStrengthApplication.appCheckInitializationState)?.let { message ->
+                Log.e(TAG, "stage=identity_gate result=APP_CHECK_UNAVAILABLE")
+                clearAuthoritativeIdentityState()
+                _authState.value = AuthState.Error(message)
+                return@withContext null
+            }
+            Log.i(TAG, "stage=identity_request result=STARTED")
+            val identityResult = identityClient.ensureHumanIdentity()
+            Log.i(TAG, "stage=identity_request result=${identityResult.safeResultName()}")
+            val identity = (identityResult as? HumanIdentityResult.Success)?.identity
+            if (identity == null) {
+                clearAuthoritativeIdentityState()
+                _authState.value = AuthState.Error(identityResult.safeMessage())
+                return@withContext null
+            }
+            val profile = (resolveAuthoritativeProfileHandoff(
+                fUid, identity, displayName, email, photoUrl, existingProfile,
+                strengthRepository.getUserProfile("offline"), prefs.getString("auth_human_user_id", null)
+            ) as? ProfileHandoffResolution.Ready)?.profile
+            if (profile == null) {
+                clearAuthoritativeIdentityState()
+                _authState.value = AuthState.Error("Human identity binding conflict")
+                return@withContext null
+            }
 
             // Save to room
             strengthRepository.insertUserProfile(profile)
+            strengthRepository.linkExistingDataToUser(userId, identity.humanUserId)
 
             // Save to shared preferences
-            persistGoogleAuthentication(profile)
+            persistGoogleAuthentication(profile, identity.schemaVersion)
 
             _authState.value = AuthState.Authenticated(profile)
+            com.example.core.sync.SyncScheduler.scheduleImmediate(context)
+            com.example.core.sync.SyncScheduler.schedulePeriodic(context)
             return@withContext profile
         } catch (e: CancellationException) {
             throw e
+        } catch (e: com.google.firebase.FirebaseNetworkException) {
+            Log.e(TAG, "Google Sign-In network failure", e)
+            _authState.value = AuthState.Error("Network unavailable. Check your connection and try again.")
+            return@withContext null
+        } catch (e: com.google.firebase.auth.FirebaseAuthException) {
+            Log.e(TAG, "Firebase rejected Google authentication (${e.errorCode})")
+            _authState.value = AuthState.Error("Firebase rejected the Google sign-in. Please try again.")
+            return@withContext null
         } catch (e: Exception) {
             Log.e(TAG, "Google Sign-In integration failed", e)
             _authState.value = AuthState.Error(e.localizedMessage ?: "Unknown Google authentication error")
@@ -269,7 +334,11 @@ class AuthRepository(
 
     suspend fun linkOfflineDataToUser(userId: String) = withContext(Dispatchers.IO) {
         try {
-            strengthRepository.linkExistingDataToUser(userId)
+            val profile = strengthRepository.getUserProfile(userId)
+            val authoritativeId = profile?.takeIf {
+                it.firebaseUid == userId && isValidAuthoritativeHumanId(it.humanUserId)
+            }?.humanUserId ?: throw IllegalStateException("Authoritative Human identity is unavailable")
+            strengthRepository.linkExistingDataToUser(userId, authoritativeId)
             Log.d(TAG, "Successfully linked existing offline data to user: $userId")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to link existing offline data to user: $userId", e)
@@ -277,6 +346,7 @@ class AuthRepository(
     }
 
     suspend fun signOut(keepLocalData: Boolean) = withContext(Dispatchers.IO) {
+        com.example.core.sync.SyncScheduler.cancelCloudSync(context)
         try {
             if (firebaseAuth != null) {
                 firebaseAuth!!.signOut()
@@ -303,6 +373,10 @@ class AuthRepository(
             .remove("auth_email")
             .remove("auth_display_name")
             .remove("auth_photo_url")
+            .remove("auth_human_user_id")
+            .remove("auth_identity_status")
+            .remove("auth_identity_schema_version")
+            .putBoolean("auth_profile_handoff_complete", false)
             .apply()
 
         _authState.value = AuthState.Initial
@@ -334,8 +408,6 @@ class AuthRepository(
                 }
             }
 
-            val humanUserId = HumanUserIdGenerator.mapUserIdToHumanUserId(currentUser?.uid ?: activeUserId)
-
             // Step 2: Invoke server-side deletion endpoint if token exists
             if (idToken != null) {
                 try {
@@ -348,30 +420,18 @@ class AuthRepository(
                         readTimeout = 10000
                         doOutput = true
                     }
-                    val payload = org.json.JSONObject().apply {
-                        put("humanUserId", humanUserId)
-                    }
+                    val payload = trustedAccountDeletionPayload()
                     java.io.OutputStreamWriter(conn.outputStream, "UTF-8").use { writer ->
                         writer.write(payload.toString())
                         writer.flush()
                     }
                     val code = conn.responseCode
-                    Log.i(TAG, "Server account deletion response code: $code")
+                    if (code !in 200..299) return@withContext Result.failure(
+                        IllegalStateException("Cloud account deletion was rejected")
+                    )
                 } catch (netErr: Exception) {
                     Log.w(TAG, "Network exception invoking cloud deletion function (offline or test environment)", netErr)
-                }
-            }
-
-            // Step 3: Delete Firebase Authentication identity on client
-            if (currentUser != null) {
-                try {
-                    com.google.android.gms.tasks.Tasks.await(currentUser.delete())
-                    Log.i(TAG, "Successfully deleted client Firebase Auth user")
-                } catch (deleteErr: Exception) {
-                    Log.w(TAG, "Client-side user.delete() produced warning or required reauth", deleteErr)
-                    if (deleteErr is com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException) {
-                        return@withContext Result.failure(deleteErr)
-                    }
+                    return@withContext Result.failure(netErr)
                 }
             }
 
@@ -396,6 +456,10 @@ class AuthRepository(
                 .remove("auth_email")
                 .remove("auth_display_name")
                 .remove("auth_photo_url")
+                .remove("auth_human_user_id")
+                .remove("auth_identity_status")
+                .remove("auth_identity_schema_version")
+                .putBoolean("auth_profile_handoff_complete", false)
                 .apply()
 
             _authState.value = AuthState.Offline

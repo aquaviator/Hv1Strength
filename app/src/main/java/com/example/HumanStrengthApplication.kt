@@ -44,43 +44,21 @@ class HumanStrengthApplication : Application(), Configuration.Provider {
         }
     }
 
-    private fun initializeAppCheck(isDebug: Boolean) {
-        try {
-            val firebaseAppCheck = FirebaseAppCheck.getInstance()
-            if (isDebug) {
-                try {
-                    val debugFactoryClass = Class.forName("com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory")
-                    val getInstanceMethod = debugFactoryClass.getMethod("getInstance")
-                    val factory = getInstanceMethod.invoke(null) as com.google.firebase.appcheck.AppCheckProviderFactory
-                    firebaseAppCheck.installAppCheckProviderFactory(factory)
-                    Log.i(TAG, "Firebase App Check initialized with Debug Provider via reflection")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not load DebugAppCheckProviderFactory via reflection. Proceeding without App Check debug provider.", e)
-                }
-            } else {
-                try {
-                    // Try Play Integrity
-                    val playIntegrityClass = Class.forName("com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory")
-                    val getInstanceMethod = playIntegrityClass.getMethod("getInstance")
-                    val factory = getInstanceMethod.invoke(null) as com.google.firebase.appcheck.AppCheckProviderFactory
-                    firebaseAppCheck.installAppCheckProviderFactory(factory)
-                    Log.i(TAG, "Firebase App Check initialized with Play Integrity Provider")
-                } catch (e: Exception) {
-                    try {
-                        // Fall back to ReCaptcha Enterprise
-                        val recaptchaClass = Class.forName("com.google.firebase.appcheck.recaptcha.ReCaptchaEnterpriseAppCheckProviderFactory")
-                        val getInstanceMethod = recaptchaClass.getMethod("getInstance")
-                        val factory = getInstanceMethod.invoke(null) as com.google.firebase.appcheck.AppCheckProviderFactory
-                        firebaseAppCheck.installAppCheckProviderFactory(factory)
-                        Log.i(TAG, "Firebase App Check initialized with ReCaptcha Enterprise Provider")
-                    } catch (e2: Exception) {
-                        Log.w(TAG, "Could not load any App Check production provider via reflection", e2)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "App Check initialization failed", e)
+    private fun initializeAppCheck(isDebug: Boolean): AppCheckInitializationState {
+        appCheckInitializationState = try {
+            val factory = BuildVariantAppCheckProviderFactory.create()
+            FirebaseAppCheck.getInstance().installAppCheckProviderFactory(factory)
+            Log.i(TAG, "stage=app_check result=READY provider=${if (isDebug) "DEBUG" else "PLAY_INTEGRITY"}")
+            if (isDebug) Log.i(TAG, "stage=app_check_debug result=REGISTER_TOKEN_IN_FIREBASE_CONSOLE token_not_logged=true")
+            AppCheckInitializationState.READY
+        } catch (_: IllegalStateException) {
+            Log.e(TAG, "stage=app_check result=UNAVAILABLE")
+            AppCheckInitializationState.UNAVAILABLE
+        } catch (_: Exception) {
+            Log.e(TAG, "stage=app_check result=FAILED")
+            AppCheckInitializationState.FAILED
         }
+        return appCheckInitializationState
     }
 
     private fun configureEmulators() {
@@ -107,6 +85,8 @@ class HumanStrengthApplication : Application(), Configuration.Provider {
         // Dynamic flag indicating if Firebase configuration is missing
         var isFirebaseConfigured: Boolean = false
             private set
+        @Volatile var appCheckInitializationState: AppCheckInitializationState = AppCheckInitializationState.UNAVAILABLE
+            private set
 
         internal fun determineFirebaseAvailability(initializer: () -> Boolean): Boolean {
             return try {
@@ -118,3 +98,7 @@ class HumanStrengthApplication : Application(), Configuration.Provider {
         }
     }
 }
+
+enum class AppCheckInitializationState { READY, UNAVAILABLE, FAILED }
+enum class AppCheckProviderKind { DEBUG, PLAY_INTEGRITY }
+internal fun appCheckProviderKind(isDebug: Boolean) = if (isDebug) AppCheckProviderKind.DEBUG else AppCheckProviderKind.PLAY_INTEGRITY

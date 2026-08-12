@@ -1,6 +1,7 @@
 package com.example.data
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.core.versioning.VersionedEntity
 
@@ -307,4 +308,61 @@ data class ActiveWorkoutBackup(
     val setsJson: String,
     val exerciseMetadataJson: String
 )
+
+@Entity(tableName = "training_plan")
+data class TrainingPlan(
+    @PrimaryKey val id: String,
+    val userId: String,
+    override val humanUserId: String,
+    val templateId: Int,
+    val templateGlobalId: String,
+    val routineName: String,
+    val firstEpochDay: Long,
+    val preferredMinuteOfDay: Int? = null,
+    val weekdaysMask: Int = 0,
+    val recurrenceEndEpochDay: Long? = null,
+    override val createdAt: Long = System.currentTimeMillis(),
+    override val updatedAt: Long = System.currentTimeMillis(),
+    override val globalId: String = id,
+    override val revision: Long = 1,
+    override val deletedAt: Long? = null,
+    override val syncStatus: String = "PENDING_UPLOAD",
+    override val lastSyncedAt: Long? = null,
+    override val conflictState: String? = null,
+    override val originDeviceId: String = ""
+) : VersionedEntity
+
+@Entity(
+    tableName = "planned_workout",
+    indices = [
+        Index(value = ["userId", "scheduledEpochDay"]),
+        Index(value = ["seriesId", "scheduledEpochDay"], unique = true)
+    ]
+)
+data class PlannedWorkout(
+    @PrimaryKey val id: String,
+    val seriesId: String,
+    val userId: String,
+    override val humanUserId: String,
+    val templateId: Int,
+    val templateGlobalId: String,
+    val routineName: String,
+    val scheduledEpochDay: Long,
+    val originalEpochDay: Long,
+    val preferredMinuteOfDay: Int? = null,
+    val status: String = "PLANNED",
+    val completedAt: Long? = null,
+    val linkedSessionId: Int? = null,
+    val reminderEnabled: Boolean = false,
+    val detachedFromSeries: Boolean = false,
+    override val createdAt: Long = System.currentTimeMillis(),
+    override val updatedAt: Long = System.currentTimeMillis(),
+    override val globalId: String = id,
+    override val revision: Long = 1,
+    override val deletedAt: Long? = null,
+    override val syncStatus: String = "PENDING_UPLOAD",
+    override val lastSyncedAt: Long? = null,
+    override val conflictState: String? = null,
+    override val originDeviceId: String = ""
+) : VersionedEntity
 

@@ -1,6 +1,7 @@
 package com.example
 
 import android.os.Bundle
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.text.font.FontWeight
@@ -37,11 +39,21 @@ import com.example.ui.theme.HumanV1Theme
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.StrengthViewModel
 import com.example.ui.viewmodel.StrengthViewModelFactory
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     android.util.Log.i("MainActivity", "onCreate started")
+    if (intent?.getBooleanExtra(com.example.service.workout.WorkoutNotificationFactory.EXTRA_OPEN_WORKOUT, false) == true) {
+        com.example.service.workout.WorkoutExecutionServiceController.requestNavigation()
+    }
+    if (savedInstanceState == null) {
+      com.example.planner.PlannerReminderNavigation.request(
+        intent?.getStringExtra(com.example.planner.PlannerReminderWorker.EXTRA_PLANNER_OCCURRENCE)
+      )
+    }
 
     // Check for previous crash logs
     val crashLogFile = java.io.File(filesDir, "crash_log.txt")
@@ -98,6 +110,14 @@ class MainActivity : ComponentActivity() {
     }
   }
 
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent); setIntent(intent)
+    if (intent.getBooleanExtra(com.example.service.workout.WorkoutNotificationFactory.EXTRA_OPEN_WORKOUT, false)) {
+      com.example.service.workout.WorkoutExecutionServiceController.requestNavigation()
+    }
+    com.example.planner.PlannerReminderNavigation.request(intent.getStringExtra(com.example.planner.PlannerReminderWorker.EXTRA_PLANNER_OCCURRENCE))
+  }
+
   private fun startApp() {
     try {
         android.util.Log.i("MainActivity", "Initializing database...")
@@ -106,9 +126,7 @@ class MainActivity : ComponentActivity() {
         android.util.Log.i("MainActivity", "Database initialized. Initializing repository...")
         val repository = StrengthRepository(database.strengthDao(), applicationContext)
         
-        android.util.Log.i("MainActivity", "Repository initialized. Scheduling background sync...")
-        com.example.core.sync.SyncScheduler.schedulePeriodic(applicationContext)
-        android.util.Log.i("MainActivity", "Background sync scheduled successfully.")
+        android.util.Log.i("MainActivity", "Repository initialized. Cloud sync awaits trusted identity resolution.")
 
         setContent {
           val viewModel: StrengthViewModel = viewModel(
@@ -163,6 +181,8 @@ fun MainAppScreen(
     viewModel: StrengthViewModel,
     navController: androidx.navigation.NavHostController = rememberNavController()
 ) {
+    var plannerReminderTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    val requestedPlannerOccurrence by com.example.planner.PlannerReminderNavigation.requestedOccurrence.collectAsState()
     val authState by viewModel.authState.collectAsState()
     val appAccessState by viewModel.appAccessState.collectAsState()
     val vibrationOn by viewModel.vibrationOn.collectAsState()
@@ -170,6 +190,18 @@ fun MainAppScreen(
     val currentRoute = navBackStackEntry?.destination?.route
     val startupDestination = resolveStartupDestination(authState, appAccessState)
 
+    LaunchedEffect(Unit) {
+        com.example.service.workout.WorkoutExecutionServiceController.navigationRequests.collect {
+            if (viewModel.activeWorkoutState.value == null) viewModel.resumeWorkout()
+            val restored = kotlinx.coroutines.withTimeoutOrNull(5_000L) {
+                viewModel.activeWorkoutState.filterNotNull().first()
+            }
+            if (restored != null && navController.currentDestination?.route != "active_workout") {
+                navController.navigate("active_workout") { launchSingleTop = true }
+            }
+            com.example.service.workout.WorkoutExecutionServiceController.consumeNavigation()
+        }
+    }
     if (
         startupDestination == StartupDestination.AuthLoading ||
         startupDestination == StartupDestination.AccessLoading
@@ -192,6 +224,11 @@ fun MainAppScreen(
                         ),
                         color = MaterialTheme.colorScheme.onBackground
                     )
+                    Text(
+                        text = com.example.ui.presentation.startupProgressMessage(authState, appAccessState),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -208,6 +245,13 @@ fun MainAppScreen(
             }
         )
         return
+    }
+
+    LaunchedEffect(requestedPlannerOccurrence, currentRoute, startupDestination) {
+        val occurrenceId = requestedPlannerOccurrence ?: return@LaunchedEffect
+        if (currentRoute == null) return@LaunchedEffect
+        plannerReminderTarget = occurrenceId
+        if (currentRoute != "planner") navController.navigate("planner") { launchSingleTop = true }
     }
 
     CompositionLocalProvider(
@@ -344,6 +388,7 @@ fun MainAppScreen(
                     onNavigateToActiveWorkout = {
                         navController.navigate("active_workout")
                     },
+                    onNavigateToPlanner = { navController.navigate("planner") },
                     onNavigateToProfile = {
                         navController.navigate("profile") { launchSingleTop = true }
                     }
@@ -391,6 +436,18 @@ fun MainAppScreen(
                         navController.popBackStack()
                     }
                 )
+            }
+            composable("planner") {
+                PlannerScreen(viewModel, notificationOccurrenceId = plannerReminderTarget,
+                    onNotificationHandled = {
+                        com.example.planner.PlannerReminderNavigation.consume()
+                    }, onBack = {
+                        com.example.planner.PlannerReminderNavigation.consume()
+                        plannerReminderTarget = null
+                        navController.popBackStack()
+                    }, onWorkoutStarted = {
+                    navController.navigate("active_workout") { launchSingleTop = true }
+                })
             }
             composable("active_workout") {
                 ActiveWorkoutScreen(

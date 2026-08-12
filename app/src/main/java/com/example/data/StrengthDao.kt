@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface StrengthDao {
+    @Query("SELECT * FROM user_profile WHERE humanUserId = :humanUserId AND deletedAt IS NULL LIMIT 1")
+    suspend fun getUserProfileByHumanUserId(humanUserId: String): UserProfile?
 
     // User Profile
     @Query("SELECT * FROM user_profile WHERE id = :id AND deletedAt IS NULL LIMIT 1")
@@ -72,6 +74,9 @@ interface StrengthDao {
     // Exercises
     @Query("SELECT * FROM exercise WHERE deletedAt IS NULL ORDER BY name ASC")
     fun getAllExercises(): Flow<List<Exercise>>
+
+    @Query("SELECT * FROM exercise")
+    suspend fun getAllExercisesSync(): List<Exercise>
 
     @Query("SELECT * FROM exercise WHERE id = :id AND deletedAt IS NULL LIMIT 1")
     suspend fun getExerciseById(id: String): Exercise?
@@ -436,6 +441,82 @@ interface StrengthDao {
 
     @Query("DELETE FROM active_workout_backup WHERE id = 1")
     suspend fun clearActiveWorkoutBackup()
+
+    // TRAINING PLANNER
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertTrainingPlan(plan: TrainingPlan)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertPlannedWorkouts(items: List<PlannedWorkout>): List<Long>
+
+    @androidx.room.Transaction
+    suspend fun restorePlannerBackupAtomically(plans: List<TrainingPlan>, occurrences: List<PlannedWorkout>) {
+        plans.forEach { upsertTrainingPlan(it) }
+        occurrences.forEach { upsertPlannedWorkout(it) }
+    }
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPlannedWorkout(item: PlannedWorkout)
+
+    @Query("SELECT * FROM planned_workout WHERE userId = :userId AND deletedAt IS NULL ORDER BY scheduledEpochDay, preferredMinuteOfDay, createdAt, id")
+    fun getPlannedWorkoutsForUser(userId: String): Flow<List<PlannedWorkout>>
+
+    @Query("SELECT * FROM planned_workout WHERE id = :id LIMIT 1")
+    suspend fun getPlannedWorkout(id: String): PlannedWorkout?
+
+    @Query("SELECT * FROM training_plan WHERE id = :id LIMIT 1")
+    suspend fun getTrainingPlan(id: String): TrainingPlan?
+
+    @Query("SELECT * FROM training_plan WHERE userId = :userId ORDER BY createdAt, id")
+    suspend fun getTrainingPlansForUser(userId: String): List<TrainingPlan>
+
+    @Query("SELECT * FROM training_plan WHERE userId = :userId ORDER BY createdAt, id")
+    suspend fun getAllTrainingPlansForBackup(userId: String): List<TrainingPlan>
+
+    @Query("SELECT * FROM planned_workout WHERE userId = :userId ORDER BY scheduledEpochDay, id")
+    suspend fun getAllPlannedWorkoutsForBackup(userId: String): List<PlannedWorkout>
+
+    @Query("SELECT * FROM training_plan WHERE globalId = :globalId LIMIT 1")
+    suspend fun getTrainingPlanByGlobalId(globalId: String): TrainingPlan?
+
+    @Query("SELECT * FROM planned_workout WHERE globalId = :globalId LIMIT 1")
+    suspend fun getPlannedWorkoutByGlobalId(globalId: String): PlannedWorkout?
+
+    @Query("SELECT * FROM planned_workout WHERE seriesId = :seriesId AND userId = :userId AND scheduledEpochDay >= :fromEpochDay AND status = 'PLANNED' AND deletedAt IS NULL")
+    suspend fun getFuturePlannedWorkouts(seriesId: String, userId: String, fromEpochDay: Long): List<PlannedWorkout>
+
+    @Query("UPDATE planned_workout SET deletedAt = :now, updatedAt = :now, revision = revision + 1, syncStatus = 'PENDING_UPLOAD' WHERE id = :id AND userId = :userId AND status != 'COMPLETED'")
+    suspend fun softDeletePlannedWorkout(id: String, userId: String, now: Long)
+
+    @Query("UPDATE planned_workout SET deletedAt = :now, updatedAt = :now, revision = revision + 1, syncStatus = 'PENDING_UPLOAD' WHERE seriesId = :seriesId AND userId = :userId AND scheduledEpochDay >= :fromEpochDay AND status = 'PLANNED' AND deletedAt IS NULL")
+    suspend fun softDeleteFuturePlannedWorkouts(seriesId: String, userId: String, fromEpochDay: Long, now: Long)
+
+    @Query("UPDATE planned_workout SET deletedAt = :now, updatedAt = :now, revision = revision + 1, syncStatus = 'PENDING_UPLOAD' WHERE seriesId = :seriesId AND userId = :userId AND scheduledEpochDay >= :fromEpochDay AND status = 'PLANNED' AND deletedAt IS NULL")
+    suspend fun deleteFuturePlannedWorkouts(seriesId: String, userId: String, fromEpochDay: Long, now: Long = System.currentTimeMillis())
+
+    @Query("UPDATE planned_workout SET status = :status, completedAt = :completedAt, linkedSessionId = :sessionId, updatedAt = :updatedAt, revision = revision + 1, syncStatus = 'PENDING_UPLOAD' WHERE id = :id")
+    suspend fun updatePlannedWorkoutStatus(id: String, status: String, completedAt: Long?, sessionId: Int?, updatedAt: Long)
+
+    @Query("SELECT COUNT(*) FROM planned_workout WHERE id = :id AND userId = :userId")
+    suspend fun ownsPlannedWorkout(id: String, userId: String): Int
+
+    @Query("SELECT COUNT(*) FROM planned_workout WHERE seriesId = :seriesId AND scheduledEpochDay = :scheduledEpochDay AND id != :excludeId AND deletedAt IS NULL")
+    suspend fun countSeriesDateCollision(seriesId: String, scheduledEpochDay: Long, excludeId: String): Int
+
+    @Query("UPDATE training_plan SET syncStatus = 'SYNCED', lastSyncedAt = :timestamp WHERE id = :id")
+    suspend fun markTrainingPlanSynced(id: String, timestamp: Long)
+
+    @Query("UPDATE planned_workout SET syncStatus = 'SYNCED', lastSyncedAt = :timestamp WHERE id = :id")
+    suspend fun markPlannedWorkoutSynced(id: String, timestamp: Long)
+
+    @Query("UPDATE planned_workout SET status = 'COMPLETED', completedAt = :completedAt, linkedSessionId = :sessionId, revision = :revision, updatedAt = :updatedAt, deletedAt = NULL, syncStatus = 'SYNCED', lastSyncedAt = :updatedAt WHERE id = :id")
+    suspend fun reconcileRemoteCompletion(id: String, completedAt: Long?, sessionId: Int?, revision: Long, updatedAt: Long)
+
+    @Query("UPDATE planned_workout SET deletedAt = :deletedAt, revision = :revision, updatedAt = :updatedAt, syncStatus = 'SYNCED', lastSyncedAt = :updatedAt WHERE id = :id AND status != 'COMPLETED'")
+    suspend fun reconcileRemoteTombstone(id: String, deletedAt: Long, revision: Long, updatedAt: Long)
+
+    @Query("UPDATE planned_workout SET syncStatus = 'CONFLICT', conflictState = :diagnostic WHERE id = :id")
+    suspend fun markPlannedWorkoutConflict(id: String, diagnostic: String)
 
     @Query("DELETE FROM workout_session")
     suspend fun clearWorkoutSessions()

@@ -72,12 +72,19 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
+import com.example.core.sync.SyncManager
+import com.example.ui.presentation.membershipStatus
+import com.example.ui.presentation.syncPresentation
+import com.example.catalogue.ExerciseCatalogueRuntime
+import com.example.catalogue.exerciseMatches
+import com.example.catalogue.recentExerciseIds
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkoutScreen(
     viewModel: StrengthViewModel,
     onNavigateToActiveWorkout: () -> Unit,
+    onNavigateToPlanner: () -> Unit,
     onNavigateToProfile: () -> Unit = {}
 ) {
     val templates by viewModel.templates.collectAsState()
@@ -86,6 +93,12 @@ fun WorkoutScreen(
     val isMetric by viewModel.isMetric.collectAsState()
     val sessions by viewModel.sessions.collectAsState(initial = emptyList())
     val workoutRecoveryState by viewModel.workoutRecoveryState.collectAsState()
+    val authState by viewModel.authState.collectAsState()
+    val appAccessState by viewModel.appAccessState.collectAsState()
+    val syncStatus by SyncManager.currentStatus.collectAsState()
+    val syncQueueSize by SyncManager.queueSize.collectAsState()
+    val syncError by SyncManager.lastError.collectAsState()
+    val planned by viewModel.plannedWorkouts.collectAsState()
 
     var showTemplateEditor by remember { mutableStateOf(false) }
     var templateToEdit by remember { mutableStateOf<WorkoutTemplate?>(null) }
@@ -242,7 +255,34 @@ fun WorkoutScreen(
                 }
             }
 
+            item {
+                val membership = membershipStatus(appAccessState)
+                val sync = syncPresentation(authState, syncStatus, syncQueueSize, syncError)
+                Column(
+                    modifier = Modifier.fillMaxWidth().testTag("dashboard_platform_status"),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ExperienceStatusCard(membership, "dashboard_membership_status")
+                    if (sync.title != "Synced") ExperienceStatusCard(sync, "dashboard_sync_status")
+                }
+            }
+
             // Quick Start Card
+            item {
+                val today = java.time.LocalDate.now().toEpochDay()
+                val todayPlan = planned.firstOrNull { it.scheduledEpochDay == today && it.status == "PLANNED" }
+                val nextPlan = planned.firstOrNull { it.scheduledEpochDay > today && it.status == "PLANNED" }
+                Card(Modifier.fillMaxWidth().clickable(onClick = onNavigateToPlanner)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Training plan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        val shown = todayPlan ?: nextPlan
+                        Text(shown?.let { if (todayPlan != null) "Today · ${it.routineName}" else "Next · ${java.time.LocalDate.ofEpochDay(it.scheduledEpochDay)} · ${it.routineName}" }
+                            ?: "Nothing scheduled — plan your next workout")
+                        Text(if (activeWorkout != null) "Resume active workout" else "View plan", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+
             item {
                 Card(
                     modifier = Modifier
@@ -367,6 +407,7 @@ fun WorkoutScreen(
                         routineExercises = routineExercises,
                         templateDetails = templateDetails,
                         onStart = { viewModel.startWorkout(template) },
+                        onSchedule = { viewModel.scheduleRoutine(template, java.time.LocalDate.now()) },
                         onEdit = {
                             templateToEdit = template
                             showTemplateEditor = true
@@ -633,6 +674,9 @@ fun TemplateEditorDialog(
     
     val favoriteExercises by viewModel.favoriteExercises.collectAsState()
     val allLoggedSets by viewModel.allLoggedSets.collectAsState()
+    val recentSessions by viewModel.sessions.collectAsState()
+    val pickerCatalogue = remember { ExerciseCatalogueRuntime.snapshot ?: ExerciseCatalogueRuntime.load(context) }
+    val pickerCatalogueById = remember(pickerCatalogue) { pickerCatalogue.exercises.associateBy { it.id } }
     val isMetric by viewModel.isMetric.collectAsState()
     val defaultRestTimerDuration by viewModel.defaultRestTimerDuration.collectAsState()
     val haptic = LocalHapticFeedback.current
@@ -923,7 +967,7 @@ fun TemplateEditorDialog(
                                             }
                                             if (muscles.isEmpty()) "All" else exercises.count { muscles.contains(it.category) }.toString()
                                         }
-                                        "Recent" -> allLoggedSets.map { it.exerciseId }.distinct().take(10).size.toString()
+                                        "Recent" -> recentExerciseIds(recentSessions, allLoggedSets, 10).size.toString()
                                         "Favorites" -> favoriteExercises.size.toString()
                                         else -> exercises.size.toString()
                                     }
@@ -941,7 +985,7 @@ fun TemplateEditorDialog(
 
                             // Filtered List based on Search, category filter and Browser tabs
                             val filteredList = exercises.filter { ex ->
-                                val matchesSearch = ex.name.contains(searchQuery, ignoreCase = true)
+                                val matchesSearch = exerciseMatches(ex, searchQuery, pickerCatalogueById[ex.id])
                                 val matchesCategory = selectedMuscleFilter == "All" || ex.category.equals(selectedMuscleFilter, ignoreCase = true)
                                 
                                 val matchesTab = when (selectedBrowserTab) {
@@ -959,7 +1003,7 @@ fun TemplateEditorDialog(
                                         suggestedCategories.isEmpty() || suggestedCategories.contains(ex.category)
                                     }
                                     "Recent" -> {
-                                        val recentIds = allLoggedSets.map { it.exerciseId }.distinct().take(10)
+                                        val recentIds = recentExerciseIds(recentSessions, allLoggedSets, 10)
                                         recentIds.contains(ex.id)
                                     }
                                     "Favorites" -> favoriteExercises.contains(ex.id)

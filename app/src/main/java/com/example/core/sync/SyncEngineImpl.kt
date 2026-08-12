@@ -5,12 +5,12 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
 import com.example.core.identity.DeviceIdGenerator
-import com.example.core.identity.HumanUserIdGenerator
 import com.example.core.versioning.VersionedEntity
 import com.example.data.*
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,9 +21,13 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
-class SyncEngineImpl(
+class SyncEngineImpl internal constructor(
     private val context: Context,
-    private val repository: StrengthRepository
+    private val repository: StrengthRepository,
+    private val firestoreOverride: FirebaseFirestore? = null,
+    private val connectivityOverride: (() -> Boolean)? = null,
+    private val deviceIdOverride: String? = null,
+    private val identityResolverOverride: (suspend () -> SyncIdentityResolution)? = null
 ) : SyncEngine {
 
     private val TAG = "SyncEngineImpl"
@@ -49,9 +53,9 @@ class SyncEngineImpl(
     private val pendingDependencies = ConcurrentHashMap<String, CopyOnWriteArrayList<DeferredChild>>()
 
     init {
-        if (com.example.HumanStrengthApplication.isFirebaseConfigured) {
+        if (firestoreOverride != null || com.example.HumanStrengthApplication.isFirebaseConfigured) {
             try {
-                firestore = FirebaseFirestore.getInstance()
+                firestore = firestoreOverride ?: FirebaseFirestore.getInstance()
             } catch (e: Exception) {
                 Log.w(TAG, "Firestore not initialized. Operating in offline/fallback mode.", e)
             }
@@ -130,19 +134,30 @@ class SyncEngineImpl(
         SyncManager.updateStatus("Uploading")
 
         try {
-            val db = StrengthDatabase.getDatabase(context, syncScope)
-            val dao = db.strengthDao()
+            // The repository is the synchronization store boundary. Reopening
+            // the application singleton here breaks isolated clients and can
+            // redirect downloads into the wrong local store.
+            val dao = repository.dao
+
+            val identityResolution = identityResolverOverride?.invoke() ?: resolvePersistedIdentity()
+            if (identityResolution is SyncIdentityResolution.Blocked) {
+                SyncManager.updateStatus("Identity blocked: ${identityResolution.reason}")
+                _activeSyncing.value = false
+                return@withContext Result.success(Unit)
+            }
+            val trustedIdentity = (identityResolution as SyncIdentityResolution.Ready).identity
 
             // 1. Check internet / firestore connectivity
-            if (getInitialConnectivity() == ConnectivityState.OFFLINE || firestore == null) {
+            if ((connectivityOverride?.invoke() == false) ||
+                (connectivityOverride == null && getInitialConnectivity() == ConnectivityState.OFFLINE) || firestore == null) {
                 updateConnectivity(ConnectivityState.OFFLINE)
                 _activeSyncing.value = false
                 return@withContext Result.failure(Exception("Network is offline or Firestore is unavailable"))
             }
             updateConnectivity(ConnectivityState.ONLINE)
 
-            val humanUserId = HumanUserIdGenerator.getOrGenerateOfflineHumanId(context)
-            val deviceId = DeviceIdGenerator.getOrGenerateDeviceId(context)
+            val humanUserId = trustedIdentity.humanUserId
+            val deviceId = deviceIdOverride ?: DeviceIdGenerator.getOrGenerateDeviceId(context)
 
             // 2. Process Command Queue (Upload)
             val now = System.currentTimeMillis()
@@ -231,6 +246,19 @@ class SyncEngineImpl(
             _activeSyncing.value = false
             Result.failure(e)
         }
+    }
+
+    private suspend fun resolvePersistedIdentity(): SyncIdentityResolution {
+        val prefs = context.getSharedPreferences("strength_settings", Context.MODE_PRIVATE)
+        val firebaseUid = runCatching { FirebaseAuth.getInstance().currentUser?.uid }.getOrNull()
+        val activeUserId = prefs.getString("auth_active_user_id", null)
+        return resolveAuthenticatedSyncIdentity(
+            firebaseUid, activeUserId?.let { repository.getUserProfile(it) },
+            prefs.getBoolean("auth_is_logged_in", false) && prefs.getString("auth_provider", null) == "google",
+            prefs.getBoolean("auth_profile_handoff_complete", false), activeUserId,
+            prefs.getString("auth_human_user_id", null), prefs.getString("auth_identity_status", null),
+            if (prefs.contains("auth_identity_schema_version")) prefs.getLong("auth_identity_schema_version", -1L) else null
+        )
     }
 
     private suspend fun uploadEntityForCommand(
@@ -501,9 +529,82 @@ class SyncEngineImpl(
                     }
                 }
             }
+            "TRAINING_PLAN" -> repository.getTrainingPlanByGlobalId(entityGlobalId)?.let { plan ->
+                require(plan.humanUserId == humanUserId) { "Planner owner mismatch" }
+                docData.putAll(mapOf(
+                    "globalId" to plan.globalId, "humanUserId" to plan.humanUserId,
+                    "templateGlobalId" to plan.templateGlobalId, "routineName" to plan.routineName,
+                    "firstEpochDay" to plan.firstEpochDay, "preferredMinuteOfDay" to plan.preferredMinuteOfDay,
+                    "weekdaysMask" to plan.weekdaysMask, "recurrenceEndEpochDay" to plan.recurrenceEndEpochDay,
+                    "createdAt" to plan.createdAt, "updatedAt" to plan.updatedAt, "revision" to plan.revision,
+                    "deletedAt" to plan.deletedAt, "originDeviceId" to plan.originDeviceId, "lastSyncedAt" to now
+                ))
+                docRef = fs.collection("users").document(humanUserId).collection("trainingPlans").document(plan.globalId)
+                afterCommit = { repository.markTrainingPlanSynced(plan.id, now) }
+            }
+            "PLANNED_WORKOUT" -> repository.getPlannedWorkoutByGlobalId(entityGlobalId)?.let { item ->
+                require(item.humanUserId == humanUserId) { "Planner owner mismatch" }
+                docData.putAll(mapOf(
+                    "globalId" to item.globalId, "humanUserId" to item.humanUserId,
+                    "seriesId" to item.seriesId, "templateGlobalId" to item.templateGlobalId,
+                    "routineName" to item.routineName, "scheduledEpochDay" to item.scheduledEpochDay,
+                    "originalEpochDay" to item.originalEpochDay, "preferredMinuteOfDay" to item.preferredMinuteOfDay,
+                    "status" to item.status, "completedAt" to item.completedAt,
+                    "linkedSessionId" to item.linkedSessionId, "reminderEnabled" to item.reminderEnabled,
+                    "detachedFromSeries" to item.detachedFromSeries, "createdAt" to item.createdAt,
+                    "updatedAt" to item.updatedAt, "revision" to item.revision, "deletedAt" to item.deletedAt,
+                    "originDeviceId" to item.originDeviceId, "lastSyncedAt" to now
+                ))
+                docRef = fs.collection("users").document(humanUserId).collection("plannedWorkouts").document(item.globalId)
+                afterCommit = { repository.markPlannedWorkoutSynced(item.id, now) }
+            }
         }
 
         if (docRef != null && afterCommit != null) {
+            // Completion is monotonic. A stale planner edit must never replace a
+            // completion already accepted from another device.
+            if (entityType == "PLANNED_WORKOUT" && docData["status"] != "COMPLETED") {
+                val remote = docRef.get().await()
+                if (remote.exists() && remote.getString("status") == "COMPLETED") {
+                    val remoteRevision = remote.getLong("revision") ?: 1L
+                    val mergedRevision = maxOf((docData["revision"] as? Long) ?: 1L, remoteRevision) + 1L
+                    val completedAt = remote.getLong("completedAt")
+                    val linkedSessionId = remote.getLong("linkedSessionId")?.toInt()
+                    docData["status"] = "COMPLETED"
+                    docData["completedAt"] = completedAt
+                    docData["linkedSessionId"] = linkedSessionId
+                    docData["deletedAt"] = null
+                    docData["revision"] = mergedRevision
+                    docData["updatedAt"] = now
+                    val occurrenceId = entityGlobalId
+                    afterCommit = {
+                        repository.reconcileRemoteCompletion(occurrenceId, completedAt, linkedSessionId, mergedRevision, now)
+                    }
+                } else if (remote.exists() && remote.getLong("deletedAt") != null && docData["deletedAt"] == null) {
+                    val remoteRevision = remote.getLong("revision") ?: 1L
+                    val mergedRevision = maxOf((docData["revision"] as? Long) ?: 1L, remoteRevision) + 1L
+                    val deletedAt = requireNotNull(remote.getLong("deletedAt"))
+                    docData["deletedAt"] = deletedAt
+                    docData["revision"] = mergedRevision
+                    docData["updatedAt"] = now
+                    val occurrenceId = entityGlobalId
+                    afterCommit = { repository.reconcileRemoteTombstone(occurrenceId, deletedAt, mergedRevision, now) }
+                }
+            }
+            if (entityType == "PLANNED_WORKOUT" && docData["status"] != "COMPLETED" && docData["deletedAt"] == null) {
+                val remote = docRef.get().await()
+                val localRevision = (docData["revision"] as? Long) ?: 1L
+                val remoteRevision = remote.getLong("revision")
+                val remoteOrigin = remote.getString("originDeviceId")
+                val localOrigin = docData["originDeviceId"] as? String
+                if (remote.exists() && remoteRevision == localRevision && !remoteOrigin.isNullOrBlank() &&
+                    !localOrigin.isNullOrBlank() && remoteOrigin != localOrigin &&
+                    remote.getLong("updatedAt") != (docData["updatedAt"] as? Long)) {
+                    val diagnostic = "Concurrent planner edits have the same revision; manual resolution required"
+                    repository.markPlannedWorkoutConflict(entityGlobalId, diagnostic)
+                    throw IllegalStateException(diagnostic)
+                }
+            }
             // Check if command is already processed (Idempotency check)
             val processedRef = fs.collection("users").document(humanUserId)
                 .collection("processedCommands").document(command.commandId)
@@ -552,10 +653,13 @@ class SyncEngineImpl(
             "templateSets" to "WORKOUT_TEMPLATE_SET",
             "sessions" to "WORKOUT_SESSION",
             "loggedSets" to "LOGGED_SET"
+            ,"trainingPlans" to "TRAINING_PLAN"
+            ,"plannedWorkouts" to "PLANNED_WORKOUT"
         )
 
         var totalDownloaded = 0
         var conflictsDetected = 0
+        val downloadFailures = mutableListOf<String>()
 
         for ((subColl, entityType) in subcollections) {
             try {
@@ -582,6 +686,8 @@ class SyncEngineImpl(
                         "WORKOUT_TEMPLATE_SET" -> dao.getTemplateSetByGlobalId(remoteGlobalId) as VersionedEntity?
                         "WORKOUT_SESSION" -> dao.getSessionByGlobalId(remoteGlobalId) as VersionedEntity?
                         "LOGGED_SET" -> dao.getLoggedSetByGlobalId(remoteGlobalId) as VersionedEntity?
+                        "TRAINING_PLAN" -> dao.getTrainingPlanByGlobalId(remoteGlobalId) as VersionedEntity?
+                        "PLANNED_WORKOUT" -> dao.getPlannedWorkoutByGlobalId(remoteGlobalId) as VersionedEntity?
                         else -> null
                     }
 
@@ -627,7 +733,12 @@ class SyncEngineImpl(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error downloading subcollection $subColl", e)
+                downloadFailures += "$subColl: ${e.localizedMessage ?: "download failed"}"
             }
+        }
+
+        if (downloadFailures.isNotEmpty()) {
+            throw IllegalStateException("Remote download incomplete: ${downloadFailures.joinToString("; ")}")
         }
 
         if (totalDownloaded > 0) {
@@ -681,6 +792,14 @@ class SyncEngineImpl(
             "LOGGED_SET" -> {
                 val local = localEntity as LoggedSet
                 dao.insertLoggedSet(local.copy(syncStatus = "CONFLICT", conflictState = diagnostic))
+            }
+            "TRAINING_PLAN" -> {
+                val local = localEntity as TrainingPlan
+                dao.upsertTrainingPlan(local.copy(syncStatus = "CONFLICT", conflictState = diagnostic))
+            }
+            "PLANNED_WORKOUT" -> {
+                val local = localEntity as PlannedWorkout
+                dao.upsertPlannedWorkout(local.copy(syncStatus = "CONFLICT", conflictState = diagnostic))
             }
         }
     }
@@ -944,6 +1063,36 @@ class SyncEngineImpl(
                 dao.insertLoggedSet(set)
                 resolvePendingDependencies(set.globalId, dao)
             }
+            "TRAINING_PLAN" -> {
+                val owner = doc.getString("humanUserId") ?: return
+                val profile = dao.getUserProfileByHumanUserId(owner) ?: return
+                dao.upsertTrainingPlan(TrainingPlan(
+                    id = doc.id, userId = profile.id, humanUserId = owner,
+                    templateId = dao.getTemplateByGlobalId(doc.getString("templateGlobalId") ?: "")?.id ?: 0,
+                    templateGlobalId = doc.getString("templateGlobalId") ?: "", routineName = doc.getString("routineName") ?: "Workout",
+                    firstEpochDay = doc.getLong("firstEpochDay") ?: 0, preferredMinuteOfDay = doc.getLong("preferredMinuteOfDay")?.toInt(),
+                    weekdaysMask = doc.getLong("weekdaysMask")?.toInt() ?: 0, recurrenceEndEpochDay = doc.getLong("recurrenceEndEpochDay"),
+                    createdAt = doc.getLong("createdAt") ?: now, updatedAt = doc.getLong("updatedAt") ?: now,
+                    globalId = doc.id, revision = doc.getLong("revision") ?: 1, deletedAt = doc.getLong("deletedAt"),
+                    syncStatus = "SYNCED", lastSyncedAt = now, originDeviceId = doc.getString("originDeviceId") ?: ""
+                ))
+            }
+            "PLANNED_WORKOUT" -> {
+                val owner = doc.getString("humanUserId") ?: return
+                val profile = dao.getUserProfileByHumanUserId(owner) ?: return
+                dao.upsertPlannedWorkout(PlannedWorkout(
+                    id = doc.id, seriesId = doc.getString("seriesId") ?: return, userId = profile.id, humanUserId = owner,
+                    templateId = dao.getTemplateByGlobalId(doc.getString("templateGlobalId") ?: "")?.id ?: 0,
+                    templateGlobalId = doc.getString("templateGlobalId") ?: "", routineName = doc.getString("routineName") ?: "Workout",
+                    scheduledEpochDay = doc.getLong("scheduledEpochDay") ?: return, originalEpochDay = doc.getLong("originalEpochDay") ?: 0,
+                    preferredMinuteOfDay = doc.getLong("preferredMinuteOfDay")?.toInt(), status = doc.getString("status") ?: "PLANNED",
+                    completedAt = doc.getLong("completedAt"), linkedSessionId = doc.getLong("linkedSessionId")?.toInt(),
+                    reminderEnabled = doc.getBoolean("reminderEnabled") ?: false, detachedFromSeries = doc.getBoolean("detachedFromSeries") ?: false,
+                    createdAt = doc.getLong("createdAt") ?: now, updatedAt = doc.getLong("updatedAt") ?: now,
+                    globalId = doc.id, revision = doc.getLong("revision") ?: 1, deletedAt = doc.getLong("deletedAt"),
+                    syncStatus = "SYNCED", lastSyncedAt = now, originDeviceId = doc.getString("originDeviceId") ?: ""
+                ))
+            }
         }
     }
 
@@ -1161,6 +1310,41 @@ class SyncEngineImpl(
                 )
                 dao.insertLoggedSet(updated)
                 resolvePendingDependencies(updated.globalId, dao)
+            }
+            "TRAINING_PLAN" -> {
+                val local = localEntity as TrainingPlan
+                dao.upsertTrainingPlan(local.copy(
+                    templateGlobalId = doc.getString("templateGlobalId") ?: local.templateGlobalId,
+                    routineName = doc.getString("routineName") ?: local.routineName,
+                    firstEpochDay = doc.getLong("firstEpochDay") ?: local.firstEpochDay,
+                    preferredMinuteOfDay = doc.getLong("preferredMinuteOfDay")?.toInt(),
+                    weekdaysMask = doc.getLong("weekdaysMask")?.toInt() ?: local.weekdaysMask,
+                    recurrenceEndEpochDay = doc.getLong("recurrenceEndEpochDay"), updatedAt = doc.getLong("updatedAt") ?: now,
+                    revision = doc.getLong("revision") ?: local.revision, deletedAt = doc.getLong("deletedAt"),
+                    syncStatus = "SYNCED", lastSyncedAt = now,
+                    originDeviceId = doc.getString("originDeviceId") ?: local.originDeviceId
+                ))
+            }
+            "PLANNED_WORKOUT" -> {
+                val local = localEntity as PlannedWorkout
+                val remoteStatus = doc.getString("status") ?: "PLANNED"
+                if (local.status == "COMPLETED" && remoteStatus != "COMPLETED") return
+                dao.upsertPlannedWorkout(local.copy(
+                    seriesId = doc.getString("seriesId") ?: local.seriesId,
+                    templateGlobalId = doc.getString("templateGlobalId") ?: local.templateGlobalId,
+                    routineName = doc.getString("routineName") ?: local.routineName,
+                    scheduledEpochDay = doc.getLong("scheduledEpochDay") ?: local.scheduledEpochDay,
+                    originalEpochDay = doc.getLong("originalEpochDay") ?: local.originalEpochDay,
+                    preferredMinuteOfDay = doc.getLong("preferredMinuteOfDay")?.toInt(), status = remoteStatus,
+                    completedAt = doc.getLong("completedAt") ?: local.completedAt,
+                    linkedSessionId = doc.getLong("linkedSessionId")?.toInt() ?: local.linkedSessionId,
+                    reminderEnabled = doc.getBoolean("reminderEnabled") ?: local.reminderEnabled,
+                    detachedFromSeries = doc.getBoolean("detachedFromSeries") ?: local.detachedFromSeries,
+                    updatedAt = doc.getLong("updatedAt") ?: now, revision = doc.getLong("revision") ?: local.revision,
+                    deletedAt = if (local.status == "COMPLETED") null else doc.getLong("deletedAt"),
+                    syncStatus = "SYNCED", lastSyncedAt = now,
+                    originDeviceId = doc.getString("originDeviceId") ?: local.originDeviceId
+                ))
             }
         }
     }

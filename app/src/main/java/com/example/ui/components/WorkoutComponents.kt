@@ -35,6 +35,7 @@ fun RoutineCard(
     routineExercises: List<Exercise>,
     templateDetails: List<TemplateExerciseState>,
     onStart: () -> Unit,
+    onSchedule: () -> Unit = {},
     onEdit: () -> Unit,
     onDuplicate: () -> Unit,
     onDelete: () -> Unit,
@@ -136,6 +137,9 @@ fun RoutineCard(
                 Icon(Icons.Default.PlayArrow, contentDescription = "Start Routine")
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("Start Session", fontWeight = FontWeight.Bold)
+            }
+            OutlinedButton(onClick = onSchedule, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                Text("Schedule")
             }
         }
     }

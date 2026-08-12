@@ -79,6 +79,14 @@ class ActiveWorkoutViewModel(
     private var backupSaveJob: kotlinx.coroutines.Job? = null
     private val saveMutex = kotlinx.coroutines.sync.Mutex()
 
+    private suspend fun snapshotWorkoutOwner(): Pair<String, String> {
+        val userId = authViewModel.activeUserId.value
+        val profileHumanId = repository.dao.getUserProfile(userId)?.humanUserId
+        val humanId = profileHumanId?.takeIf { com.example.data.isValidAuthoritativeHumanId(it) }
+            ?: com.example.core.identity.HumanUserIdGenerator.getOrGenerateOfflineHumanId(context)
+        return userId to humanId
+    }
+
     init {
         // 1. Auto-save active workout state changes to Database Backup
         viewModelScope.launch {
@@ -96,6 +104,7 @@ class ActiveWorkoutViewModel(
                             }
                         }
                         lastSavedState = null
+                        com.example.service.workout.WorkoutExecutionServiceController.stop(context)
                     }
                 } else {
                     triggerBackupSave(state)
@@ -151,6 +160,7 @@ class ActiveWorkoutViewModel(
                 )
                 repository.saveActiveWorkoutBackup(backup)
                 lastSavedState = state
+                com.example.service.workout.WorkoutExecutionServiceController.start(context, state.activeSessionId)
             } catch (e: Exception) {
                 android.util.Log.e("ActiveWorkoutVM", "Failed to save active workout backup", e)
             }
@@ -212,6 +222,10 @@ class ActiveWorkoutViewModel(
                     val isRestTimerPaused = recoveryObj?.optBoolean("isRestTimerPaused", false) ?: false
                     val isMetric = recoveryObj?.optBoolean("isMetric", true) ?: true
                     val stateVersion = recoveryObj?.optInt("stateVersion", 1) ?: 1
+                    val ownerUserId = recoveryObj?.optString("workoutOwnerUserId")?.takeIf { it.isNotBlank() } ?: "offline"
+                    val ownerHumanUserId = recoveryObj?.optString("workoutOwnerHumanUserId")?.takeIf { com.example.data.isValidAuthoritativeHumanId(it) }
+                        ?: com.example.core.identity.HumanUserIdGenerator.getOrGenerateOfflineHumanId(context)
+                    val plannedOccurrenceId = recoveryObj?.optString("plannedOccurrenceId")?.takeIf { it.isNotBlank() }
 
                     val state = ActiveWorkoutState(
                         templateId = backup.templateId,
@@ -227,7 +241,10 @@ class ActiveWorkoutViewModel(
                         restTimerDuration = restTimerDuration,
                         isRestTimerPaused = isRestTimerPaused,
                         isMetric = isMetric,
-                        stateVersion = stateVersion
+                        stateVersion = stateVersion,
+                        workoutOwnerUserId = ownerUserId,
+                        workoutOwnerHumanUserId = ownerHumanUserId,
+                        plannedOccurrenceId = plannedOccurrenceId
                     )
                     
                     _activeWorkoutState.value = state
@@ -274,6 +291,7 @@ class ActiveWorkoutViewModel(
             }
             lastSavedState = null
             _activeWorkoutState.value = null
+            com.example.service.workout.WorkoutExecutionServiceController.stop(context)
             _workoutRecoveryState.value = WorkoutRecoveryState.None
             skipRestTimer()
         }
@@ -418,6 +436,9 @@ class ActiveWorkoutViewModel(
                 put("isRestTimerPaused", state.isRestTimerPaused)
                 put("isMetric", state.isMetric)
                 put("stateVersion", state.stateVersion)
+                put("workoutOwnerUserId", state.workoutOwnerUserId)
+                put("workoutOwnerHumanUserId", state.workoutOwnerHumanUserId)
+                put("plannedOccurrenceId", state.plannedOccurrenceId ?: "")
                 _restTimeRemaining.value?.let {
                     put("restTimerRemainingAtSave", it)
                 }
@@ -615,6 +636,7 @@ class ActiveWorkoutViewModel(
     fun startCasualWorkout() {
         viewModelScope.launch {
             val startTime = System.currentTimeMillis()
+            val owner = snapshotWorkoutOwner()
             _activeWorkoutState.value = ActiveWorkoutState(
                 templateId = null,
                 templateName = "Log a Workout",
@@ -622,15 +644,22 @@ class ActiveWorkoutViewModel(
                 exercises = emptyList(),
                 sets = emptyMap(),
                 exerciseMetadata = emptyMap(),
-                workoutSource = "CASUAL"
+                workoutSource = "CASUAL",
+                workoutOwnerUserId = owner.first,
+                workoutOwnerHumanUserId = owner.second
             )
             _navigateToActiveWorkoutEvent.emit(Unit)
         }
     }
 
-    fun startWorkout(template: WorkoutTemplate?) {
+    fun startWorkout(template: WorkoutTemplate?, plannedOccurrenceId: String? = null) {
+        if (_activeWorkoutState.value != null) {
+            viewModelScope.launch { _navigateToActiveWorkoutEvent.emit(Unit) }
+            return
+        }
         viewModelScope.launch {
             val startTime = System.currentTimeMillis()
+            val owner = snapshotWorkoutOwner()
             val templateName = template?.name ?: "Custom Workout"
             val templateId = template?.id
 
@@ -727,7 +756,10 @@ class ActiveWorkoutViewModel(
                 startTime = startTime,
                 exercises = activeExercises,
                 sets = activeSetsMap,
-                exerciseMetadata = exerciseMetadata
+                exerciseMetadata = exerciseMetadata,
+                workoutOwnerUserId = owner.first,
+                workoutOwnerHumanUserId = owner.second,
+                plannedOccurrenceId = plannedOccurrenceId
             )
             _navigateToActiveWorkoutEvent.emit(Unit)
         }
@@ -1106,7 +1138,8 @@ class ActiveWorkoutViewModel(
                         templateName = currentState.templateName,
                         startTime = currentState.startTime,
                         endTime = endTime,
-                        userId = authViewModel.activeUserId.value
+                        userId = currentState.workoutOwnerUserId,
+                        humanUserId = currentState.workoutOwnerHumanUserId
                     )
 
                     android.util.Log.d("ActiveWorkoutVM", "[COMPLETION] Final set persistence started...")
@@ -1163,6 +1196,10 @@ class ActiveWorkoutViewModel(
                 }
 
                 android.util.Log.d("ActiveWorkoutVM", "[COMPLETION] Workout persistence succeeded. Assigned Session ID: $sessionId")
+                currentState.plannedOccurrenceId?.let {
+                    repository.completePlannedWorkout(it, currentState.workoutOwnerUserId, System.currentTimeMillis(), sessionId)
+                    com.example.planner.PlannerReminderScheduler.cancel(context, it)
+                }
                 
                 clearRestGuide()
                 android.util.Log.d("ActiveWorkoutVM", "[COMPLETION] Rest guide cleared.")
@@ -1172,6 +1209,7 @@ class ActiveWorkoutViewModel(
                 lastSavedState = null
 
                 _activeWorkoutState.value = null
+                com.example.service.workout.WorkoutExecutionServiceController.stop(context)
                 android.util.Log.d("ActiveWorkoutVM", "[COMPLETION] Active workout state cleared.")
 
                 _activeWorkoutEvents.emit(ActiveWorkoutEvent.WorkoutCompleted(sessionId.toLong()))
@@ -1189,5 +1227,6 @@ class ActiveWorkoutViewModel(
     fun cancelActiveWorkout() {
         android.util.Log.d("ActiveWorkoutVM", "[COMPLETION] Cancelling active workout.")
         _activeWorkoutState.value = null
+        com.example.service.workout.WorkoutExecutionServiceController.stop(context)
     }
 }
