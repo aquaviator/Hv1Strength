@@ -5,6 +5,19 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface StrengthDao {
+    @Query("SELECT (SELECT COUNT(*) FROM body_weight WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM tape_measurement WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM workout_template WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM workout_session WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM logged_set WHERE humanUserId = :humanId) + (SELECT COUNT(*) FROM exercise WHERE isCustom = 1 AND humanUserId = :humanId) + (SELECT COUNT(*) FROM training_plan WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM planned_workout WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM command_queue WHERE humanUserId = :humanId) + (SELECT COUNT(*) FROM active_workout_backup)")
+    suspend fun countMeaningfulOwnedRecords(profileId: String, humanId: String): Int
+
+    @Query("SELECT COUNT(*) FROM user_profile WHERE deletedAt IS NULL AND humanUserId != '' AND humanUserId != :authoritativeHumanId")
+    suspend fun countOtherProfiles(authoritativeHumanId: String): Int
+
+    @Transaction
+    suspend fun replaceEmptyOfflinePlaceholder(profile: UserProfile, offlineHumanId: String) {
+        check(countMeaningfulOwnedRecords("offline", offlineHumanId) == 0) { "Local profile contains meaningful data" }
+        deleteUserProfile("offline")
+        insertUserProfile(profile)
+    }
+
     @Query("SELECT * FROM user_profile WHERE humanUserId = :humanUserId AND deletedAt IS NULL LIMIT 1")
     suspend fun getUserProfileByHumanUserId(humanUserId: String): UserProfile?
 

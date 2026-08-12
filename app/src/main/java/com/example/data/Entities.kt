@@ -5,6 +5,8 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.core.versioning.VersionedEntity
 
+data class LocalOwnershipSummary(val meaningfulRecordCount: Int, val otherProfileCount: Int)
+
 @Entity(tableName = "user_profile")
 data class UserProfile(
     @PrimaryKey val id: String, // "offline" or Google User ID

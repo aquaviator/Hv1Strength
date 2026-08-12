@@ -19,12 +19,36 @@ sealed class AuthState {
     object Loading : AuthState()
     data class Authenticated(val profile: UserProfile) : AuthState()
     object Offline : AuthState()
-    data class Error(val message: String) : AuthState()
+    data class Error(
+        val message: String,
+        val kind: AuthErrorKind = AuthErrorKind.UNKNOWN,
+        val canContinueOffline: Boolean = false
+    ) : AuthState()
 }
+
+enum class AuthErrorKind { PROFILE_CONFLICT, APP_CHECK, NETWORK, TRUSTED_IDENTITY, UNKNOWN }
 
 internal sealed interface ProfileHandoffResolution {
     data class Ready(val profile: UserProfile) : ProfileHandoffResolution
     data object IdentityConflict : ProfileHandoffResolution
+}
+
+internal enum class LocalProfileDisposition { MATCHING, EMPTY_PLACEHOLDER, MEANINGFUL_DATA, AMBIGUOUS }
+
+internal fun classifyLocalProfileHandoff(
+    authoritativeHumanUserId: String,
+    existingProfile: UserProfile?,
+    offlineProfile: UserProfile?,
+    persistedHumanUserId: String?,
+    ownership: LocalOwnershipSummary
+): LocalProfileDisposition {
+    val localIds = listOfNotNull(existingProfile?.humanUserId, offlineProfile?.humanUserId, persistedHumanUserId)
+        .filter { it.isNotBlank() && it != authoritativeHumanUserId }
+        .distinct()
+    if (localIds.isEmpty()) return LocalProfileDisposition.MATCHING
+    if (localIds.size > 1 || ownership.otherProfileCount > 1) return LocalProfileDisposition.AMBIGUOUS
+    return if (ownership.meaningfulRecordCount == 0) LocalProfileDisposition.EMPTY_PLACEHOLDER
+    else LocalProfileDisposition.MEANINGFUL_DATA
 }
 
 internal fun appCheckIdentityGate(state: com.example.AppCheckInitializationState): String? = when (state) {
@@ -136,7 +160,7 @@ class AuthRepository(
                     appCheckIdentityGate(com.example.HumanStrengthApplication.appCheckInitializationState)?.let { message ->
                         Log.e(TAG, "stage=identity_gate result=APP_CHECK_UNAVAILABLE")
                         clearAuthoritativeIdentityState()
-                        _authState.value = AuthState.Error(message)
+                        _authState.value = AuthState.Error(message, AuthErrorKind.APP_CHECK)
                         return@launch
                     }
                     Log.i(TAG, "stage=identity_request result=STARTED")
@@ -145,26 +169,50 @@ class AuthRepository(
                     val identity = (identityResult as? HumanIdentityResult.Success)?.identity
                     if (identity == null) {
                         clearAuthoritativeIdentityState()
-                        _authState.value = AuthState.Error(identityResult.safeMessage())
+                        _authState.value = AuthState.Error(identityResult.safeMessage(), AuthErrorKind.TRUSTED_IDENTITY)
                         return@launch
                     }
                     val existingProfile = strengthRepository.getUserProfile(userId)
+                    val offlineProfile = strengthRepository.getUserProfile("offline")
+                    val persistedHumanId = prefs.getString("auth_human_user_id", null)
+                    val mismatchedProfile = existingProfile?.takeIf { it.humanUserId.isNotBlank() && it.humanUserId != identity.humanUserId }
+                        ?: offlineProfile?.takeIf { it.humanUserId.isNotBlank() && it.humanUserId != identity.humanUserId }
+                    val ownership = mismatchedProfile?.let {
+                        strengthRepository.inspectLocalOwnership(it.id, it.humanUserId, identity.humanUserId)
+                    } ?: LocalOwnershipSummary(0, strengthRepository.dao.countOtherProfiles(identity.humanUserId))
+                    val disposition = classifyLocalProfileHandoff(
+                        identity.humanUserId, existingProfile, offlineProfile, persistedHumanId, ownership
+                    )
+                    Log.i(TAG, "stage=local_profile result=$disposition")
+                    if (disposition == LocalProfileDisposition.MEANINGFUL_DATA || disposition == LocalProfileDisposition.AMBIGUOUS) {
+                        _authState.value = AuthState.Error(
+                            "Sign-in succeeded, but this device contains data belonging to a different local profile. Nothing was deleted or uploaded.",
+                            AuthErrorKind.PROFILE_CONFLICT, offlineProfile != null
+                        )
+                        return@launch
+                    }
                     val profile = (resolveAuthoritativeProfileHandoff(
                         userId, identity, firebaseUser.displayName, firebaseUser.email,
-                        firebaseUser.photoUrl?.toString(), existingProfile,
-                        strengthRepository.getUserProfile("offline"),
-                        prefs.getString("auth_human_user_id", null)
+                        firebaseUser.photoUrl?.toString(),
+                        existingProfile?.takeIf { it.humanUserId.isBlank() || it.humanUserId == identity.humanUserId },
+                        offlineProfile, null
                     ) as? ProfileHandoffResolution.Ready)?.profile
                     if (profile == null) {
                         clearAuthoritativeIdentityState()
-                        _authState.value = AuthState.Error("Human identity binding conflict")
+                        _authState.value = AuthState.Error("The trusted account could not be matched to a safe local profile.", AuthErrorKind.PROFILE_CONFLICT)
                         return@launch
                     }
 
-                    strengthRepository.insertUserProfile(profile)
+                    if (disposition == LocalProfileDisposition.EMPTY_PLACEHOLDER && offlineProfile != null) {
+                        strengthRepository.adoptEmptyOfflinePlaceholder(profile, offlineProfile.humanUserId)
+                    } else {
+                        strengthRepository.insertUserProfile(profile)
+                    }
                     strengthRepository.linkExistingDataToUser(userId, identity.humanUserId)
                     persistGoogleAuthentication(profile, identity.schemaVersion)
+                    Log.i(TAG, "stage=profile_persistence result=SUCCESS")
                     _authState.value = AuthState.Authenticated(profile)
+                    Log.i(TAG, "stage=authentication result=AUTHENTICATED")
                     com.example.core.sync.SyncScheduler.scheduleImmediate(context)
                     com.example.core.sync.SyncScheduler.schedulePeriodic(context)
                 } catch (e: Exception) {
@@ -282,7 +330,7 @@ class AuthRepository(
             appCheckIdentityGate(com.example.HumanStrengthApplication.appCheckInitializationState)?.let { message ->
                 Log.e(TAG, "stage=identity_gate result=APP_CHECK_UNAVAILABLE")
                 clearAuthoritativeIdentityState()
-                _authState.value = AuthState.Error(message)
+                _authState.value = AuthState.Error(message, AuthErrorKind.APP_CHECK)
                 return@withContext null
             }
             Log.i(TAG, "stage=identity_request result=STARTED")
@@ -291,27 +339,55 @@ class AuthRepository(
             val identity = (identityResult as? HumanIdentityResult.Success)?.identity
             if (identity == null) {
                 clearAuthoritativeIdentityState()
-                _authState.value = AuthState.Error(identityResult.safeMessage())
+                _authState.value = AuthState.Error(identityResult.safeMessage(), AuthErrorKind.TRUSTED_IDENTITY)
+                return@withContext null
+            }
+            val offlineProfile = strengthRepository.getUserProfile("offline")
+            val persistedHumanId = prefs.getString("auth_human_user_id", null)
+            val mismatchedProfile = existingProfile?.takeIf { it.humanUserId.isNotBlank() && it.humanUserId != identity.humanUserId }
+                ?: offlineProfile?.takeIf { it.humanUserId.isNotBlank() && it.humanUserId != identity.humanUserId }
+            val ownership = mismatchedProfile?.let {
+                strengthRepository.inspectLocalOwnership(it.id, it.humanUserId, identity.humanUserId)
+            } ?: LocalOwnershipSummary(0, strengthRepository.dao.countOtherProfiles(identity.humanUserId))
+            val disposition = classifyLocalProfileHandoff(
+                identity.humanUserId, existingProfile, offlineProfile, persistedHumanId, ownership
+            )
+            Log.i(TAG, "stage=local_profile result=$disposition")
+            if (disposition == LocalProfileDisposition.MEANINGFUL_DATA || disposition == LocalProfileDisposition.AMBIGUOUS) {
+                _authState.value = AuthState.Error(
+                    message = if (disposition == LocalProfileDisposition.AMBIGUOUS)
+                        "This device contains multiple local profiles. Sign-in succeeded, but synchronization is paused until the profiles are reviewed."
+                    else "Sign-in succeeded, but this device already contains data belonging to a different local profile. Nothing was deleted or uploaded.",
+                    kind = AuthErrorKind.PROFILE_CONFLICT,
+                    canContinueOffline = offlineProfile != null
+                )
                 return@withContext null
             }
             val profile = (resolveAuthoritativeProfileHandoff(
-                fUid, identity, displayName, email, photoUrl, existingProfile,
-                strengthRepository.getUserProfile("offline"), prefs.getString("auth_human_user_id", null)
+                fUid, identity, displayName, email, photoUrl,
+                existingProfile?.takeIf { it.humanUserId.isBlank() || it.humanUserId == identity.humanUserId },
+                offlineProfile, null
             ) as? ProfileHandoffResolution.Ready)?.profile
             if (profile == null) {
                 clearAuthoritativeIdentityState()
-                _authState.value = AuthState.Error("Human identity binding conflict")
+                _authState.value = AuthState.Error("The trusted account could not be matched to a safe local profile.", AuthErrorKind.PROFILE_CONFLICT)
                 return@withContext null
             }
 
-            // Save to room
-            strengthRepository.insertUserProfile(profile)
+            // Save only after the ownership decision. Empty offline placeholders are replaced atomically.
+            if (disposition == LocalProfileDisposition.EMPTY_PLACEHOLDER && offlineProfile != null) {
+                strengthRepository.adoptEmptyOfflinePlaceholder(profile, offlineProfile.humanUserId)
+            } else {
+                strengthRepository.insertUserProfile(profile)
+            }
             strengthRepository.linkExistingDataToUser(userId, identity.humanUserId)
 
             // Save to shared preferences
             persistGoogleAuthentication(profile, identity.schemaVersion)
 
+            Log.i(TAG, "stage=profile_persistence result=SUCCESS")
             _authState.value = AuthState.Authenticated(profile)
+            Log.i(TAG, "stage=authentication result=AUTHENTICATED")
             com.example.core.sync.SyncScheduler.scheduleImmediate(context)
             com.example.core.sync.SyncScheduler.schedulePeriodic(context)
             return@withContext profile
@@ -319,7 +395,7 @@ class AuthRepository(
             throw e
         } catch (e: com.google.firebase.FirebaseNetworkException) {
             Log.e(TAG, "Google Sign-In network failure", e)
-            _authState.value = AuthState.Error("Network unavailable. Check your connection and try again.")
+            _authState.value = AuthState.Error("Network unavailable. Check your connection and try again.", AuthErrorKind.NETWORK)
             return@withContext null
         } catch (e: com.google.firebase.auth.FirebaseAuthException) {
             Log.e(TAG, "Firebase rejected Google authentication (${e.errorCode})")

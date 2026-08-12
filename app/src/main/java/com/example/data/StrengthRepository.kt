@@ -10,6 +10,27 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
 
     private fun deviceId(): String = deviceIdOverride ?: DeviceIdGenerator.getOrGenerateDeviceId()
 
+    suspend fun inspectLocalOwnership(profileId: String, humanId: String, authoritativeHumanId: String) =
+        LocalOwnershipSummary(
+            meaningfulRecordCount = dao.countMeaningfulOwnedRecords(profileId, humanId),
+            otherProfileCount = dao.countOtherProfiles(authoritativeHumanId)
+        )
+
+    suspend fun adoptEmptyOfflinePlaceholder(profile: UserProfile, offlineHumanId: String) {
+        val now = System.currentTimeMillis()
+        val finalProfile = profile.copy(
+            globalId = profile.globalId.ifEmpty { GlobalIdGenerator.generate("profile") },
+            updatedAt = now,
+            revision = maxOf(1, profile.revision),
+            syncStatus = "PENDING_UPLOAD",
+            deletedAt = null,
+            originDeviceId = deviceId()
+        )
+        dao.replaceEmptyOfflinePlaceholder(finalProfile, offlineHumanId)
+        enqueueCommand("SettingsUpdated", "USER_PROFILE", finalProfile.globalId, finalProfile.humanUserId,
+            "{\"globalId\":\"${finalProfile.globalId}\"}")
+    }
+
     fun getPlannedWorkoutsForUser(userId: String): Flow<List<PlannedWorkout>> = dao.getPlannedWorkoutsForUser(userId)
     suspend fun getPlannedWorkout(id: String): PlannedWorkout? = dao.getPlannedWorkout(id)
     suspend fun getTrainingPlan(id: String): TrainingPlan? = dao.getTrainingPlan(id)

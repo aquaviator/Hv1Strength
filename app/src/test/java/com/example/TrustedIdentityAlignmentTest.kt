@@ -26,6 +26,63 @@ class TrustedIdentityAlignmentTest {
     private val humanId = "human_0123456789abcdef0123456789abcdef"
     private val identity = AuthoritativeHumanIdentity(humanId, "ACTIVE", 1)
 
+    @Test fun emptyPlaceholderCanBeAdopted() {
+        val offline = UserProfile("offline", humanUserId = "human_offlineusr", isOfflineUser = true)
+        assertEquals(LocalProfileDisposition.EMPTY_PLACEHOLDER,
+            classifyLocalProfileHandoff(humanId, null, offline, null, LocalOwnershipSummary(0, 1)))
+    }
+
+    @Test fun meaningfulLocalDataAlwaysBlocksAutomaticAdoption() {
+        val offline = UserProfile("offline", humanUserId = "human_offlineusr", isOfflineUser = true)
+        for (count in listOf(1, 2, 20)) {
+            assertEquals(LocalProfileDisposition.MEANINGFUL_DATA,
+                classifyLocalProfileHandoff(humanId, null, offline, null, LocalOwnershipSummary(count, 1)))
+        }
+    }
+
+    @Test fun matchingIdentityIsIdempotent() {
+        val matching = profile(humanId)
+        repeat(2) {
+            assertEquals(LocalProfileDisposition.MATCHING,
+                classifyLocalProfileHandoff(humanId, matching, null, humanId, LocalOwnershipSummary(0, 0)))
+        }
+    }
+
+    @Test fun multipleDifferentProfilesFailClosed() {
+        val offline = UserProfile("offline", humanUserId = "human_offlineusr", isOfflineUser = true)
+        assertEquals(LocalProfileDisposition.AMBIGUOUS,
+            classifyLocalProfileHandoff(humanId, null, offline, "human_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", LocalOwnershipSummary(0, 2)))
+    }
+
+    @Test fun emptyPlaceholderReplacementIsTransactional() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val database = Room.inMemoryDatabaseBuilder(context, StrengthDatabase::class.java)
+            .allowMainThreadQueries().build()
+        try {
+            val dao = database.strengthDao()
+            dao.insertUserProfile(UserProfile("offline", humanUserId = "human_offlineusr", isOfflineUser = true))
+            dao.replaceEmptyOfflinePlaceholder(profile(humanId), "human_offlineusr")
+            assertNull(dao.getUserProfile("offline"))
+            assertEquals(humanId, dao.getUserProfile(uid)?.humanUserId)
+        } finally { database.close() }
+    }
+
+    @Test fun failedReplacementPreservesMeaningfulOwner() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val database = Room.inMemoryDatabaseBuilder(context, StrengthDatabase::class.java)
+            .allowMainThreadQueries().build()
+        try {
+            val dao = database.strengthDao()
+            dao.insertUserProfile(UserProfile("offline", humanUserId = "human_offlineusr", isOfflineUser = true))
+            dao.insertBodyWeight(BodyWeight(weight = 80f, date = 1, userId = "offline", humanUserId = "human_offlineusr"))
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking { dao.replaceEmptyOfflinePlaceholder(profile(humanId), "human_offlineusr") }
+            }
+            assertNotNull(dao.getUserProfile("offline"))
+            assertNull(dao.getUserProfile(uid))
+        } finally { database.close() }
+    }
+
     @Test fun successfulResolutionRequiresCompleteBackendResponse() {
         val result = parseHumanIdentityResponse(mapOf("humanUserId" to humanId, "status" to "ACTIVE", "schemaVersion" to 1))
             as HumanIdentityResult.Success
