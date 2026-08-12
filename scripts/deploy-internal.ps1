@@ -5,12 +5,11 @@ param(
     [string]$KeystorePath =
         "D:\App-Security-Keys\PlayStore\my-upload-key.jks",
 
-    [string]$CredentialsPath =
-        "D:\App-Security-Keys\PlayStore\passwords.txt",
-
     [switch]$SkipDebugBuild,
 
     [switch]$RunTests,
+
+    [switch]$VerifyRemoteSync,
 
     [switch]$VersionCheckOnly
 )
@@ -35,7 +34,7 @@ trap {
     }
 
     Write-Host ""
-    Write-Host "DEPLOYMENT STOPPED: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "INTERNAL RELEASE BUILD STOPPED: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
 
@@ -47,6 +46,12 @@ if (-not (Test-Path -LiteralPath $versioningHelper)) {
 }
 
 . $versioningHelper
+
+$policyHelper = Join-Path $PSScriptRoot "internal-release-policy.ps1"
+if (-not (Test-Path -LiteralPath $policyHelper)) {
+    throw "Missing internal release policy helper: $policyHelper"
+}
+. $policyHelper
 
 # ============================================================
 # Helpers
@@ -197,12 +202,6 @@ Write-OK "Java check: OK"
 
 Write-Step "Checking Git state"
 
-git fetch origin
-
-if ($LASTEXITCODE -ne 0) {
-    Fail "git fetch origin failed."
-}
-
 $branch =
     (git branch --show-current).Trim()
 
@@ -210,57 +209,32 @@ if (-not $branch) {
     Fail "Could not determine the current Git branch."
 }
 
-# Allows Version3, Version4, Version5 etc.
-if ($branch -notmatch '^Version\d+$') {
-    Fail "Deployment must run from a Version branch. Current branch: '$branch'."
-}
-
-$remoteBranch =
-    "origin/$branch"
-
-git rev-parse --verify $remoteBranch 2>$null |
-    Out-Null
-
-if ($LASTEXITCODE -ne 0) {
-    Fail "Remote branch '$remoteBranch' does not exist."
+if (-not (Test-InternalReleaseBranch $branch)) {
+    Fail "Internal release build must run from a Version<number> or release/strength-v<version>-rc<number> branch. Current branch: '$branch'."
 }
 
 $localHead =
     (git rev-parse HEAD).Trim()
 
-$remoteHead =
-    (git rev-parse $remoteBranch).Trim()
-
-if ($localHead -ne $remoteHead) {
-
-    Write-Host "Local:  $localHead"
-    Write-Host "Remote: $remoteHead"
-
-    Fail "Local $branch does not match $remoteBranch. Push or synchronise first."
+if ($VerifyRemoteSync) {
+    git fetch origin
+    if ($LASTEXITCODE -ne 0) { Fail "git fetch origin failed." }
+    $remoteBranch = "origin/$branch"
+    git rev-parse --verify $remoteBranch 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { Fail "Remote branch '$remoteBranch' does not exist." }
+    $remoteHead = (git rev-parse $remoteBranch).Trim()
+    if ($localHead -ne $remoteHead) { Fail "Local $branch does not match $remoteBranch." }
 }
 
-# Ignore untracked local tooling, but tracked files must be clean.
-$trackedChanges =
-    @(git status --porcelain --untracked-files=no)
-
-if ($trackedChanges.Count -gt 0) {
-
-    Write-Host ""
-    Write-Host "Tracked changes:"
-
-    $trackedChanges |
-        ForEach-Object {
-            Write-Host "  $_"
-        }
-
-    Fail "Tracked working-tree changes exist. Commit or restore them first."
-}
+$trackedFiles = @(git diff --name-only)
+Assert-InternalReleaseTrackedChanges -ChangedFiles $trackedFiles
+$diagnosticPath = Join-Path $repoRoot 'app/diagnostic.txt'
+$diagnosticHashBefore = (Get-FileHash -LiteralPath $diagnosticPath -Algorithm SHA256).Hash
 
 Write-Host "Branch: $branch"
-Write-Host "Remote: $remoteBranch"
 Write-Host "HEAD:   $localHead"
 
-Write-OK "Git: clean and synchronised"
+Write-OK "Git: local release state accepted"
 
 $untracked =
     @(git ls-files --others --exclude-standard)
@@ -496,120 +470,11 @@ $env:KEYSTORE_PATH =
 
 Write-Host "Keystore: $resolvedKeystore"
 
-# ============================================================
-# Signing credentials
-# ============================================================
+# Signing credentials (inherited environment only)
 
 Write-Step "Checking signing credentials"
 
-if (
-    -not $env:STORE_PASSWORD -or
-    -not $env:KEY_PASSWORD
-) {
-
-    if (-not (
-        Test-Path `
-            -LiteralPath $CredentialsPath
-    )) {
-        Fail "Signing credentials file does not exist: $CredentialsPath"
-    }
-
-    foreach (
-        $line in
-        Get-Content -LiteralPath $CredentialsPath
-    ) {
-
-        $trimmed =
-            $line.Trim()
-
-        if (
-            -not $trimmed -or
-            $trimmed.StartsWith("#")
-        ) {
-            continue
-        }
-
-        # Supports:
-        #
-        # STORE_PASSWORD=value
-        #
-        if (
-            $trimmed -match
-            '^STORE_PASSWORD\s*=\s*(.*)$'
-        ) {
-
-            $value =
-                $matches[1].Trim()
-
-            $value =
-                $value.Trim('"').Trim("'")
-
-            $env:STORE_PASSWORD =
-                $value
-
-            continue
-        }
-
-        # Supports:
-        #
-        # KEY_PASSWORD=value
-        #
-        if (
-            $trimmed -match
-            '^KEY_PASSWORD\s*=\s*(.*)$'
-        ) {
-
-            $value =
-                $matches[1].Trim()
-
-            $value =
-                $value.Trim('"').Trim("'")
-
-            $env:KEY_PASSWORD =
-                $value
-
-            continue
-        }
-
-        # Supports:
-        #
-        # $env:STORE_PASSWORD = "value"
-        #
-        if (
-            $trimmed -match
-            '^\$env:STORE_PASSWORD\s*=\s*["''](.*)["'']$'
-        ) {
-
-            $env:STORE_PASSWORD =
-                $matches[1]
-
-            continue
-        }
-
-        # Supports:
-        #
-        # $env:KEY_PASSWORD = "value"
-        #
-        if (
-            $trimmed -match
-            '^\$env:KEY_PASSWORD\s*=\s*["''](.*)["'']$'
-        ) {
-
-            $env:KEY_PASSWORD =
-                $matches[1]
-
-            continue
-        }
-    }
-}
-
-if (-not $env:STORE_PASSWORD) {
-    Fail "STORE_PASSWORD was not found in the environment or credentials file."
-}
-
-if (-not $env:KEY_PASSWORD) {
-    Fail "KEY_PASSWORD was not found in the environment or credentials file."
-}
+Assert-SigningEnvironment @{ STORE_PASSWORD = $env:STORE_PASSWORD; KEY_PASSWORD = $env:KEY_PASSWORD }
 
 # Never print secret values.
 Write-OK "Signing credentials: present"
@@ -724,15 +589,19 @@ if ($stagedChanges.Count -gt 0) {
     Fail "Deployment unexpectedly staged tracked files: $($stagedChanges -join ', ')."
 }
 
-$finalTrackedFiles =
-    @(git diff --name-only)
+$finalTrackedFiles = @(git diff --name-only)
+Assert-DiagnosticUnchanged -ExpectedHash $diagnosticHashBefore -ActualHash (Get-FileHash -LiteralPath $diagnosticPath -Algorithm SHA256).Hash
+Assert-InternalReleaseTrackedChanges -ChangedFiles $finalTrackedFiles -AllowVersionFile
 
 if ($versionDecision.RequiresUpdate) {
     if (
         $finalTrackedFiles.Count -ne 1 -or
         $finalTrackedFiles[0] -ne "app/build.gradle.kts"
     ) {
-        Fail "Unexpected tracked files changed during deployment: $($finalTrackedFiles -join ', ')."
+        $unexpected = @($finalTrackedFiles | Where-Object { $_ -notin @('app/diagnostic.txt', 'app/build.gradle.kts') })
+        if ($unexpected.Count -gt 0 -or 'app/build.gradle.kts' -notin $finalTrackedFiles) {
+            Fail "Unexpected tracked files changed during internal release build: $($finalTrackedFiles -join ', ')."
+        }
     }
 
     $finalBuildGradle =
@@ -746,8 +615,8 @@ if ($versionDecision.RequiresUpdate) {
 
     Write-OK "Git contains only the expected uncommitted release version change."
 }
-elseif ($finalTrackedFiles.Count -gt 0) {
-    Fail "Deployment changed tracked repository files: $($finalTrackedFiles -join ', ')."
+elseif (@($finalTrackedFiles | Where-Object { $_ -ne 'app/diagnostic.txt' }).Count -gt 0) {
+    Fail "Internal release build changed tracked repository files: $($finalTrackedFiles -join ', ')."
 }
 else {
     Write-OK "Git remained clean; the target release version was already present."
@@ -761,7 +630,6 @@ Write-Step "Release ready"
 
 Write-Host ""
 Write-Host "Branch:       $branch"
-Write-Host "Remote:       $remoteBranch"
 Write-Host "Commit:       $localHead"
 Write-Host "Version code: $targetVersionCode"
 Write-Host "Version name: $targetVersionName"
@@ -773,7 +641,7 @@ Write-Host "Size:         $([math]::Round($aabFile.Length / 1MB, 2)) MB"
 Write-Host "Created:      $($aabFile.LastWriteTime)"
 
 Write-Host ""
-Write-OK "Release version prepared: $targetVersionCode / $targetVersionName"
+Write-OK "Internal release build prepared: $targetVersionCode / $targetVersionName"
 if ($versionDecision.RequiresUpdate) {
     Write-Warn "Tracked release version change pending commit: app/build.gradle.kts"
 }
@@ -781,5 +649,5 @@ else {
     Write-Host "Release version was already committed before this build."
 }
 Write-Host ""
-Write-Host "READY FOR GOOGLE PLAY INTERNAL TESTING" `
+Write-Host "AAB BUILT LOCALLY; NO PLAY UPLOAD WAS PERFORMED" `
     -ForegroundColor Green
