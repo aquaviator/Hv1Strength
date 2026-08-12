@@ -281,6 +281,8 @@ class StrengthViewModel(
         email: String?,
         photoUrl: String?
     ) = authViewModel.signInWithGoogle(idToken, displayName, email, photoUrl)
+    fun cancelAuthenticatedAccount() = authViewModel.cancelAuthenticatedAccount()
+    fun continueWithExistingLocalData() = authViewModel.continueWithExistingLocalData()
 
     // Delegated User Profile & Settings properties & functions
     val activeUserProfile = profileViewModel.activeUserProfile

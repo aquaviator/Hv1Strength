@@ -38,6 +38,13 @@ class AuthViewModel(
             authRepository.signInWithGoogle(idToken, displayName, email, photoUrl)
         }
     }
+
+    fun cancelAuthenticatedAccount() = viewModelScope.launch { authRepository.signOut(keepLocalData = true) }
+
+    fun continueWithExistingLocalData() = viewModelScope.launch {
+        authRepository.signOut(keepLocalData = true)
+        authRepository.signInAnonymously()
+    }
 }
 
 internal fun launchAuthentication(

@@ -29,6 +29,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -36,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.example.BuildConfig
 import com.example.ui.viewmodel.StrengthViewModel
 import com.example.data.AuthState
+import com.example.data.AuthErrorKind
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -90,6 +94,8 @@ fun WelcomeScreen(
             onNavigateToHome()
         }
     }
+
+    val repositoryError = authState as? AuthState.Error
 
     Box(
         modifier = Modifier
@@ -207,6 +213,54 @@ fun WelcomeScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    if (repositoryError != null) {
+        val title = when (repositoryError.kind) {
+            AuthErrorKind.PROFILE_CONFLICT -> "Local data needs attention"
+            AuthErrorKind.APP_CHECK -> "Device verification unavailable"
+            AuthErrorKind.NETWORK -> "Connection problem"
+            AuthErrorKind.TRUSTED_IDENTITY -> "Account verification incomplete"
+            AuthErrorKind.UNKNOWN -> "Sign-in could not finish"
+        }
+        AlertDialog(
+            modifier = Modifier.testTag("authentication_error_dialog"),
+            onDismissRequest = { },
+            title = { Text(title) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .semantics { liveRegion = LiveRegionMode.Assertive },
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(repositoryError.message, modifier = Modifier.testTag("authentication_error_message"))
+                    if (repositoryError.kind == AuthErrorKind.PROFILE_CONFLICT) {
+                        Text("Cloud synchronization is paused. Your existing data has not been deleted, changed, or uploaded.")
+                        Text("You can continue with the existing local profile, or cancel this account and use backup/export guidance from Settings.")
+                    }
+                }
+            },
+            confirmButton = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (repositoryError.canContinueOffline) {
+                        Button(
+                            onClick = viewModel::continueWithExistingLocalData,
+                            modifier = Modifier.fillMaxWidth().testTag("continue_existing_local_data")
+                        ) { Text("Continue offline with local data") }
+                    } else {
+                        Button(
+                            onClick = beginGoogleSignIn,
+                            modifier = Modifier.fillMaxWidth().testTag("retry_authentication")
+                        ) { Text("Retry") }
+                    }
+                    OutlinedButton(
+                        onClick = viewModel::cancelAuthenticatedAccount,
+                        modifier = Modifier.fillMaxWidth().testTag("cancel_authenticated_account")
+                    ) { Text("Cancel and sign out") }
+                }
+            }
+        )
     }
 
     // Google Sign-In Simulation Dialog for development / headless environments
