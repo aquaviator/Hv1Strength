@@ -35,6 +35,39 @@ internal sealed interface ProfileHandoffResolution {
 
 internal enum class LocalProfileDisposition { MATCHING, EMPTY_PLACEHOLDER, MEANINGFUL_DATA, AMBIGUOUS }
 
+/** Security classification for upgrading ownership created by historical Strength builds. */
+internal enum class LegacyProfileProof {
+    MATCHING_AUTHORITATIVE,
+    EMPTY_PLACEHOLDER,
+    VERIFIED_LEGACY_SAME_ACCOUNT,
+    UNVERIFIED_LEGACY,
+    MEANINGFUL_DIFFERENT_ACCOUNT,
+    AMBIGUOUS_MULTIPLE_PROFILES
+}
+
+internal fun classifyLegacyProfileProof(
+    currentFirebaseUid: String,
+    authoritativeHumanUserId: String,
+    legacyProfile: UserProfile?,
+    meaningfulRecordCount: Int,
+    otherProfileCount: Int,
+    restoredFromUnsignedBackup: Boolean = false
+): LegacyProfileProof {
+    if (otherProfileCount > 1) return LegacyProfileProof.AMBIGUOUS_MULTIPLE_PROFILES
+    if (meaningfulRecordCount == 0) return LegacyProfileProof.EMPTY_PLACEHOLDER
+    if (legacyProfile?.humanUserId == authoritativeHumanUserId) {
+        return LegacyProfileProof.MATCHING_AUTHORITATIVE
+    }
+    // firebaseUid is app-private historical authentication provenance. Email, googleUserId,
+    // unsigned backups, names and other user-editable fields deliberately do not qualify.
+    val storedUid = legacyProfile?.firebaseUid
+    if (!restoredFromUnsignedBackup && storedUid != null) {
+        return if (storedUid == currentFirebaseUid) LegacyProfileProof.VERIFIED_LEGACY_SAME_ACCOUNT
+        else LegacyProfileProof.MEANINGFUL_DIFFERENT_ACCOUNT
+    }
+    return LegacyProfileProof.UNVERIFIED_LEGACY
+}
+
 internal fun classifyLocalProfileHandoff(
     authoritativeHumanUserId: String,
     existingProfile: UserProfile?,

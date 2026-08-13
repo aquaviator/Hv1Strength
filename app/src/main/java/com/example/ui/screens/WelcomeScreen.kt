@@ -63,6 +63,8 @@ fun WelcomeScreen(
     
     var showSignInErrorDialog by remember { mutableStateOf(false) }
     var signInErrorMessage by remember { mutableStateOf("") }
+    var recoveryBackup by remember { mutableStateOf<String?>(null) }
+    var recoveryBackupError by remember { mutableStateOf<String?>(null) }
     val beginGoogleSignIn: () -> Unit = {
         coroutineScope.launch {
             try {
@@ -237,7 +239,7 @@ fun WelcomeScreen(
                     Text(repositoryError.message, modifier = Modifier.testTag("authentication_error_message"))
                     if (repositoryError.kind == AuthErrorKind.PROFILE_CONFLICT) {
                         Text("Cloud synchronization is paused. Your existing data has not been deleted, changed, or uploaded.")
-                        Text("You can continue with the existing local profile, or cancel this account and use backup/export guidance from Settings.")
+                        Text("You can continue with the existing local profile, create a backup, or cancel and sign out.")
                     }
                 }
             },
@@ -248,12 +250,54 @@ fun WelcomeScreen(
                             onClick = viewModel::continueWithExistingLocalData,
                             modifier = Modifier.fillMaxWidth().testTag("continue_existing_local_data")
                         ) { Text("Continue offline with local data") }
+                        OutlinedButton(
+                             onClick = {
+                                 coroutineScope.launch {
+                                     runCatching { viewModel.exportData() }
+                                         .onSuccess { backup -> runCatching { org.json.JSONObject(backup) }
+                                             .onSuccess { recoveryBackup = backup }
+                                             .onFailure { recoveryBackupError = "The backup could not be validated. No data was changed." }
+                                         }
+                                         .onFailure { recoveryBackupError = "The backup could not be created. No data was changed." }
+                                 }
+                             },
+                             modifier = Modifier.fillMaxWidth().testTag("backup_conflicting_local_data")
+                        ) { Text("Back up my data") }
+                        TextButton(
+                            onClick = beginGoogleSignIn,
+                            modifier = Modifier.fillMaxWidth().testTag("check_profile_again")
+                        ) { Text("Check again") }
                     } else {
                         Button(
                             onClick = beginGoogleSignIn,
                             modifier = Modifier.fillMaxWidth().testTag("retry_authentication")
                         ) { Text("Retry") }
                     }
+
+    recoveryBackup?.let { backup ->
+        AlertDialog(
+            onDismissRequest = { recoveryBackup = null },
+            title = { Text("Backup ready") },
+            text = { Text("Your local data backup has been created and validated. Save a copy before resolving this account.") },
+            confirmButton = {
+                Button(onClick = {
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Human V1 Strength backup", backup))
+                    recoveryBackup = null
+                }, modifier = Modifier.testTag("copy_recovery_backup")) { Text("Copy backup") }
+            },
+            dismissButton = { TextButton(onClick = { recoveryBackup = null }) { Text("Return") } }
+        )
+    }
+
+    recoveryBackupError?.let { message ->
+        AlertDialog(
+            onDismissRequest = { recoveryBackupError = null },
+            title = { Text("Backup not created") },
+            text = { Text(message) },
+            confirmButton = { Button(onClick = { recoveryBackupError = null }) { Text("Return") } }
+        )
+    }
                     OutlinedButton(
                         onClick = viewModel::cancelAuthenticatedAccount,
                         modifier = Modifier.fillMaxWidth().testTag("cancel_authenticated_account")
