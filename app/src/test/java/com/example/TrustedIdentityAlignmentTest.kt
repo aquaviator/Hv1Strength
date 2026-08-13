@@ -83,6 +83,23 @@ class TrustedIdentityAlignmentTest {
         } finally { database.close() }
     }
 
+    @Test fun untouchedGovernedDefaultsDoNotBlockButChangedDefaultsDo() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val database = Room.inMemoryDatabaseBuilder(context, StrengthDatabase::class.java)
+            .allowMainThreadQueries().build()
+        try {
+            val dao = database.strengthDao()
+            dao.insertUserProfile(UserProfile("offline", humanUserId = "human_offlineusr", isOfflineUser = true))
+            dao.insertTemplate(WorkoutTemplate(name = "Push Day", exerciseIdsJson = "[]",
+                globalId = "template_push", humanUserId = "human_offlineusr"))
+            assertEquals(0, dao.countMeaningfulOwnedRecords("offline", "human_offlineusr"))
+            dao.insertTemplate(WorkoutTemplate(name = "Changed Push Day", exerciseIdsJson = "[]",
+                globalId = "template_push", humanUserId = "human_offlineusr", revision = 2,
+                syncStatus = "PENDING_UPLOAD"))
+            assertEquals(1, dao.countMeaningfulOwnedRecords("offline", "human_offlineusr"))
+        } finally { database.close() }
+    }
+
     @Test fun successfulResolutionRequiresCompleteBackendResponse() {
         val result = parseHumanIdentityResponse(mapOf("humanUserId" to humanId, "status" to "ACTIVE", "schemaVersion" to 1))
             as HumanIdentityResult.Success

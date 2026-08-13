@@ -122,7 +122,7 @@ class AuthRepository(
             try {
                 Log.d(TAG, "Fetching offline profile from Room...")
                 val offlineProfile = strengthRepository.getUserProfile("offline")
-                Log.d(TAG, "Offline profile fetched: $offlineProfile")
+                Log.d(TAG, "Offline profile fetched: present=${offlineProfile != null}")
                 if (offlineProfile != null && (offlineProfile.displayName == "Jane Doe" || offlineProfile.displayName == "John Doe")) {
                     val updatedOfflineProfile = offlineProfile.copy(
                         displayName = "Offline User",
@@ -204,7 +204,9 @@ class AuthRepository(
                     }
 
                     if (disposition == LocalProfileDisposition.EMPTY_PLACEHOLDER && offlineProfile != null) {
+                        Log.i(TAG, "stage=placeholder_adoption result=STARTED")
                         strengthRepository.adoptEmptyOfflinePlaceholder(profile, offlineProfile.humanUserId)
+                        Log.i(TAG, "stage=placeholder_adoption result=SUCCESS")
                     } else {
                         strengthRepository.insertUserProfile(profile)
                     }
@@ -376,7 +378,9 @@ class AuthRepository(
 
             // Save only after the ownership decision. Empty offline placeholders are replaced atomically.
             if (disposition == LocalProfileDisposition.EMPTY_PLACEHOLDER && offlineProfile != null) {
+                Log.i(TAG, "stage=placeholder_adoption result=STARTED")
                 strengthRepository.adoptEmptyOfflinePlaceholder(profile, offlineProfile.humanUserId)
+                Log.i(TAG, "stage=placeholder_adoption result=SUCCESS")
             } else {
                 strengthRepository.insertUserProfile(profile)
             }
