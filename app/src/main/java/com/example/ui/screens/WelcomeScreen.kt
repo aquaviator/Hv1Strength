@@ -274,6 +274,14 @@ fun WelcomeScreen(
                             modifier = Modifier.fillMaxWidth().testTag("retry_authentication")
                         ) { Text("Retry") }
                     }
+                    OutlinedButton(
+                        onClick = viewModel::cancelAuthenticatedAccount,
+                        modifier = Modifier.fillMaxWidth().testTag("cancel_authenticated_account")
+                    ) { Text("Cancel and sign out") }
+                }
+            }
+        )
+    }
 
     recoveryBackup?.let { backup ->
         AlertDialog(
@@ -298,7 +306,8 @@ fun WelcomeScreen(
             title = { Text("Update local Strength data") },
             text = {
                 Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()).semantics { liveRegion = LiveRegionMode.Polite },
+                    modifier = Modifier.verticalScroll(rememberScrollState())
+                        .semantics { liveRegion = LiveRegionMode.Polite },
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text("Google sign-in succeeded. This is verified as the same account previously used on this device.")
@@ -355,15 +364,6 @@ fun WelcomeScreen(
             confirmButton = { Button(onClick = { recoveryBackupError = null }) { Text("Return") } }
         )
     }
-                    OutlinedButton(
-                        onClick = viewModel::cancelAuthenticatedAccount,
-                        modifier = Modifier.fillMaxWidth().testTag("cancel_authenticated_account")
-                    ) { Text("Cancel and sign out") }
-                }
-            }
-        )
-    }
-
     // Google Sign-In Simulation Dialog for development / headless environments
     if (developerGoogleSignInToolsVisible(BuildConfig.DEBUG) && showSimulationDialog) {
         AlertDialog(
