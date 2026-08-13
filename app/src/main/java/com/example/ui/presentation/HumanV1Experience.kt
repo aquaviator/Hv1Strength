@@ -15,6 +15,9 @@ data class ExperienceStatus(
 fun authenticationPresentation(state: AuthState): ExperienceStatus = when (state) {
     AuthState.Initial -> ExperienceStatus("Preparing your profile", "Loading local training data.", ExperienceTone.NEUTRAL)
     AuthState.Loading -> ExperienceStatus("Verifying your account", "Resolving your secure Human V1 account.", ExperienceTone.NEUTRAL)
+    is AuthState.LegacyUpgradeRequired -> ExperienceStatus("Local data update ready", "Your account is verified. Local ownership must be updated before cloud sync.", ExperienceTone.ATTENTION, "Review update")
+    is AuthState.LegacyUpgradeRunning -> ExperienceStatus("Updating local data", state.stage, ExperienceTone.NEUTRAL)
+    is AuthState.LegacyUpgradeHandoffRequired -> ExperienceStatus("Finish account setup", state.message, ExperienceTone.ATTENTION, "Try again")
     AuthState.Offline -> ExperienceStatus("Training offline", "Workouts are saved on this device. Cloud sync is unavailable.", ExperienceTone.ATTENTION, "Connect account")
     is AuthState.Authenticated -> ExperienceStatus("Human V1 account ready", "Your trusted account is verified and cloud features are available.", ExperienceTone.POSITIVE)
     is AuthState.Error -> if (state.message.contains("conflict", true) || state.message.contains("binding", true)) {

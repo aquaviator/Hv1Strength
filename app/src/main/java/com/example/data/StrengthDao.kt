@@ -55,6 +55,10 @@ interface StrengthDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertMigrationState(state: LegacyOwnershipMigrationState)
     @Query("SELECT * FROM legacy_ownership_migration WHERE id = 1")
     suspend fun getMigrationState(): LegacyOwnershipMigrationState?
+    @Query("UPDATE legacy_ownership_migration SET phase = :phase, updatedAt = :now WHERE id = 1")
+    suspend fun updateMigrationPhase(phase: String, now: Long)
+    @Query("SELECT * FROM planned_workout WHERE userId = :profileId")
+    suspend fun allOccurrencesForMigrationHandoff(profileId: String): List<PlannedWorkout>
     @Query("SELECT COUNT(*) FROM command_queue WHERE humanUserId = :legacy AND (status = 'PENDING' OR status = 'PROCESSING' OR status = 'FAILED')")
     suspend fun countUploadableLegacyCommands(legacy: String): Int
     @Query("SELECT (SELECT COUNT(*) FROM body_weight WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM tape_measurement WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM exercise WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM workout_template WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM workout_template_exercise WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM workout_template_set WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM workout_session WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM logged_set WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM training_plan WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM planned_workout WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM command_queue WHERE humanUserId = :legacy)")

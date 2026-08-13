@@ -98,6 +98,7 @@ fun WelcomeScreen(
     }
 
     val repositoryError = authState as? AuthState.Error
+    val legacyUpgrade = authState as? AuthState.LegacyUpgradeRequired
 
     Box(
         modifier = Modifier
@@ -288,6 +289,62 @@ fun WelcomeScreen(
             },
             dismissButton = { TextButton(onClick = { recoveryBackup = null }) { Text("Return") } }
         )
+    }
+
+    if (legacyUpgrade != null) {
+        AlertDialog(
+            modifier = Modifier.testTag("legacy_upgrade_dialog"),
+            onDismissRequest = { },
+            title = { Text("Update local Strength data") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()).semantics { liveRegion = LiveRegionMode.Polite },
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Google sign-in succeeded. This is verified as the same account previously used on this device.")
+                    Text("Strength needs to update the local ownership reference. Existing workouts and measurements will be retained.")
+                    Text("Nothing will be uploaded until the update completes.")
+                    Text("${legacyUpgrade.totals.templates} routines, ${legacyUpgrade.totals.sessions} workouts, ${legacyUpgrade.totals.measurements} measurements")
+                    if (legacyUpgrade.backupCompleted) Text("Backup prepared", modifier = Modifier.testTag("legacy_backup_complete"))
+                }
+            },
+            confirmButton = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = viewModel::updateVerifiedLegacyAndContinue,
+                        modifier = Modifier.fillMaxWidth().testTag("update_legacy_and_continue")) { Text("Update and continue") }
+                    OutlinedButton(onClick = {
+                        coroutineScope.launch {
+                            runCatching { viewModel.exportData() }.onSuccess { backup ->
+                                runCatching { org.json.JSONObject(backup) }.onSuccess {
+                                    recoveryBackup = backup
+                                    viewModel.markLegacyBackupCompleted()
+                                }.onFailure { recoveryBackupError = "The backup could not be validated. The update has not started." }
+                            }.onFailure { recoveryBackupError = "The backup could not be created. The update has not started." }
+                        }
+                    }, modifier = Modifier.fillMaxWidth().testTag("backup_before_legacy_upgrade")) { Text("Back up first") }
+                    OutlinedButton(onClick = viewModel::continueWithExistingLocalData,
+                        modifier = Modifier.fillMaxWidth().testTag("legacy_upgrade_continue_offline")) { Text("Continue offline") }
+                    TextButton(onClick = viewModel::cancelAuthenticatedAccount,
+                        modifier = Modifier.fillMaxWidth().testTag("legacy_upgrade_cancel")) { Text("Cancel and sign out") }
+                }
+            }
+        )
+    }
+
+    if (authState is AuthState.LegacyUpgradeRunning) {
+        AlertDialog(onDismissRequest = { }, title = { Text("Updating local data") },
+            text = { Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(modifier = Modifier.testTag("legacy_upgrade_progress"))
+                Text((authState as AuthState.LegacyUpgradeRunning).stage)
+            } }, confirmButton = { })
+    }
+
+    if (authState is AuthState.LegacyUpgradeHandoffRequired) {
+        AlertDialog(onDismissRequest = { }, title = { Text("Finish account setup") },
+            text = { Text((authState as AuthState.LegacyUpgradeHandoffRequired).message) },
+            confirmButton = { Button(onClick = viewModel::retryLegacyMigrationHandoff,
+                modifier = Modifier.testTag("retry_legacy_handoff")) { Text("Try again") } },
+            dismissButton = { TextButton(onClick = viewModel::cancelAuthenticatedAccount) { Text("Cancel and sign out") } })
     }
 
     recoveryBackupError?.let { message ->

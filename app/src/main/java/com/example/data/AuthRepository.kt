@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 import java.security.MessageDigest
 import java.util.UUID
 
@@ -19,6 +20,9 @@ sealed class AuthState {
     object Loading : AuthState()
     data class Authenticated(val profile: UserProfile) : AuthState()
     object Offline : AuthState()
+    data class LegacyUpgradeRequired(val totals: LegacyOwnershipTotals, val backupCompleted: Boolean = false) : AuthState()
+    data class LegacyUpgradeRunning(val stage: String) : AuthState()
+    data class LegacyUpgradeHandoffRequired(val message: String) : AuthState()
     data class Error(
         val message: String,
         val kind: AuthErrorKind = AuthErrorKind.UNKNOWN,
@@ -134,6 +138,8 @@ class AuthRepository(
     val authState: StateFlow<AuthState> = _authState
 
     private var firebaseAuth: FirebaseAuth? = null
+    @Volatile private var pendingLegacyPlan: LegacyOwnershipPlan? = null
+    private val legacyUpgradeMutex = kotlinx.coroutines.sync.Mutex()
 
     init {
         Log.i(TAG, "Initializing AuthRepository. isFirebaseConfigured=${com.example.HumanStrengthApplication.isFirebaseConfigured}")
@@ -173,6 +179,82 @@ class AuthRepository(
         restoreSession()
     }
 
+    private suspend fun offerVerifiedLegacyUpgrade(
+        firebaseUid: String,
+        identity: AuthoritativeHumanIdentity,
+        legacy: UserProfile,
+        displayName: String?, email: String?, photoUrl: String?,
+        ownership: LocalOwnershipSummary
+    ): Boolean {
+        val proof = classifyLegacyProfileProof(firebaseUid, identity.humanUserId, legacy,
+            ownership.meaningfulRecordCount, ownership.otherProfileCount)
+        if (proof != LegacyProfileProof.VERIFIED_LEGACY_SAME_ACCOUNT) return false
+        com.example.core.sync.SyncScheduler.cancelCloudSync(context)
+        val target = legacy.copy(
+            id = firebaseUid, googleUserId = firebaseUid, firebaseUid = firebaseUid,
+            humanUserId = identity.humanUserId, isOfflineUser = false, authProvider = "google",
+            displayName = displayName ?: legacy.displayName, email = email ?: legacy.email,
+            photoUrl = photoUrl ?: legacy.photoUrl, lastLoginAt = System.currentTimeMillis()
+        )
+        pendingLegacyPlan = strengthRepository.dao.prepareVerifiedLegacyMigration(
+            legacy.id, firebaseUid, identity.humanUserId, target
+        )
+        _authState.value = AuthState.LegacyUpgradeRequired(requireNotNull(pendingLegacyPlan).totals)
+        return true
+    }
+
+    suspend fun markLegacyBackupCompleted() {
+        val current = _authState.value as? AuthState.LegacyUpgradeRequired ?: return
+        _authState.value = current.copy(backupCompleted = true)
+    }
+
+    suspend fun updateVerifiedLegacyAndContinue() = legacyUpgradeMutex.withLock {
+        val plan = pendingLegacyPlan ?: run {
+            _authState.value = AuthState.Error("The verified upgrade must be checked again before it can start.", AuthErrorKind.PROFILE_CONFLICT, true)
+            return@withLock
+        }
+        if (_authState.value !is AuthState.LegacyUpgradeRequired) return@withLock
+        _authState.value = AuthState.LegacyUpgradeRunning("Updating local ownership")
+        try {
+            strengthRepository.dao.commitVerifiedLegacyMigration(plan)
+            pendingLegacyPlan = null
+            completeLegacyMigrationHandoff()
+        } catch (e: Exception) {
+            Log.e(TAG, "stage=legacy_upgrade result=FAILED_BEFORE_COMMIT")
+            _authState.value = AuthState.Error("The local update did not complete. Your existing data is unchanged.", AuthErrorKind.PROFILE_CONFLICT, true)
+        }
+    }
+
+    private suspend fun completeLegacyMigrationHandoff() {
+        val journal = strengthRepository.dao.getMigrationState()
+            ?: throw IllegalStateException("Migration handoff state is missing")
+        require(journal.phase == "ROOM_COMMITTED" || journal.phase == "HANDOFF_REQUIRED")
+        val profile = requireNotNull(strengthRepository.getUserProfile(journal.sourceProfileId))
+        require(profile.humanUserId == journal.targetHumanUserId && profile.firebaseUid == journal.sourceProfileId)
+        require(strengthRepository.dao.countUploadableLegacyCommands(journal.sourceHumanUserId) == 0)
+        try {
+            strengthRepository.dao.updateMigrationPhase("HANDOFF_REQUIRED", System.currentTimeMillis())
+            persistGoogleAuthentication(profile, SUPPORTED_IDENTITY_SCHEMA_VERSION)
+            strengthRepository.dao.allOccurrencesForMigrationHandoff(profile.id).forEach {
+                com.example.planner.PlannerReminderScheduler.schedule(context, it)
+            }
+            strengthRepository.dao.updateMigrationPhase("COMPLETE", System.currentTimeMillis())
+            _authState.value = AuthState.Authenticated(profile)
+            com.example.core.sync.SyncScheduler.scheduleImmediate(context)
+            com.example.core.sync.SyncScheduler.schedulePeriodic(context)
+        } catch (e: Exception) {
+            Log.e(TAG, "stage=legacy_handoff result=RETRY_REQUIRED")
+            strengthRepository.dao.updateMigrationPhase("HANDOFF_REQUIRED", System.currentTimeMillis())
+            com.example.core.sync.SyncScheduler.cancelCloudSync(context)
+            _authState.value = AuthState.LegacyUpgradeHandoffRequired("Your local data is safe. Finishing account setup can be retried.")
+        }
+    }
+
+    suspend fun retryLegacyMigrationHandoff() = legacyUpgradeMutex.withLock {
+        _authState.value = AuthState.LegacyUpgradeRunning("Finishing account setup")
+        completeLegacyMigrationHandoff()
+    }
+
     private fun restoreSession() {
         if (com.example.HumanStrengthApplication.isFirebaseConfigured) {
             _authState.value = AuthState.Loading
@@ -186,6 +268,14 @@ class AuthRepository(
                     }
 
                     val userId = firebaseUser.uid
+                    val migrationState = strengthRepository.dao.getMigrationState()
+                    if (migrationState?.phase == "ROOM_COMMITTED" || migrationState?.phase == "HANDOFF_REQUIRED") {
+                        if (migrationState.sourceProfileId != userId) {
+                            com.example.core.sync.SyncScheduler.cancelCloudSync(context)
+                            _authState.value = AuthState.Error("A local account update is awaiting the verified account that started it.", AuthErrorKind.PROFILE_CONFLICT, true)
+                        } else completeLegacyMigrationHandoff()
+                        return@launch
+                    }
                     if (prefs.getString("auth_active_user_id", null)?.let { it != userId } == true) {
                         clearAuthoritativeIdentityState()
                     }
@@ -218,6 +308,9 @@ class AuthRepository(
                     )
                     Log.i(TAG, "stage=local_profile result=$disposition")
                     if (disposition == LocalProfileDisposition.MEANINGFUL_DATA || disposition == LocalProfileDisposition.AMBIGUOUS) {
+                        if (disposition == LocalProfileDisposition.MEANINGFUL_DATA && mismatchedProfile != null &&
+                            offerVerifiedLegacyUpgrade(userId, identity, mismatchedProfile, firebaseUser.displayName,
+                                firebaseUser.email, firebaseUser.photoUrl?.toString(), ownership)) return@launch
                         _authState.value = AuthState.Error(
                             "Sign-in succeeded, but this device contains data belonging to a different local profile. Nothing was deleted or uploaded.",
                             AuthErrorKind.PROFILE_CONFLICT, offlineProfile != null
@@ -389,6 +482,10 @@ class AuthRepository(
             )
             Log.i(TAG, "stage=local_profile result=$disposition")
             if (disposition == LocalProfileDisposition.MEANINGFUL_DATA || disposition == LocalProfileDisposition.AMBIGUOUS) {
+                if (disposition == LocalProfileDisposition.MEANINGFUL_DATA && mismatchedProfile != null &&
+                    offerVerifiedLegacyUpgrade(fUid, identity, mismatchedProfile, displayName, email, photoUrl, ownership)) {
+                    return@withContext null
+                }
                 _authState.value = AuthState.Error(
                     message = if (disposition == LocalProfileDisposition.AMBIGUOUS)
                         "This device contains multiple local profiles. Sign-in succeeded, but synchronization is paused until the profiles are reviewed."

@@ -501,7 +501,10 @@ internal fun resolveStartupDestination(
 ): StartupDestination = when (authState) {
     AuthState.Loading -> StartupDestination.AuthLoading
     AuthState.Initial,
-    is AuthState.Error -> StartupDestination.Welcome
+    is AuthState.Error,
+    is AuthState.LegacyUpgradeRequired,
+    is AuthState.LegacyUpgradeRunning,
+    is AuthState.LegacyUpgradeHandoffRequired -> StartupDestination.Welcome
     // Offline mode remains available only for builds where Firebase is genuinely
     // unconfigured. Configured startup never treats a local profile as cloud auth.
     AuthState.Offline -> StartupDestination.FullApp

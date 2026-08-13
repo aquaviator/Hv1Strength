@@ -45,6 +45,10 @@ class AuthViewModel(
         authRepository.signOut(keepLocalData = true)
         authRepository.signInAnonymously()
     }
+
+    fun updateVerifiedLegacyAndContinue() = viewModelScope.launch { authRepository.updateVerifiedLegacyAndContinue() }
+    fun retryLegacyMigrationHandoff() = viewModelScope.launch { authRepository.retryLegacyMigrationHandoff() }
+    fun markLegacyBackupCompleted() = viewModelScope.launch { authRepository.markLegacyBackupCompleted() }
 }
 
 internal fun launchAuthentication(
