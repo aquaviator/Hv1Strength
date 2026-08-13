@@ -368,3 +368,13 @@ data class PlannedWorkout(
     override val originDeviceId: String = ""
 ) : VersionedEntity
 
+@Entity(tableName = "legacy_ownership_migration")
+data class LegacyOwnershipMigrationState(
+    @PrimaryKey val id: Int = 1,
+    val sourceProfileId: String,
+    val sourceHumanUserId: String,
+    val targetHumanUserId: String,
+    val phase: String,
+    val updatedAt: Long
+)
+

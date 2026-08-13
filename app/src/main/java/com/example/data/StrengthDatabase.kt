@@ -26,9 +26,10 @@ import kotlinx.coroutines.launch
         UserPreferences::class,
         ActiveWorkoutBackup::class,
         TrainingPlan::class,
-        PlannedWorkout::class
+        PlannedWorkout::class,
+        LegacyOwnershipMigrationState::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class StrengthDatabase : RoomDatabase() {
@@ -38,6 +39,12 @@ abstract class StrengthDatabase : RoomDatabase() {
     companion object {
         @Volatile
         private var INSTANCE: StrengthDatabase? = null
+
+        val MIGRATION_11_12 = object : androidx.room.migration.Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `legacy_ownership_migration` (`id` INTEGER NOT NULL, `sourceProfileId` TEXT NOT NULL, `sourceHumanUserId` TEXT NOT NULL, `targetHumanUserId` TEXT NOT NULL, `phase` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+            }
+        }
 
         val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -728,7 +735,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         StrengthDatabase::class.java,
                         "strength_database"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                         .addCallback(StrengthDatabaseCallback(appCtx))
                         .build()
                     INSTANCE = instance

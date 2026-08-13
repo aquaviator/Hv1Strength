@@ -5,6 +5,95 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface StrengthDao {
+    @Query("SELECT * FROM body_weight WHERE humanUserId = :owner OR userId = :profileId")
+    suspend fun legacyBodyWeights(profileId: String, owner: String): List<BodyWeight>
+    @Query("SELECT * FROM tape_measurement WHERE humanUserId = :owner OR userId = :profileId")
+    suspend fun legacyTapeMeasurements(profileId: String, owner: String): List<TapeMeasurement>
+    @Query("SELECT * FROM exercise WHERE isCustom = 1 AND humanUserId = :owner")
+    suspend fun legacyCustomExercises(owner: String): List<Exercise>
+    @Query("SELECT * FROM workout_template WHERE humanUserId = :owner OR userId = :profileId")
+    suspend fun legacyTemplates(profileId: String, owner: String): List<WorkoutTemplate>
+    @Query("SELECT * FROM workout_template_exercise WHERE humanUserId = :owner")
+    suspend fun legacyTemplateExercises(owner: String): List<WorkoutTemplateExercise>
+    @Query("SELECT * FROM workout_template_set WHERE humanUserId = :owner")
+    suspend fun legacyTemplateSets(owner: String): List<WorkoutTemplateSet>
+    @Query("SELECT * FROM workout_session WHERE humanUserId = :owner OR userId = :profileId")
+    suspend fun legacySessions(profileId: String, owner: String): List<WorkoutSession>
+    @Query("SELECT * FROM logged_set WHERE humanUserId = :owner")
+    suspend fun legacyLoggedSets(owner: String): List<LoggedSet>
+    @Query("SELECT * FROM training_plan WHERE humanUserId = :owner OR userId = :profileId")
+    suspend fun legacyTrainingPlans(profileId: String, owner: String): List<TrainingPlan>
+    @Query("SELECT * FROM planned_workout WHERE humanUserId = :owner OR userId = :profileId")
+    suspend fun legacyPlannedWorkouts(profileId: String, owner: String): List<PlannedWorkout>
+    @Query("SELECT * FROM command_queue WHERE humanUserId = :owner")
+    suspend fun legacyCommands(owner: String): List<CommandQueueEntity>
+
+    @Query("UPDATE body_weight SET userId = :profileId, humanUserId = :target WHERE humanUserId = :source OR userId = :profileId")
+    suspend fun migrateLegacyBodyWeights(profileId: String, source: String, target: String)
+    @Query("UPDATE tape_measurement SET userId = :profileId, humanUserId = :target WHERE humanUserId = :source OR userId = :profileId")
+    suspend fun migrateLegacyTape(profileId: String, source: String, target: String)
+    @Query("UPDATE exercise SET humanUserId = :target WHERE isCustom = 1 AND humanUserId = :source")
+    suspend fun migrateLegacyExercises(source: String, target: String)
+    @Query("UPDATE workout_template SET userId = :profileId, humanUserId = :target WHERE humanUserId = :source OR userId = :profileId")
+    suspend fun migrateLegacyTemplates(profileId: String, source: String, target: String)
+    @Query("UPDATE workout_template_exercise SET humanUserId = :target WHERE humanUserId = :source")
+    suspend fun migrateLegacyTemplateExercises(source: String, target: String)
+    @Query("UPDATE workout_template_set SET humanUserId = :target WHERE humanUserId = :source")
+    suspend fun migrateLegacyTemplateSets(source: String, target: String)
+    @Query("UPDATE workout_session SET userId = :profileId, humanUserId = :target WHERE humanUserId = :source OR userId = :profileId")
+    suspend fun migrateLegacySessions(profileId: String, source: String, target: String)
+    @Query("UPDATE logged_set SET humanUserId = :target WHERE humanUserId = :source")
+    suspend fun migrateLegacyLoggedSets(source: String, target: String)
+    @Query("UPDATE training_plan SET userId = :profileId, humanUserId = :target WHERE humanUserId = :source OR userId = :profileId")
+    suspend fun migrateLegacyPlans(profileId: String, source: String, target: String)
+    @Query("UPDATE planned_workout SET userId = :profileId, humanUserId = :target WHERE humanUserId = :source OR userId = :profileId")
+    suspend fun migrateLegacyOccurrences(profileId: String, source: String, target: String)
+    @Query("UPDATE active_workout_backup SET exercisesJson = :exercises, setsJson = :sets, exerciseMetadataJson = :metadata WHERE id = 1")
+    suspend fun rewriteActiveBackup(exercises: String, sets: String, metadata: String)
+    @Query("UPDATE command_queue SET humanUserId = :target, status = 'POISONED', errorMessage = 'Retired by verified ownership upgrade' WHERE id = :id")
+    suspend fun retireLegacyCommand(id: Int, target: String)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertMigrationState(state: LegacyOwnershipMigrationState)
+    @Query("SELECT * FROM legacy_ownership_migration WHERE id = 1")
+    suspend fun getMigrationState(): LegacyOwnershipMigrationState?
+    @Query("SELECT COUNT(*) FROM command_queue WHERE humanUserId = :legacy AND (status = 'PENDING' OR status = 'PROCESSING' OR status = 'FAILED')")
+    suspend fun countUploadableLegacyCommands(legacy: String): Int
+    @Query("SELECT (SELECT COUNT(*) FROM body_weight WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM tape_measurement WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM exercise WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM workout_template WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM workout_template_exercise WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM workout_template_set WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM workout_session WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM logged_set WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM training_plan WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM planned_workout WHERE humanUserId = :legacy) + (SELECT COUNT(*) FROM command_queue WHERE humanUserId = :legacy)")
+    suspend fun countRemainingLegacyOwnership(legacy: String): Int
+
+    @Transaction
+    suspend fun commitVerifiedLegacyMigration(plan: LegacyOwnershipPlan) {
+        val source = requireNotNull(getUserProfile(plan.profileId))
+        require(source.firebaseUid == plan.firebaseUid && source.humanUserId == plan.sourceHumanUserId)
+        require(plan.firebaseUid == plan.profileId && plan.sourceHumanUserId != plan.targetHumanUserId)
+        require(getUserProfileByHumanUserId(plan.targetHumanUserId)?.id in listOf(null, plan.profileId))
+        require(getMigrationState()?.phase != "ROOM_COMMITTED" && getMigrationState()?.phase != "COMPLETE")
+        plan.validateGraph()
+        insertMigrationState(LegacyOwnershipMigrationState(sourceProfileId = plan.profileId,
+            sourceHumanUserId = plan.sourceHumanUserId, targetHumanUserId = plan.targetHumanUserId,
+            phase = "PREFLIGHT_PASSED", updatedAt = plan.now))
+        insertUserProfile(plan.targetProfile)
+        migrateLegacyBodyWeights(plan.profileId, plan.sourceHumanUserId, plan.targetHumanUserId)
+        migrateLegacyTape(plan.profileId, plan.sourceHumanUserId, plan.targetHumanUserId)
+        migrateLegacyExercises(plan.sourceHumanUserId, plan.targetHumanUserId)
+        migrateLegacyTemplates(plan.profileId, plan.sourceHumanUserId, plan.targetHumanUserId)
+        migrateLegacyTemplateExercises(plan.sourceHumanUserId, plan.targetHumanUserId)
+        migrateLegacyTemplateSets(plan.sourceHumanUserId, plan.targetHumanUserId)
+        migrateLegacySessions(plan.profileId, plan.sourceHumanUserId, plan.targetHumanUserId)
+        check(!plan.failAfterParentMigrationForTest) { "Injected migration failure" }
+        migrateLegacyLoggedSets(plan.sourceHumanUserId, plan.targetHumanUserId)
+        migrateLegacyPlans(plan.profileId, plan.sourceHumanUserId, plan.targetHumanUserId)
+        migrateLegacyOccurrences(plan.profileId, plan.sourceHumanUserId, plan.targetHumanUserId)
+        plan.rewrittenBackup?.let { rewriteActiveBackup(it.exercisesJson, it.setsJson, it.exerciseMetadataJson) }
+        plan.commands.forEach { old ->
+            retireLegacyCommand(old.id, plan.targetHumanUserId)
+            plan.replacements.firstOrNull { it.commandId.endsWith(old.commandId.takeLast(12)) }?.let { enqueueCommand(it) }
+        }
+        require(countUploadableLegacyCommands(plan.sourceHumanUserId) == 0)
+        require(countRemainingLegacyOwnership(plan.sourceHumanUserId) == 0)
+        insertMigrationState(LegacyOwnershipMigrationState(sourceProfileId = plan.profileId,
+            sourceHumanUserId = plan.sourceHumanUserId, targetHumanUserId = plan.targetHumanUserId,
+            phase = "ROOM_COMMITTED", updatedAt = plan.now))
+    }
     @Query("SELECT (SELECT COUNT(*) FROM body_weight WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM tape_measurement WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM workout_template WHERE (humanUserId = :humanId OR userId = :profileId) AND NOT (userId IS NULL AND globalId IN ('template_push', 'template_pull', 'template_legs_abs') AND revision = 1 AND syncStatus = 'LOCAL_ONLY' AND deletedAt IS NULL)) + (SELECT COUNT(*) FROM workout_session WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM logged_set WHERE humanUserId = :humanId) + (SELECT COUNT(*) FROM exercise WHERE isCustom = 1 AND humanUserId = :humanId) + (SELECT COUNT(*) FROM training_plan WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM planned_workout WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM command_queue WHERE humanUserId = :humanId) + (SELECT COUNT(*) FROM active_workout_backup)")
     suspend fun countMeaningfulOwnedRecords(profileId: String, humanId: String): Int
 
