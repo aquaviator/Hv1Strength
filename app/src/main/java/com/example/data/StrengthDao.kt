@@ -83,7 +83,6 @@ interface StrengthDao {
         migrateLegacyTemplateExercises(plan.sourceHumanUserId, plan.targetHumanUserId)
         migrateLegacyTemplateSets(plan.sourceHumanUserId, plan.targetHumanUserId)
         migrateLegacySessions(plan.profileId, plan.sourceHumanUserId, plan.targetHumanUserId)
-        check(!plan.failAfterParentMigrationForTest) { "Injected migration failure" }
         migrateLegacyLoggedSets(plan.sourceHumanUserId, plan.targetHumanUserId)
         migrateLegacyPlans(plan.profileId, plan.sourceHumanUserId, plan.targetHumanUserId)
         migrateLegacyOccurrences(plan.profileId, plan.sourceHumanUserId, plan.targetHumanUserId)

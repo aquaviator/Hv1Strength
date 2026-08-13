@@ -28,8 +28,7 @@ data class LegacyOwnershipPlan(
     val commands: List<CommandQueueEntity>,
     val replacements: List<CommandQueueEntity>,
     val rewrittenBackup: ActiveWorkoutBackup?,
-    val now: Long,
-    internal val failAfterParentMigrationForTest: Boolean = false
+    val now: Long
 ) {
     val totals = LegacyOwnershipTotals(bodyWeights.size + tape.size, exercises.size, templates.size,
         sessions.size, loggedSets.size, plans.size, occurrences.size, commands.size)

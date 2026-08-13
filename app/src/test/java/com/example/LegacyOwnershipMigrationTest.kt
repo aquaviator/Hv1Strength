@@ -53,9 +53,9 @@ class LegacyOwnershipMigrationTest {
 
     @Test fun injectedFailureRollsBackEveryRoomWrite() = runBlocking {
         val profile = seed()
-        val original = dao.prepareVerifiedLegacyMigration(uid, uid, target, profile.copy(humanUserId = target))
-        val failed = original.copy(failAfterParentMigrationForTest = true)
-        assertThrows(IllegalStateException::class.java) { runBlocking { dao.commitVerifiedLegacyMigration(failed) } }
+        val plan = dao.prepareVerifiedLegacyMigration(uid, uid, target, profile.copy(humanUserId = target))
+        db.openHelper.writableDatabase.execSQL("CREATE TRIGGER abort_session_owner_update BEFORE UPDATE OF humanUserId ON workout_session BEGIN SELECT RAISE(ABORT, 'test rollback'); END")
+        assertThrows(android.database.sqlite.SQLiteException::class.java) { runBlocking { dao.commitVerifiedLegacyMigration(plan) } }
         assertEquals(legacy, dao.getUserProfile(uid)?.humanUserId)
         assertTrue(dao.countMeaningfulOwnedRecords(uid, legacy) >= 3)
         assertNull(dao.getMigrationState())
