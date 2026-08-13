@@ -129,7 +129,8 @@ class AuthRepository(
     private val context: Context,
     private val strengthRepository: StrengthRepository,
     private val scope: CoroutineScope,
-    private val identityClient: HumanIdentityClient = FirebaseHumanIdentityClient()
+    identityClient: HumanIdentityClient? = null,
+    authDependencies: AuthDependencies? = null
 ) {
     private val TAG = "AuthRepository"
     private val prefs = context.getSharedPreferences("strength_settings", Context.MODE_PRIVATE)
@@ -137,16 +138,16 @@ class AuthRepository(
     private val _authState = MutableStateFlow<AuthState>(AuthState.Initial)
     val authState: StateFlow<AuthState> = _authState
 
-    private var firebaseAuth: FirebaseAuth? = null
+    private val resolvedDependencies = authDependencies ?: BuildVariantAuthDependenciesFactory.create(context)
+    private val identityClient: HumanIdentityClient = identityClient ?: resolvedDependencies.identityClient
+    private var firebaseAuth: FirebaseAuth? = resolvedDependencies.firebaseAuth
     @Volatile private var pendingLegacyPlan: LegacyOwnershipPlan? = null
     private val legacyUpgradeMutex = kotlinx.coroutines.sync.Mutex()
 
     init {
         Log.i(TAG, "Initializing AuthRepository. isFirebaseConfigured=${com.example.HumanStrengthApplication.isFirebaseConfigured}")
-        if (com.example.HumanStrengthApplication.isFirebaseConfigured) {
+        if (firebaseAuth != null) {
             try {
-                Log.d(TAG, "Attempting to get FirebaseAuth instance...")
-                firebaseAuth = FirebaseAuth.getInstance()
                 Log.i(TAG, "FirebaseAuth instance obtained successfully.")
             } catch (e: Exception) {
                 Log.w(TAG, "Firebase Auth not initialized. Falling back to offline-first Google profile management.", e)
@@ -188,6 +189,7 @@ class AuthRepository(
     ): Boolean {
         val proof = classifyLegacyProfileProof(firebaseUid, identity.humanUserId, legacy,
             ownership.meaningfulRecordCount, ownership.otherProfileCount)
+        Log.i(TAG, "stage=legacy_upgrade_preflight result=$proof")
         if (proof != LegacyProfileProof.VERIFIED_LEGACY_SAME_ACCOUNT) return false
         com.example.core.sync.SyncScheduler.cancelCloudSync(context)
         val target = legacy.copy(
@@ -200,6 +202,7 @@ class AuthRepository(
             legacy.id, firebaseUid, identity.humanUserId, target
         )
         _authState.value = AuthState.LegacyUpgradeRequired(requireNotNull(pendingLegacyPlan).totals)
+        Log.i(TAG, "stage=legacy_upgrade result=OFFERED")
         return true
     }
 
