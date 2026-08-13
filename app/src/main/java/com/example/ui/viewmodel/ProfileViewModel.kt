@@ -11,9 +11,16 @@ class ProfileViewModel(
     private val repository: StrengthRepository,
     private val context: Context,
     private val authViewModel: AuthViewModel,
-    val billingRepository: com.example.billing.BillingRepository = com.example.billing.PlayBillingRepository(context),
-    val entitlementRepository: com.example.billing.EntitlementRepository = com.example.billing.PlayEntitlementRepository(context, billingRepository, repository)
+    injectedBillingRepository: com.example.billing.BillingRepository? = null,
+    injectedEntitlementRepository: com.example.billing.EntitlementRepository? = null
 ) : ViewModel() {
+
+    private val accessDependencies = if (injectedBillingRepository == null || injectedEntitlementRepository == null)
+        com.example.billing.BuildVariantAccessDependenciesFactory.create(context, repository) else null
+    val billingRepository: com.example.billing.BillingRepository =
+        injectedBillingRepository ?: requireNotNull(accessDependencies).billingRepository
+    val entitlementRepository: com.example.billing.EntitlementRepository =
+        injectedEntitlementRepository ?: requireNotNull(accessDependencies).entitlementRepository
 
     val subscriptionState: StateFlow<com.example.billing.SubscriptionState> = billingRepository.subscriptionState
     val productInfo: StateFlow<com.example.billing.SubscriptionProductInfo?> = billingRepository.productInfo

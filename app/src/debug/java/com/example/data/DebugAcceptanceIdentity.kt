@@ -22,6 +22,15 @@ internal object DebugAcceptanceIdentity {
 
     fun disarm(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().commit()
 
+    fun isValidAcceptanceSession(context: Context): Boolean {
+        if (!BuildConfig.DEBUG) return false
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("armed", false) || prefs.getLong("expires", 0) <= System.currentTimeMillis()) return false
+        if (prefs.getString("project", null) != PROJECT || prefs.getString("host", null) != "10.0.2.2" ||
+            prefs.getString("uid", null) != SYNTHETIC_UID || prefs.getString("human", null) != SYNTHETIC_HUMAN) return false
+        return runCatching { dependencies(context)?.firebaseAuth?.currentUser?.uid == SYNTHETIC_UID }.getOrDefault(false)
+    }
+
     fun dependencies(context: Context): AuthDependencies? {
         if (!BuildConfig.DEBUG) return null
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
