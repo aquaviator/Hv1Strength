@@ -20,6 +20,7 @@
                 <action android:name="com.example.debug.V31_ARM_MATCHING" />
                 <action android:name="com.example.debug.V31_REPORT" />
                 <action android:name="com.example.debug.V31_DISARM" />
+                <action android:name="com.example.debug.V31_RESET_SYNTHETIC_SESSION" />
             </intent-filter>
         </receiver>
     </application>
