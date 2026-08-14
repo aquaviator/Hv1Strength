@@ -297,29 +297,14 @@ fun ExerciseScreen(
         val categories = remember(catalogue) { catalogue.exercises.map { it.category }.distinct().sorted() }
         val muscles = remember(catalogue) { catalogue.exercises.flatMap { it.primaryMuscles + it.secondaryMuscles }.distinct().sorted() }
         val equipment = remember(catalogue) { catalogue.exercises.flatMap { it.equipment }.distinct().sorted() }
-        ModalBottomSheet(onDismissRequest = { showFilters = false }, modifier = Modifier.testTag("exercise_filter_sheet")) {
-            Column(modifier = Modifier.fillMaxHeight(0.7f).padding(horizontal = 20.dp).navigationBarsPadding()) {
-                Text("Filter exercises", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Choices within a group match any; different groups combine together.", style = MaterialTheme.typography.bodySmall)
-                LazyColumn(modifier = Modifier.weight(1f).testTag("exercise_filter_options"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    item { FilterOptionGroup("Source", ExerciseSource.entries.map { it.name.lowercase().replaceFirstChar(Char::uppercase) }, listOf(draftSource.name.lowercase().replaceFirstChar(Char::uppercase))) { value -> draftSource = ExerciseSource.valueOf(value.uppercase()) } }
-                    item { FilterOptionGroup("Category", categories, draftCategories) { value -> draftCategories = toggleChoice(draftCategories, value) } }
-                    item { FilterOptionGroup("Muscles", muscles, draftMuscles) { value -> draftMuscles = toggleChoice(draftMuscles, value) } }
-                    item { FilterOptionGroup("Equipment", equipment, draftEquipment) { value -> draftEquipment = toggleChoice(draftEquipment, value) } }
-                    item { FilterOptionGroup("Tracking", MeasurementCapability.entries.map { it.wireName }, draftCapabilities) { value -> draftCapabilities = toggleChoice(draftCapabilities, value) } }
-                    item { Spacer(Modifier.height(12.dp)); Text("End of filter options", modifier = Modifier.testTag("exercise_filter_last_option")) }
-                }
-                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { draftCategories = emptyList(); draftMuscles = emptyList(); draftEquipment = emptyList(); draftCapabilities = emptyList(); draftSource = ExerciseSource.ALL }, modifier = Modifier.testTag("clear_all_exercise_filters")) { Text("Clear all") }
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { showFilters = false }) { Text("Cancel") }
-                    Button(onClick = {
+        ExerciseFilterSheet(categories, muscles, equipment, draftCategories, draftMuscles, draftEquipment, draftCapabilities, draftSource,
+            onCategory = { draftCategories = toggleChoice(draftCategories, it) }, onMuscle = { draftMuscles = toggleChoice(draftMuscles, it) },
+            onEquipment = { draftEquipment = toggleChoice(draftEquipment, it) }, onCapability = { draftCapabilities = toggleChoice(draftCapabilities, it) },
+            onSource = { draftSource = it }, onClear = { draftCategories = emptyList(); draftMuscles = emptyList(); draftEquipment = emptyList(); draftCapabilities = emptyList(); draftSource = ExerciseSource.ALL },
+            onDismiss = { showFilters = false }, onApply = {
                         selectedCategories = draftCategories; selectedMuscles = draftMuscles; selectedEquipment = draftEquipment
                         selectedCapabilities = draftCapabilities; selectedSource = draftSource; showFilters = false
-                    }, modifier = Modifier.testTag("apply_exercise_filters")) { Text("Apply") }
-                }
-            }
-        }
+            })
     }
 
     // Create Custom Exercise Dialog
@@ -618,6 +603,34 @@ private fun DetailSection(title: String, values: List<Pair<String, String>>) = C
 
 private fun toggleChoice(current: List<String>, value: String): List<String> =
     if (value in current) current - value else (current + value).distinct()
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ExerciseFilterSheet(categories: List<String>, muscles: List<String>, equipment: List<String>,
+    selectedCategories: List<String>, selectedMuscles: List<String>, selectedEquipment: List<String>, selectedCapabilities: List<String>, selectedSource: ExerciseSource,
+    onCategory: (String) -> Unit, onMuscle: (String) -> Unit, onEquipment: (String) -> Unit, onCapability: (String) -> Unit, onSource: (ExerciseSource) -> Unit,
+    onClear: () -> Unit, onDismiss: () -> Unit, onApply: () -> Unit) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, modifier = Modifier.testTag("exercise_filter_sheet")) {
+        Column(modifier = Modifier.fillMaxHeight(0.7f).padding(horizontal = 20.dp).navigationBarsPadding()) {
+            Text("Filter exercises", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Choices within a group match any; different groups combine together.", style = MaterialTheme.typography.bodySmall)
+            LazyColumn(modifier = Modifier.weight(1f).testTag("exercise_filter_options"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item { FilterOptionGroup("Source", ExerciseSource.entries.map { it.name.lowercase().replaceFirstChar(Char::uppercase) }, listOf(selectedSource.name.lowercase().replaceFirstChar(Char::uppercase))) { onSource(ExerciseSource.valueOf(it.uppercase())) } }
+                item { FilterOptionGroup("Category", categories, selectedCategories, onCategory) }
+                item { FilterOptionGroup("Muscles", muscles, selectedMuscles, onMuscle) }
+                item { FilterOptionGroup("Equipment", equipment, selectedEquipment, onEquipment) }
+                item { FilterOptionGroup("Tracking", MeasurementCapability.entries.map { it.wireName }, selectedCapabilities, onCapability) }
+                item { Spacer(Modifier.height(12.dp)); Text("End of filter options", modifier = Modifier.testTag("exercise_filter_last_option")) }
+            }
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onClear, modifier = Modifier.testTag("clear_all_exercise_filters")) { Text("Clear all") }
+                Spacer(Modifier.weight(1f)); TextButton(onClick = onDismiss) { Text("Cancel") }
+                Button(onClick = onApply, modifier = Modifier.testTag("apply_exercise_filters")) { Text("Apply") }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
