@@ -163,6 +163,7 @@ fun ExerciseRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
+            modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -180,6 +181,9 @@ fun ExerciseRow(
             }
             Text(
                 text = exercise.name,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("routine_exercise_name"),
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface
@@ -192,6 +196,9 @@ fun ExerciseRow(
             if (targetSummary.isNotBlank()) {
                 Text(
                     text = targetSummary,
+                    modifier = Modifier
+                        .widthIn(min = 72.dp)
+                        .testTag("routine_exercise_target"),
                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                 )
