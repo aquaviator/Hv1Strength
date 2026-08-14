@@ -32,7 +32,7 @@ import com.example.catalogue.*
 import com.example.ui.viewmodel.StrengthViewModel
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ExerciseScreen(
     viewModel: StrengthViewModel,
@@ -44,11 +44,18 @@ fun ExerciseScreen(
     val favoriteExercises by viewModel.favoriteExercises.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("All") }
-    var selectedEquipment by remember { mutableStateOf("All") }
-    var selectedCapability by remember { mutableStateOf<MeasurementCapability?>(null) }
-    var showCustomOnly by remember { mutableStateOf<Boolean?>(null) }
+    var selectedCategories by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var selectedMuscles by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var selectedEquipment by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var selectedCapabilities by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var selectedSource by rememberSaveable { mutableStateOf(ExerciseSource.ALL) }
     var selectedSection by rememberSaveable { mutableStateOf(LibrarySection.ALL) }
+    var showFilters by rememberSaveable { mutableStateOf(false) }
+    var draftCategories by remember { mutableStateOf(emptyList<String>()) }
+    var draftMuscles by remember { mutableStateOf(emptyList<String>()) }
+    var draftEquipment by remember { mutableStateOf(emptyList<String>()) }
+    var draftCapabilities by remember { mutableStateOf(emptyList<String>()) }
+    var draftSource by remember { mutableStateOf(ExerciseSource.ALL) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val catalogue = remember { ExerciseCatalogueRuntime.snapshot ?: ExerciseCatalogueRuntime.load(context) }
     val catalogueById = remember(catalogue) { catalogue.exercises.associateBy { it.id } }
@@ -120,35 +127,17 @@ fun ExerciseScreen(
                 }
             }
 
-            // Muscle Category Pill Tabs
-            val categories = remember(catalogue) { listOf("All") + catalogue.exercises.map { it.category }.distinct().sorted() }
-            ScrollableTabRow(
-                selectedTabIndex = categories.indexOf(selectedCategory).coerceAtLeast(0),
-                edgePadding = 0.dp,
-                containerColor = Color.Transparent,
-                divider = {}
-            ) {
-                categories.forEach { cat ->
-                    Tab(
-                        selected = selectedCategory == cat,
-                        onClick = { selectedCategory = cat },
-                        text = { Text(cat, fontWeight = FontWeight.Bold) }
-                    )
+            val activeFilterCount = selectedCategories.size + selectedMuscles.size + selectedEquipment.size + selectedCapabilities.size +
+                (if (selectedSource == ExerciseSource.ALL) 0 else 1) + (if (selectedSection == LibrarySection.ALL) 0 else 1)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = {
+                    draftCategories = selectedCategories; draftMuscles = selectedMuscles; draftEquipment = selectedEquipment
+                    draftCapabilities = selectedCapabilities; draftSource = selectedSource; showFilters = true
+                }, modifier = Modifier.testTag("open_exercise_filters")) {
+                    Icon(Icons.Default.FilterList, contentDescription = null); Spacer(Modifier.width(8.dp))
+                    Text(if (activeFilterCount == 0) "Filters" else "Filters ($activeFilterCount)")
                 }
-            }
-
-            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("All", "barbell", "dumbbell", "kettlebell", "cable", "machine", "bodyweight", "resistance band").forEach { value ->
-                    FilterChip(selected = selectedEquipment == value, onClick = { selectedEquipment = value }, label = { Text(value.replaceFirstChar { it.uppercase() }) })
-                }
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilterChip(selected = showCustomOnly == null, onClick = { showCustomOnly = null }, label = { Text("All") })
-                FilterChip(selected = showCustomOnly == false, onClick = { showCustomOnly = false }, label = { Text("Built-in") })
-                FilterChip(selected = showCustomOnly == true, onClick = { showCustomOnly = true }, label = { Text("Custom") })
-                FilterChip(selected = selectedCapability == MeasurementCapability.DURATION,
-                    onClick = { selectedCapability = if (selectedCapability == MeasurementCapability.DURATION) null else MeasurementCapability.DURATION },
-                    label = { Text("Timed") })
+                if (activeFilterCount > 0) Text("$activeFilterCount active", style = MaterialTheme.typography.labelMedium)
             }
 
             Text(
@@ -161,16 +150,16 @@ fun ExerciseScreen(
             )
 
             // Exercise List
-            val filteredExercises = remember(searchQuery, selectedCategory, selectedEquipment, selectedCapability, showCustomOnly, selectedSection, exercises, catalogue, sessions, allLoggedSets, favoriteExercises) {
+            val filteredExercises = remember(searchQuery, selectedCategories, selectedMuscles, selectedEquipment, selectedCapabilities, selectedSource, selectedSection, exercises, catalogue, sessions, allLoggedSets, favoriteExercises) {
                 discoverExercises(exercises, catalogueById, favoriteExercises, recentExerciseIds(sessions, allLoggedSets),
-                    ExerciseDiscoveryFilters(query = searchQuery, category = selectedCategory.takeUnless { it == "All" },
-                        equipment = selectedEquipment.takeUnless { it == "All" }, capability = selectedCapability,
-                        section = if (showCustomOnly == true) LibrarySection.CUSTOM else selectedSection))
+                    ExerciseDiscoveryFilters(query = searchQuery, categories = selectedCategories.toSet(), muscles = selectedMuscles.toSet(),
+                        equipmentSelections = selectedEquipment.toSet(), capabilities = selectedCapabilities.mapNotNull { value -> MeasurementCapability.entries.find { it.wireName == value } }.toSet(),
+                        source = selectedSource, section = selectedSection))
             }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("${filteredExercises.size} exercises", style = MaterialTheme.typography.labelMedium, modifier = Modifier.testTag("exercise_result_count"))
-                TextButton(onClick = { searchQuery = ""; selectedCategory = "All"; selectedEquipment = "All"; selectedCapability = null; showCustomOnly = null; selectedSection = LibrarySection.ALL }) { Text("Clear filters") }
+                TextButton(onClick = { selectedCategories = emptyList(); selectedMuscles = emptyList(); selectedEquipment = emptyList(); selectedCapabilities = emptyList(); selectedSource = ExerciseSource.ALL; selectedSection = LibrarySection.ALL }) { Text("Clear filters") }
             }
 
             if (filteredExercises.isEmpty()) {
@@ -196,11 +185,20 @@ fun ExerciseScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "Create a custom one using the '+' button at the top.",
+                            "Try editing or clearing filters. Your search text will be kept.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
+                        Button(onClick = { selectedCategories = emptyList(); selectedMuscles = emptyList(); selectedEquipment = emptyList(); selectedCapabilities = emptyList(); selectedSource = ExerciseSource.ALL; selectedSection = LibrarySection.ALL }, modifier = Modifier.testTag("empty_clear_filters")) { Text("Clear filters") }
+                        OutlinedButton(onClick = {
+                            draftCategories = selectedCategories
+                            draftMuscles = selectedMuscles
+                            draftEquipment = selectedEquipment
+                            draftCapabilities = selectedCapabilities
+                            draftSource = selectedSource
+                            showFilters = true
+                        }, modifier = Modifier.testTag("empty_edit_filters")) { Text("Edit filters") }
                     }
                 }
             } else {
@@ -208,7 +206,7 @@ fun ExerciseScreen(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filteredExercises) { exercise ->
+                    items(filteredExercises, key = { it.id }) { exercise ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -290,6 +288,35 @@ fun ExerciseScreen(
                     item {
                         Spacer(modifier = Modifier.height(32.dp))
                     }
+                }
+            }
+        }
+    }
+
+    if (showFilters) {
+        val categories = remember(catalogue) { catalogue.exercises.map { it.category }.distinct().sorted() }
+        val muscles = remember(catalogue) { catalogue.exercises.flatMap { it.primaryMuscles + it.secondaryMuscles }.distinct().sorted() }
+        val equipment = remember(catalogue) { catalogue.exercises.flatMap { it.equipment }.distinct().sorted() }
+        ModalBottomSheet(onDismissRequest = { showFilters = false }, modifier = Modifier.testTag("exercise_filter_sheet")) {
+            Column(modifier = Modifier.fillMaxHeight().padding(horizontal = 20.dp)) {
+                Text("Filter exercises", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Choices within a group match any; different groups combine together.", style = MaterialTheme.typography.bodySmall)
+                LazyColumn(modifier = Modifier.weight(1f).testTag("exercise_filter_options"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    item { FilterOptionGroup("Source", ExerciseSource.entries.map { it.name.lowercase().replaceFirstChar(Char::uppercase) }, listOf(draftSource.name.lowercase().replaceFirstChar(Char::uppercase))) { value -> draftSource = ExerciseSource.valueOf(value.uppercase()) } }
+                    item { FilterOptionGroup("Category", categories, draftCategories) { value -> draftCategories = toggleChoice(draftCategories, value) } }
+                    item { FilterOptionGroup("Muscles", muscles, draftMuscles) { value -> draftMuscles = toggleChoice(draftMuscles, value) } }
+                    item { FilterOptionGroup("Equipment", equipment, draftEquipment) { value -> draftEquipment = toggleChoice(draftEquipment, value) } }
+                    item { FilterOptionGroup("Tracking", MeasurementCapability.entries.map { it.wireName }, draftCapabilities) { value -> draftCapabilities = toggleChoice(draftCapabilities, value) } }
+                    item { Spacer(Modifier.height(12.dp)); Text("End of filter options", modifier = Modifier.testTag("exercise_filter_last_option")) }
+                }
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { draftCategories = emptyList(); draftMuscles = emptyList(); draftEquipment = emptyList(); draftCapabilities = emptyList(); draftSource = ExerciseSource.ALL }, modifier = Modifier.testTag("clear_all_exercise_filters")) { Text("Clear all") }
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { showFilters = false }) { Text("Cancel") }
+                    Button(onClick = {
+                        selectedCategories = draftCategories; selectedMuscles = draftMuscles; selectedEquipment = draftEquipment
+                        selectedCapabilities = draftCapabilities; selectedSource = draftSource; showFilters = false
+                    }, modifier = Modifier.testTag("apply_exercise_filters")) { Text("Apply") }
                 }
             }
         }
@@ -393,8 +420,40 @@ fun ExerciseScreen(
         }
     }
 
-    // Exercise History / Previous Weights Dialog
-    if (selectedExerciseForHistory != null) {
+    selectedExerciseForHistory?.let { exercise ->
+        val logs by remember(exercise.id) { viewModel.getCompletedSetsForExercise(exercise.id) }.collectAsState(initial = emptyList())
+        val governed = catalogueById[exercise.id]
+        val details = exerciseDetails(exercise, governed)
+        val related = remember(governed, catalogue) { governed?.let { relatedExercises(it, catalogue.exercises) } ?: emptyList() }
+        Dialog(onDismissRequest = { selectedExerciseForHistory = null }) {
+            Surface(Modifier.fillMaxSize().testTag("exercise_detail_screen"), color = MaterialTheme.colorScheme.background) {
+                LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) { Column(Modifier.weight(1f)) { Text(exercise.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black); Text(details.source, color = MaterialTheme.colorScheme.primary) }; IconButton(onClick = { selectedExerciseForHistory = null }) { Icon(Icons.Default.Close, "Close exercise details") } } }
+                    item { OutlinedButton(onClick = { viewModel.toggleFavoriteExercise(exercise.id) }, Modifier.fillMaxWidth()) { Icon(if (exercise.id in favoriteExercises) Icons.Default.Star else Icons.Default.StarBorder, null); Spacer(Modifier.width(8.dp)); Text(if (exercise.id in favoriteExercises) "Remove favourite" else "Add favourite") } }
+                    item { DetailSection("Overview", listOf("Category" to details.category, "Movement pattern" to details.movementPattern, "Equipment" to details.equipment.joinToString().ifBlank { "Not provided" }, "Primary muscles" to details.primaryMuscles.joinToString().ifBlank { "Not provided" }, "Secondary muscles" to details.secondaryMuscles.joinToString().ifBlank { "None specified" }, "Tracking" to details.measurements.joinToString(), "Laterality" to details.laterality)) }
+                    item { DetailTextSection("Setup", details.setup ?: "Setup instructions are not available for this custom exercise.") }
+                    item { DetailListSection("Execution", details.steps, true) }
+                    item { DetailTextSection("Breathing", details.breathing ?: "Breathing guidance is not available for this custom exercise.") }
+                    item { DetailListSection("Technique cues", details.cues) }
+                    item { DetailListSection("Common mistakes", details.mistakes) }
+                    item { DetailTextSection("Safety", details.safety ?: "No governed safety notes are available. Use a comfortable range and seek qualified guidance when needed.") }
+                    item { Text("Previous performance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+                    if (logs.isEmpty()) item { Text("No logged history for this exercise.") }
+                    items(logs.groupBy { it.sessionId }.toList(), key = { it.first }) { (sessionId, sets) ->
+                        val session = sessions.find { it.id == sessionId }
+                        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .4f)).padding(12.dp)) { Text(session?.templateName ?: "Workout", fontWeight = FontWeight.Bold); Text(sets.joinToString(" · ") { "${com.example.core.util.UnitConverter.formatWeight(it.weight.toDouble(), isMetric)} × ${it.reps}" }) }
+                    }
+                    item { Text("Related exercises", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+                    if (related.isEmpty()) item { Text("No governed related exercises are available.") }
+                    items(related, key = { "related_${it.id}" }) { item -> OutlinedButton(onClick = { selectedExerciseForHistory = exercises.firstOrNull { it.id == item.id } ?: item.toRoom(0) }, Modifier.fillMaxWidth()) { Text(item.name, Modifier.weight(1f)); Icon(Icons.Default.ChevronRight, null) } }
+                    item { Text("End of exercise details", modifier = Modifier.testTag("exercise_detail_last_section")); Spacer(Modifier.height(24.dp)) }
+                }
+            }
+        }
+    }
+
+    // Retained legacy implementation is unreachable while the V32 full-page detail is active.
+    if (false && selectedExerciseForHistory != null) {
         val exercise = selectedExerciseForHistory!!
         val logsFlow = remember(exercise.id) { viewModel.getCompletedSetsForExercise(exercise.id) }
         val logs by logsFlow.collectAsState(initial = emptyList())
@@ -538,6 +597,36 @@ fun ExerciseScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailTextSection(title: String, text: String) = Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(text)
+}
+@Composable
+private fun DetailListSection(title: String, values: List<String>, numbered: Boolean = false) = Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    if (values.isEmpty()) Text("Not available for this custom exercise.") else values.forEachIndexed { index, value -> Text(if (numbered) "${index + 1}. $value" else "• $value") }
+}
+@Composable
+private fun DetailSection(title: String, values: List<Pair<String, String>>) = Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.testTag("exercise_details_metadata")) {
+    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); values.forEach { (label, value) -> Text("$label: $value") }
+}
+
+private fun toggleChoice(current: List<String>, value: String): List<String> =
+    if (value in current) current - value else (current + value).distinct()
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FilterOptionGroup(title: String, options: List<String>, selected: List<String>, onToggle: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            options.sortedWith(compareByDescending<String> { it in selected }.thenBy { normalize(listOf(it)) }).forEach { option ->
+                FilterChip(selected = option in selected, onClick = { onToggle(option) }, label = { Text(option.replace('_', ' ').replaceFirstChar(Char::uppercase)) })
             }
         }
     }
