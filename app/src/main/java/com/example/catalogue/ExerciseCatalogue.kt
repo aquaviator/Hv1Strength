@@ -18,8 +18,12 @@ data class CatalogueMetadata(val contractVersion: Int, val catalogueVersion: Str
 data class CatalogueExercise(val id: String, val name: String, val aliases: List<String>, val category: String,
     val primaryMuscles: List<String>, val secondaryMuscles: List<String>, val equipment: List<String>,
     val type: String, val capabilities: Set<MeasurementCapability>, val laterality: String,
-    val bodyweight: Boolean, val active: Boolean, val replacementId: String? = null) {
-    val searchableText = normalize(listOf(name, category) + aliases + primaryMuscles + secondaryMuscles + equipment)
+    val bodyweight: Boolean, val active: Boolean, val replacementId: String? = null,
+    val movementPattern: String = "", val setup: String = "", val steps: List<String> = emptyList(),
+    val breathing: String = "", val cues: List<String> = emptyList(), val mistakes: List<String> = emptyList(),
+    val safety: String = "", val regressionId: String? = null, val progressionId: String? = null,
+    val relatedIds: List<String> = emptyList()) {
+    val searchableText = normalize(listOf(name, category, movementPattern) + aliases + primaryMuscles + secondaryMuscles + equipment)
     fun toRoom(now: Long) = Exercise(id, name, category, false, id, "global", now, now, null, 1, "SYNCED")
 }
 
@@ -56,7 +60,10 @@ class PackagedExerciseLibrarySource private constructor(override val snapshot: C
                 CatalogueExercise(o.getString("id"), o.getString("name"), o.strings("aliases"), o.getString("category"),
                     o.strings("primaryMuscles"), o.strings("secondaryMuscles"), o.strings("equipment"), o.getString("type"),
                     o.strings("capabilities").mapNotNull { value -> MeasurementCapability.entries.find { it.wireName == value } }.toSet(),
-                    o.getString("laterality"), o.getBoolean("bodyweight"), o.getBoolean("active"), o.optString("replacementId").ifBlank { null })
+                    o.getString("laterality"), o.getBoolean("bodyweight"), o.getBoolean("active"), o.optString("replacementId").ifBlank { null },
+                    o.optString("movementPattern"), o.optString("setup"), o.optStrings("steps"), o.optString("breathing"),
+                    o.optStrings("cues"), o.optStrings("mistakes"), o.optString("safety"),
+                    o.optString("regressionId").ifBlank { null }, o.optString("progressionId").ifBlank { null }, o.optStrings("relatedIds"))
             }
             val errors = validate(metadata, exercises, sha256(canonicalPayload(json)))
             return PackagedExerciseLibrarySource(CatalogueSnapshot(metadata, exercises, CatalogueValidation(errors.isEmpty(), errors)))
@@ -74,9 +81,11 @@ class PackagedExerciseLibrarySource private constructor(override val snapshot: C
             if (items.any { it.type !in setOf("strength", "bodyweight", "conditioning", "cardio") }) add("Invalid exercise type")
             if (items.any { it.laterality !in setOf("bilateral", "unilateral") }) add("Invalid laterality")
             if (items.any { it.capabilities.isEmpty() }) add("Exercise without measurement capabilities")
+            if (m.sourceId == "human-v1-strength" && items.any { it.movementPattern.isBlank() || it.setup.isBlank() || it.steps.isEmpty() || it.breathing.isBlank() || it.cues.isEmpty() || it.mistakes.isEmpty() || it.safety.isBlank() }) add("Exercise without required detail content")
             if (items.any { (MeasurementCapability.ASSISTED_LOAD in it.capabilities || MeasurementCapability.WEIGHTED_BODYWEIGHT in it.capabilities) && MeasurementCapability.BODYWEIGHT !in it.capabilities }) add("Bodyweight load capability requires bodyweight")
             val ids = items.map { it.id }.toSet()
             if (items.any { it.replacementId != null && it.replacementId !in ids }) add("Invalid replacement ID")
+            if (items.any { item -> item.regressionId?.let { it !in ids || it == item.id } == true || item.progressionId?.let { it !in ids || it == item.id } == true || item.relatedIds.any { it !in ids || it == item.id } || item.relatedIds.distinct().size != item.relatedIds.size }) add("Invalid related exercise reference")
             items.forEach { start -> var next = start.replacementId; val seen = mutableSetOf(start.id); while (next != null) {
                 if (!seen.add(next)) { add("Replacement cycle"); break }; next = items.firstOrNull { it.id == next }?.replacementId
             }}
@@ -110,8 +119,10 @@ class PackagedExerciseLibrarySource private constructor(override val snapshot: C
 }
 
 private fun JSONObject.strings(name: String) = getJSONArray(name).let { array -> (0 until array.length()).map(array::getString) }
+private fun JSONObject.optStrings(name: String) = optJSONArray(name)?.let { array -> (0 until array.length()).map(array::getString) } ?: emptyList()
 fun normalize(parts: List<String>): String = Normalizer.normalize(parts.joinToString(" "), Normalizer.Form.NFD)
-    .replace(Regex("\\p{M}+"), "").lowercase().trim().replace(Regex("\\s+"), " ")
+    .replace(Regex("\\p{M}+"), "").lowercase()
+    .replace(Regex("[^a-z0-9]+"), " ").trim().replace(Regex("\\s+"), " ")
 
 object ExerciseCatalogueRuntime {
     @Volatile var snapshot: CatalogueSnapshot? = null
