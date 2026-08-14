@@ -58,16 +58,16 @@ class ExerciseCatalogueTest {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val source = PackagedExerciseLibrarySource.load(context)
         assertTrue(source.snapshot.validation.errors.joinToString(), source.snapshot.validation.valid)
-        assertEquals(124, source.snapshot.exercises.size)
+        assertEquals(264, source.snapshot.exercises.size)
         val database = Room.inMemoryDatabaseBuilder(context, StrengthDatabase::class.java).allowMainThreadQueries().build()
         try {
             database.strengthDao().insertExercise(Exercise("custom_1", "My Lift", "Other", true))
             val first = CatalogueReconciler(context, database).reconcile()
             val second = CatalogueReconciler(context, database).reconcile()
             val stored = database.strengthDao().getAllExercisesSync()
-            assertEquals(124, first.inserted)
+            assertEquals(264, first.inserted)
             assertEquals(0, second.inserted)
-            assertEquals(125, stored.size)
+            assertEquals(265, stored.size)
             assertTrue(stored.single { it.id == "custom_1" }.isCustom)
         } finally { database.close() }
     }
