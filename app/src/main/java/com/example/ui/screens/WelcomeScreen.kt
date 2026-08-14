@@ -240,7 +240,7 @@ fun WelcomeScreen(
                     if (repositoryError.kind == AuthErrorKind.DATA_CONFLICT) {
                         Button(onClick = { }, modifier = Modifier.fillMaxWidth().testTag("review_differences")) { Text("Review differences") }
                         OutlinedButton(onClick = viewModel::continueWithExistingLocalData,
-                            modifier = Modifier.fillMaxWidth().testTag("decide_later")) { Text("Decide later") }
+                            modifier = Modifier.fillMaxWidth().testTag("use_offline_after_conflict")) { Text("Use offline for now") }
                     } else if (repositoryError.kind == AuthErrorKind.DIFFERENT_ACCOUNT) {
                         Button(
                             onClick = viewModel::continueWithExistingLocalData,

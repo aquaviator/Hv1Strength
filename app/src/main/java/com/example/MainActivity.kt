@@ -189,6 +189,16 @@ fun MainAppScreen(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val startupDestination = resolveStartupDestination(authState, appAccessState)
+    val syncConflicts by viewModel.syncConflictSummaries.collectAsState()
+    var conflictReviewShownThisSession by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(syncConflicts, authState, currentRoute) {
+        if (!conflictReviewShownThisSession && syncConflicts.isNotEmpty() &&
+            authState is AuthState.Authenticated && currentRoute != null && currentRoute != "conflict_review") {
+            conflictReviewShownThisSession = true
+            navController.navigate("conflict_review") { launchSingleTop = true }
+        }
+    }
 
     LaunchedEffect(Unit) {
         com.example.service.workout.WorkoutExecutionServiceController.navigationRequests.collect {
@@ -440,6 +450,20 @@ fun MainAppScreen(
                     onNavigateBack = {
                         navController.popBackStack()
                     }
+                )
+            }
+            composable("conflict_review") {
+                SyncConflictReviewScreen(
+                    conflicts = syncConflicts,
+                    onUseOffline = {
+                        viewModel.continueWithExistingLocalData()
+                        navController.navigate("workout") { popUpTo("conflict_review") { inclusive = true } }
+                    },
+                    onSignOut = {
+                        viewModel.cancelAuthenticatedAccount()
+                        navController.navigate("welcome") { popUpTo(0) { inclusive = true } }
+                    },
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable("planner") {

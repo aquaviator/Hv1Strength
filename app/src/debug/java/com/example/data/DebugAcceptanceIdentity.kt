@@ -5,12 +5,14 @@ import com.example.BuildConfig
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 
 internal object DebugAcceptanceIdentity {
     private const val PREFS = "v31_debug_acceptance"
     private const val PROJECT = "demo-hv1-planner-sync"
     private const val APP = "v31-debug-acceptance"
     private const val MAX_SESSION_MS = 15 * 60 * 1000L
+    @Volatile private var acceptanceFirestore: FirebaseFirestore? = null
 
     fun arm(context: Context, uid: String, humanId: String, now: Long = System.currentTimeMillis()) {
         require(BuildConfig.DEBUG && uid == SYNTHETIC_UID && humanId == SYNTHETIC_HUMAN)
@@ -60,6 +62,18 @@ internal object DebugAcceptanceIdentity {
         return AuthDependencies(auth, client)
     }
 
+    fun firestore(context: Context): FirebaseFirestore? {
+        if (!hasValidAcceptanceMarker(context)) return null
+        acceptanceFirestore?.let { return it }
+        val app = dependencies(context)?.firebaseAuth?.app ?: return null
+        return synchronized(this) {
+            acceptanceFirestore ?: FirebaseFirestore.getInstance(app).also {
+                it.useEmulator("10.0.2.2", 8080)
+                acceptanceFirestore = it
+            }
+        }
+    }
+
     private fun failClosed(): AuthDependencies = AuthDependencies(null, object : HumanIdentityClient {
         override suspend fun ensureHumanIdentity() = HumanIdentityResult.IdentityConflict
     })
@@ -71,4 +85,23 @@ internal object DebugAcceptanceIdentity {
 internal object BuildVariantAuthDependenciesFactory {
     fun create(context: Context): AuthDependencies = DebugAcceptanceIdentity.dependencies(context)
         ?: AuthDependencies(runCatching { FirebaseAuth.getInstance() }.getOrNull(), FirebaseHumanIdentityClient())
+}
+
+internal object BuildVariantSyncFirestoreFactory {
+    fun create(context: Context): FirebaseFirestore = DebugAcceptanceIdentity.firestore(context)
+        ?: FirebaseFirestore.getInstance()
+}
+
+internal object BuildVariantSyncIdentityFactory {
+    suspend fun resolve(context: Context, repository: StrengthRepository): com.example.core.sync.SyncIdentityResolution? {
+        if (!DebugAcceptanceIdentity.isValidAcceptanceSession(context)) return null
+        val profile = repository.getUserProfile(DebugAcceptanceIdentity.SYNTHETIC_UID)
+            ?: return com.example.core.sync.SyncIdentityResolution.Blocked(com.example.core.sync.SyncIdentityBlockReason.PROFILE_MISSING)
+        if (profile.humanUserId != DebugAcceptanceIdentity.SYNTHETIC_HUMAN) {
+            return com.example.core.sync.SyncIdentityResolution.Blocked(com.example.core.sync.SyncIdentityBlockReason.HUMAN_USER_ID_UNRESOLVED)
+        }
+        return com.example.core.sync.SyncIdentityResolution.Ready(
+            com.example.core.sync.AuthenticatedSyncIdentity(DebugAcceptanceIdentity.SYNTHETIC_UID, DebugAcceptanceIdentity.SYNTHETIC_HUMAN)
+        )
+    }
 }

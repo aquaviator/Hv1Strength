@@ -54,7 +54,7 @@ class SignInUxHotfixTest {
         assertEquals("Some saved items need your attention", copy.title)
         assertTrue(copy.message.contains("Human V1 online data"))
         assertTrue(copy.message.contains("Nothing has been overwritten"))
-        assertEquals(listOf("Review differences", "Decide later", "Sign out"), copy.actions)
+        assertEquals(listOf("Review differences", "Use offline for now", "Sign out"), copy.actions)
     }
 
     @Test fun differentAccountUsesOfflineExportAndSignOutWithoutRetry() {

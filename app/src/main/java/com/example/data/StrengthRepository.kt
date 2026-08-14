@@ -928,6 +928,10 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
     suspend fun reconcileRemoteTombstone(id: String, deletedAt: Long, revision: Long, updatedAt: Long) =
         dao.reconcileRemoteTombstone(id, deletedAt, revision, updatedAt)
     suspend fun markPlannedWorkoutConflict(id: String, diagnostic: String) = dao.markPlannedWorkoutConflict(id, diagnostic)
+    suspend fun markExerciseConflict(id: String, diagnostic: String) = dao.markExerciseConflict(id, diagnostic)
+    suspend fun markTemplateConflict(id: Int, diagnostic: String) = dao.markTemplateConflict(id, diagnostic)
+    fun getConflictExercisesFlow() = dao.getConflictExercisesFlow()
+    fun getConflictTemplatesFlow() = dao.getConflictTemplatesFlow()
 
     // ==========================================
     // ACTIVE WORKOUT BACKUP SUPPORT

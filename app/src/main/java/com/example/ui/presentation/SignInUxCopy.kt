@@ -8,7 +8,7 @@ fun signInDialogCopy(kind: AuthErrorKind, fallback: String): SignInDialogCopy = 
     AuthErrorKind.DATA_CONFLICT -> SignInDialogCopy(
         "Some saved items need your attention",
         "This phone and your Human V1 online data contain different versions of the same routines or custom exercises. Nothing has been overwritten. Your workouts and history are safe.",
-        listOf("Review differences", "Decide later", "Sign out")
+        listOf("Review differences", "Use offline for now", "Sign out")
     )
     AuthErrorKind.DIFFERENT_ACCOUNT -> SignInDialogCopy(
         "Workouts from another profile were found on this phone",

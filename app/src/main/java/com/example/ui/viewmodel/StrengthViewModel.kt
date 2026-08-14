@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
+import com.example.ui.presentation.toConflictSummary
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -109,6 +110,13 @@ class StrengthViewModel(
     private val repository: StrengthRepository,
     private val context: android.content.Context
 ) : ViewModel() {
+
+    val syncConflictSummaries = kotlinx.coroutines.flow.combine(
+        repository.getConflictExercisesFlow(),
+        repository.getConflictTemplatesFlow()
+    ) { exercises, templates ->
+        exercises.map { it.toConflictSummary() } + templates.map { it.toConflictSummary() }
+    }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), emptyList())
 
     // Screen-level representations for template editing
     data class TemplateExerciseState(

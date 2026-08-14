@@ -460,6 +460,18 @@ interface StrengthDao {
     @Query("UPDATE body_weight SET syncStatus = 'CONFLICT', conflictState = :conflictData WHERE id = :id")
     suspend fun markBodyWeightConflict(id: Int, conflictData: String)
 
+    @Query("UPDATE exercise SET syncStatus = 'CONFLICT', conflictState = :conflictData WHERE id = :id AND isCustom = 1")
+    suspend fun markExerciseConflict(id: String, conflictData: String)
+
+    @Query("UPDATE workout_template SET syncStatus = 'CONFLICT', conflictState = :conflictData WHERE id = :id")
+    suspend fun markTemplateConflict(id: Int, conflictData: String)
+
+    @Query("SELECT * FROM exercise WHERE syncStatus = 'CONFLICT' AND isCustom = 1 ORDER BY updatedAt DESC")
+    fun getConflictExercisesFlow(): Flow<List<Exercise>>
+
+    @Query("SELECT * FROM workout_template WHERE syncStatus = 'CONFLICT' ORDER BY updatedAt DESC")
+    fun getConflictTemplatesFlow(): Flow<List<WorkoutTemplate>>
+
 
     // ==========================================
     // GLOBAL ID SELECTORS FOR SYNC
