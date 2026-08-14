@@ -298,7 +298,7 @@ fun ExerciseScreen(
         val muscles = remember(catalogue) { catalogue.exercises.flatMap { it.primaryMuscles + it.secondaryMuscles }.distinct().sorted() }
         val equipment = remember(catalogue) { catalogue.exercises.flatMap { it.equipment }.distinct().sorted() }
         ModalBottomSheet(onDismissRequest = { showFilters = false }, modifier = Modifier.testTag("exercise_filter_sheet")) {
-            Column(modifier = Modifier.fillMaxHeight().padding(horizontal = 20.dp)) {
+            Column(modifier = Modifier.fillMaxHeight(0.7f).padding(horizontal = 20.dp).navigationBarsPadding()) {
                 Text("Filter exercises", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text("Choices within a group match any; different groups combine together.", style = MaterialTheme.typography.bodySmall)
                 LazyColumn(modifier = Modifier.weight(1f).testTag("exercise_filter_options"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
