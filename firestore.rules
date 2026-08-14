@@ -56,6 +56,26 @@ service cloud.firestore {
       }
     }
 
+    // The governed catalogue is global, non-user data. Published production
+    // releases are publicly readable so bundled-first refresh also works before
+    // sign-in; all client writes and all unpublished content remain denied.
+    match /exercise_catalogue/{documentId} {
+      allow read: if resource.data.status == "published"
+        && resource.data.channel == "production";
+      allow create, update, delete: if false;
+    }
+    match /exercise_catalogue_releases/{releaseId} {
+      allow read: if resource.data.status == "published"
+        && resource.data.channel == "production";
+      allow create, update, delete: if false;
+      match /exercises/{exerciseId} {
+        allow read: if get(/databases/$(database)/documents/exercise_catalogue_releases/$(releaseId)).data.status == "published"
+          && get(/databases/$(database)/documents/exercise_catalogue_releases/$(releaseId)).data.channel == "production";
+        allow create, update, delete: if false;
+      }
+    }
+    match /staging_exercises/{document=**} { allow read, write: if false; }
+
     match /legacyIdentityEvidence/{document=**} { allow read, write: if false; }
     match /entitlements/{document=**} { allow read, write: if false; }
     match /trialPolicies/{document=**} { allow read, write: if false; }

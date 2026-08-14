@@ -28,6 +28,12 @@ describe("Strength Firestore trusted identity rules", function() {
       await setDoc(doc(db, `users/${H2}`), { ownerFirebaseUid: "uid-b", status: "ACTIVE", schemaVersion: 1 });
       await setDoc(doc(db, `users/${H1}/profile/main`), { value: "a" });
       await setDoc(doc(db, `users/${H2}/profile/main`), { value: "b" });
+      await setDoc(doc(db, "exercise_catalogue/current"), { releaseId: "published-1", status: "published", channel: "production" });
+      await setDoc(doc(db, "exercise_catalogue_releases/published-1"), { releaseId: "published-1", status: "published", channel: "production" });
+      await setDoc(doc(db, "exercise_catalogue_releases/published-1/exercises/bench_press"), { exerciseId: "bench_press" });
+      await setDoc(doc(db, "exercise_catalogue_releases/draft-1"), { releaseId: "draft-1", status: "draft", channel: "production" });
+      await setDoc(doc(db, "exercise_catalogue_releases/draft-1/exercises/secret"), { exerciseId: "secret" });
+      await setDoc(doc(db, "staging_exercises/candidate"), { name: "Unreviewed" });
     });
   });
 
@@ -155,5 +161,31 @@ describe("Strength Firestore trusted identity rules", function() {
     const db = env.authenticatedContext("uid-a").firestore();
     await assertFails(getDoc(doc(db, `users/${H1}/unknown/item`)));
     await assertFails(setDoc(doc(db, `users/${H1}/unknown/item`), { value: true }));
+  });
+  it("allows public reads of the published production catalogue", async () => {
+    const db = env.unauthenticatedContext().firestore();
+    await assertSucceeds(getDoc(doc(db, "exercise_catalogue/current")));
+    await assertSucceeds(getDoc(doc(db, "exercise_catalogue_releases/published-1")));
+    await assertSucceeds(getDoc(doc(db, "exercise_catalogue_releases/published-1/exercises/bench_press")));
+    await assertSucceeds(getDocs(collection(db, "exercise_catalogue_releases/published-1/exercises")));
+  });
+  it("denies ordinary clients access to draft and staging content", async () => {
+    for (const db of [env.unauthenticatedContext().firestore(), env.authenticatedContext("uid-a").firestore()]) {
+      await assertFails(getDoc(doc(db, "exercise_catalogue_releases/draft-1")));
+      await assertFails(getDoc(doc(db, "exercise_catalogue_releases/draft-1/exercises/secret")));
+      await assertFails(getDoc(doc(db, "staging_exercises/candidate")));
+    }
+  });
+  it("denies Android clients every governed catalogue mutation", async () => {
+    const db = env.authenticatedContext("uid-a").firestore();
+    for (const ref of [
+      doc(db, "exercise_catalogue/current"),
+      doc(db, "exercise_catalogue_releases/published-1"),
+      doc(db, "exercise_catalogue_releases/published-1/exercises/bench_press")
+    ]) {
+      await assertFails(setDoc(ref, { status: "published", channel: "production" }));
+      await assertFails(deleteDoc(ref));
+    }
+    await assertFails(setDoc(doc(db, "exercise_catalogue_releases/new-release"), { status: "published", channel: "production" }));
   });
 });

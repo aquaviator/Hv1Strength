@@ -64,6 +64,12 @@ describe("Strength Firestore trusted identity rules", function () {
             await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, `users/${H2}`), { ownerFirebaseUid: "uid-b", status: "ACTIVE", schemaVersion: 1 });
             await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, `users/${H1}/profile/main`), { value: "a" });
             await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, `users/${H2}/profile/main`), { value: "b" });
+            await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, "exercise_catalogue/current"), { releaseId: "published-1", status: "published", channel: "production" });
+            await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, "exercise_catalogue_releases/published-1"), { releaseId: "published-1", status: "published", channel: "production" });
+            await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, "exercise_catalogue_releases/published-1/exercises/bench_press"), { exerciseId: "bench_press" });
+            await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, "exercise_catalogue_releases/draft-1"), { releaseId: "draft-1", status: "draft", channel: "production" });
+            await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, "exercise_catalogue_releases/draft-1/exercises/secret"), { exerciseId: "secret" });
+            await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, "staging_exercises/candidate"), { name: "Unreviewed" });
         });
     });
     it("denies unauthenticated access", async () => {
@@ -187,6 +193,32 @@ describe("Strength Firestore trusted identity rules", function () {
         const db = env.authenticatedContext("uid-a").firestore();
         await (0, rules_unit_testing_1.assertFails)((0, firestore_1.getDoc)((0, firestore_1.doc)(db, `users/${H1}/unknown/item`)));
         await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(db, `users/${H1}/unknown/item`), { value: true }));
+    });
+    it("allows public reads of the published production catalogue", async () => {
+        const db = env.unauthenticatedContext().firestore();
+        await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.getDoc)((0, firestore_1.doc)(db, "exercise_catalogue/current")));
+        await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.getDoc)((0, firestore_1.doc)(db, "exercise_catalogue_releases/published-1")));
+        await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.getDoc)((0, firestore_1.doc)(db, "exercise_catalogue_releases/published-1/exercises/bench_press")));
+        await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.getDocs)((0, firestore_1.collection)(db, "exercise_catalogue_releases/published-1/exercises")));
+    });
+    it("denies ordinary clients access to draft and staging content", async () => {
+        for (const db of [env.unauthenticatedContext().firestore(), env.authenticatedContext("uid-a").firestore()]) {
+            await (0, rules_unit_testing_1.assertFails)((0, firestore_1.getDoc)((0, firestore_1.doc)(db, "exercise_catalogue_releases/draft-1")));
+            await (0, rules_unit_testing_1.assertFails)((0, firestore_1.getDoc)((0, firestore_1.doc)(db, "exercise_catalogue_releases/draft-1/exercises/secret")));
+            await (0, rules_unit_testing_1.assertFails)((0, firestore_1.getDoc)((0, firestore_1.doc)(db, "staging_exercises/candidate")));
+        }
+    });
+    it("denies Android clients every governed catalogue mutation", async () => {
+        const db = env.authenticatedContext("uid-a").firestore();
+        for (const ref of [
+            (0, firestore_1.doc)(db, "exercise_catalogue/current"),
+            (0, firestore_1.doc)(db, "exercise_catalogue_releases/published-1"),
+            (0, firestore_1.doc)(db, "exercise_catalogue_releases/published-1/exercises/bench_press")
+        ]) {
+            await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)(ref, { status: "published", channel: "production" }));
+            await (0, rules_unit_testing_1.assertFails)((0, firestore_1.deleteDoc)(ref));
+        }
+        await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(db, "exercise_catalogue_releases/new-release"), { status: "published", channel: "production" }));
     });
 });
 //# sourceMappingURL=firestore.rules.test.js.map
