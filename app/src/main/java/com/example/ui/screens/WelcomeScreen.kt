@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.example.BuildConfig
 import com.example.ui.viewmodel.StrengthViewModel
 import com.example.data.AuthState
+import com.example.ui.presentation.signInDialogCopy
 import com.example.data.AuthErrorKind
 import kotlinx.coroutines.launch
 
@@ -141,7 +142,7 @@ fun WelcomeScreen(
                 InfoBulletRow(
                     icon = Icons.Default.Lock,
                     title = "Google Sign-In Account",
-                    description = "Create a proper account profile to uniquely identify your workouts, and prepare for future secure cloud sync."
+                    description = "Google verifies who you are. Human V1 manages your saved workouts and Human V1 online data."
                 )
             }
 
@@ -154,7 +155,7 @@ fun WelcomeScreen(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Authenticating...",
+                    text = "Preparing your Human V1 data",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF0066FF),
                     fontWeight = FontWeight.SemiBold
@@ -219,17 +220,11 @@ fun WelcomeScreen(
     }
 
     if (repositoryError != null) {
-        val title = when (repositoryError.kind) {
-            AuthErrorKind.PROFILE_CONFLICT -> "Local data needs attention"
-            AuthErrorKind.APP_CHECK -> "Device verification unavailable"
-            AuthErrorKind.NETWORK -> "Connection problem"
-            AuthErrorKind.TRUSTED_IDENTITY -> "Account verification incomplete"
-            AuthErrorKind.UNKNOWN -> "Sign-in could not finish"
-        }
+        val dialogCopy = signInDialogCopy(repositoryError.kind, repositoryError.message)
         AlertDialog(
             modifier = Modifier.testTag("authentication_error_dialog"),
             onDismissRequest = { },
-            title = { Text(title) },
+            title = { Text(dialogCopy.title) },
             text = {
                 Column(
                     modifier = Modifier
@@ -237,20 +232,20 @@ fun WelcomeScreen(
                         .semantics { liveRegion = LiveRegionMode.Assertive },
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(repositoryError.message, modifier = Modifier.testTag("authentication_error_message"))
-                    if (repositoryError.kind == AuthErrorKind.PROFILE_CONFLICT) {
-                        Text("Cloud synchronization is paused. Your existing data has not been deleted, changed, or uploaded.")
-                        Text("You can continue with the existing local profile, create a backup, or cancel and sign out.")
-                    }
+                    Text(dialogCopy.message, modifier = Modifier.testTag("authentication_error_message"))
                 }
             },
             confirmButton = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (repositoryError.canContinueOffline) {
+                    if (repositoryError.kind == AuthErrorKind.DATA_CONFLICT) {
+                        Button(onClick = { }, modifier = Modifier.fillMaxWidth().testTag("review_differences")) { Text("Review differences") }
+                        OutlinedButton(onClick = viewModel::continueWithExistingLocalData,
+                            modifier = Modifier.fillMaxWidth().testTag("decide_later")) { Text("Decide later") }
+                    } else if (repositoryError.kind == AuthErrorKind.DIFFERENT_ACCOUNT) {
                         Button(
                             onClick = viewModel::continueWithExistingLocalData,
                             modifier = Modifier.fillMaxWidth().testTag("continue_existing_local_data")
-                        ) { Text("Continue offline with local data") }
+                        ) { Text("Use this data offline") }
                         OutlinedButton(
                              onClick = {
                                  coroutineScope.launch {
@@ -262,22 +257,24 @@ fun WelcomeScreen(
                                          .onFailure { recoveryBackupError = "The backup could not be created. No data was changed." }
                                  }
                              },
-                             modifier = Modifier.fillMaxWidth().testTag("backup_conflicting_local_data")
-                        ) { Text("Back up my data") }
-                        TextButton(
-                            onClick = beginGoogleSignIn,
-                            modifier = Modifier.fillMaxWidth().testTag("check_profile_again")
-                        ) { Text("Check again") }
+                             modifier = Modifier.fillMaxWidth().testTag("export_protected_local_data")
+                        ) { Text("Export the data") }
+                    } else if (repositoryError.kind == AuthErrorKind.NETWORK) {
+                        Button(onClick = beginGoogleSignIn, modifier = Modifier.fillMaxWidth().testTag("retry_authentication")) { Text("Try again") }
+                        OutlinedButton(onClick = viewModel::continueWithExistingLocalData,
+                            modifier = Modifier.fillMaxWidth().testTag("use_offline_after_network")) { Text("Use offline") }
                     } else {
                         Button(
                             onClick = beginGoogleSignIn,
                             modifier = Modifier.fillMaxWidth().testTag("retry_authentication")
-                        ) { Text("Retry") }
+                        ) { Text("Try again") }
+                        if (repositoryError.canContinueOffline) OutlinedButton(onClick = viewModel::continueWithExistingLocalData,
+                            modifier = Modifier.fillMaxWidth()) { Text("Use offline") }
                     }
                     OutlinedButton(
                         onClick = viewModel::cancelAuthenticatedAccount,
                         modifier = Modifier.fillMaxWidth().testTag("cancel_authenticated_account")
-                    ) { Text("Cancel and sign out") }
+                    ) { Text("Sign out") }
                 }
             }
         )
@@ -286,8 +283,8 @@ fun WelcomeScreen(
     recoveryBackup?.let { backup ->
         AlertDialog(
             onDismissRequest = { recoveryBackup = null },
-            title = { Text("Backup ready") },
-            text = { Text("Your local data backup has been created and validated. Save a copy before resolving this account.") },
+            title = { Text("Export ready") },
+            text = { Text("Your saved Human V1 data is ready to copy.") },
             confirmButton = {
                 Button(onClick = {
                     val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -299,49 +296,8 @@ fun WelcomeScreen(
         )
     }
 
-    if (legacyUpgrade != null) {
-        AlertDialog(
-            modifier = Modifier.testTag("legacy_upgrade_dialog"),
-            onDismissRequest = { },
-            title = { Text("Update local Strength data") },
-            text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState())
-                        .semantics { liveRegion = LiveRegionMode.Polite },
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("Google sign-in succeeded. This is verified as the same account previously used on this device.")
-                    Text("Strength needs to update the local ownership reference. Existing workouts and measurements will be retained.")
-                    Text("Nothing will be uploaded until the update completes.")
-                    Text("${legacyUpgrade.totals.templates} routines, ${legacyUpgrade.totals.sessions} workouts, ${legacyUpgrade.totals.measurements} measurements")
-                    if (legacyUpgrade.backupCompleted) Text("Backup prepared", modifier = Modifier.testTag("legacy_backup_complete"))
-                }
-            },
-            confirmButton = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = viewModel::updateVerifiedLegacyAndContinue,
-                        modifier = Modifier.fillMaxWidth().testTag("update_legacy_and_continue")) { Text("Update and continue") }
-                    OutlinedButton(onClick = {
-                        coroutineScope.launch {
-                            runCatching { viewModel.exportData() }.onSuccess { backup ->
-                                runCatching { org.json.JSONObject(backup) }.onSuccess {
-                                    recoveryBackup = backup
-                                    viewModel.markLegacyBackupCompleted()
-                                }.onFailure { recoveryBackupError = "The backup could not be validated. The update has not started." }
-                            }.onFailure { recoveryBackupError = "The backup could not be created. The update has not started." }
-                        }
-                    }, modifier = Modifier.fillMaxWidth().testTag("backup_before_legacy_upgrade")) { Text("Back up first") }
-                    OutlinedButton(onClick = viewModel::continueWithExistingLocalData,
-                        modifier = Modifier.fillMaxWidth().testTag("legacy_upgrade_continue_offline")) { Text("Continue offline") }
-                    TextButton(onClick = viewModel::cancelAuthenticatedAccount,
-                        modifier = Modifier.fillMaxWidth().testTag("legacy_upgrade_cancel")) { Text("Cancel and sign out") }
-                }
-            }
-        )
-    }
-
     if (authState is AuthState.LegacyUpgradeRunning) {
-        AlertDialog(onDismissRequest = { }, title = { Text("Updating local data") },
+        AlertDialog(onDismissRequest = { }, title = { Text("Preparing your Human V1 data") },
             text = { Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(modifier = Modifier.testTag("legacy_upgrade_progress"))
                 Text((authState as AuthState.LegacyUpgradeRunning).stage)
@@ -349,17 +305,17 @@ fun WelcomeScreen(
     }
 
     if (authState is AuthState.LegacyUpgradeHandoffRequired) {
-        AlertDialog(onDismissRequest = { }, title = { Text("Finish account setup") },
-            text = { Text((authState as AuthState.LegacyUpgradeHandoffRequired).message) },
+        AlertDialog(onDismissRequest = { }, title = { Text("We couldn’t finish signing in") },
+            text = { Text("Check your connection and try again. Your saved workouts remain on this phone.") },
             confirmButton = { Button(onClick = viewModel::retryLegacyMigrationHandoff,
                 modifier = Modifier.testTag("retry_legacy_handoff")) { Text("Try again") } },
-            dismissButton = { TextButton(onClick = viewModel::cancelAuthenticatedAccount) { Text("Cancel and sign out") } })
+            dismissButton = { TextButton(onClick = viewModel::cancelAuthenticatedAccount) { Text("Sign out") } })
     }
 
     recoveryBackupError?.let { message ->
         AlertDialog(
             onDismissRequest = { recoveryBackupError = null },
-            title = { Text("Backup not created") },
+            title = { Text("Export not created") },
             text = { Text(message) },
             confirmButton = { Button(onClick = { recoveryBackupError = null }) { Text("Return") } }
         )

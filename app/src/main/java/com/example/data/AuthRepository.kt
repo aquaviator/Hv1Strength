@@ -30,7 +30,7 @@ sealed class AuthState {
     ) : AuthState()
 }
 
-enum class AuthErrorKind { PROFILE_CONFLICT, APP_CHECK, NETWORK, TRUSTED_IDENTITY, UNKNOWN }
+enum class AuthErrorKind { DATA_CONFLICT, DIFFERENT_ACCOUNT, APP_CHECK, NETWORK, TRUSTED_IDENTITY, UNKNOWN }
 
 internal sealed interface ProfileHandoffResolution {
     data class Ready(val profile: UserProfile) : ProfileHandoffResolution
@@ -254,7 +254,7 @@ class AuthRepository(
             Log.e(TAG, "stage=legacy_handoff result=RETRY_REQUIRED")
             strengthRepository.dao.updateMigrationPhase("HANDOFF_REQUIRED", System.currentTimeMillis())
             com.example.core.sync.SyncScheduler.cancelCloudSync(context)
-            _authState.value = AuthState.LegacyUpgradeHandoffRequired("Your local data is safe. Finishing account setup can be retried.")
+            _authState.value = AuthState.Error("We couldn’t finish signing in. Check your connection and try again. Your saved workouts remain on this phone.", AuthErrorKind.NETWORK, true)
         }
     }
 
@@ -280,7 +280,7 @@ class AuthRepository(
                     if (migrationState?.phase == "ROOM_COMMITTED" || migrationState?.phase == "HANDOFF_REQUIRED") {
                         if (migrationState.sourceProfileId != userId) {
                             com.example.core.sync.SyncScheduler.cancelCloudSync(context)
-                            _authState.value = AuthState.Error("A local account update is awaiting the verified account that started it.", AuthErrorKind.PROFILE_CONFLICT, true)
+                            _authState.value = AuthState.Error("Workouts from another profile were found on this phone.", AuthErrorKind.DIFFERENT_ACCOUNT, true)
                         } else completeLegacyMigrationHandoff()
                         return@launch
                     }
@@ -321,7 +321,7 @@ class AuthRepository(
                                 firebaseUser.email, firebaseUser.photoUrl?.toString(), ownership)) return@launch
                         _authState.value = AuthState.Error(
                             "Sign-in succeeded, but this device contains data belonging to a different local profile. Nothing was deleted or uploaded.",
-                            AuthErrorKind.PROFILE_CONFLICT, offlineProfile != null
+                            AuthErrorKind.DIFFERENT_ACCOUNT, offlineProfile != null
                         )
                         return@launch
                     }
@@ -333,7 +333,7 @@ class AuthRepository(
                     ) as? ProfileHandoffResolution.Ready)?.profile
                     if (profile == null) {
                         clearAuthoritativeIdentityState()
-                        _authState.value = AuthState.Error("The trusted account could not be matched to a safe local profile.", AuthErrorKind.PROFILE_CONFLICT)
+                        _authState.value = AuthState.Error("Workouts from another profile were found on this phone.", AuthErrorKind.DIFFERENT_ACCOUNT)
                         return@launch
                     }
 
@@ -498,7 +498,7 @@ class AuthRepository(
                     message = if (disposition == LocalProfileDisposition.AMBIGUOUS)
                         "This device contains multiple local profiles. Sign-in succeeded, but synchronization is paused until the profiles are reviewed."
                     else "Sign-in succeeded, but this device already contains data belonging to a different local profile. Nothing was deleted or uploaded.",
-                    kind = AuthErrorKind.PROFILE_CONFLICT,
+                    kind = AuthErrorKind.DIFFERENT_ACCOUNT,
                     canContinueOffline = offlineProfile != null
                 )
                 return@withContext null
@@ -510,7 +510,7 @@ class AuthRepository(
             ) as? ProfileHandoffResolution.Ready)?.profile
             if (profile == null) {
                 clearAuthoritativeIdentityState()
-                _authState.value = AuthState.Error("The trusted account could not be matched to a safe local profile.", AuthErrorKind.PROFILE_CONFLICT)
+                _authState.value = AuthState.Error("Workouts from another profile were found on this phone.", AuthErrorKind.DIFFERENT_ACCOUNT)
                 return@withContext null
             }
 
@@ -537,7 +537,7 @@ class AuthRepository(
             throw e
         } catch (e: com.google.firebase.FirebaseNetworkException) {
             Log.e(TAG, "Google Sign-In network failure", e)
-            _authState.value = AuthState.Error("Network unavailable. Check your connection and try again.", AuthErrorKind.NETWORK)
+            _authState.value = AuthState.Error("We couldn’t finish signing in. Check your connection and try again. Your saved workouts remain on this phone.", AuthErrorKind.NETWORK, true)
             return@withContext null
         } catch (e: com.google.firebase.auth.FirebaseAuthException) {
             Log.e(TAG, "Firebase rejected Google authentication (${e.errorCode})")
