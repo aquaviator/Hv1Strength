@@ -28,6 +28,14 @@ class GovernedCatalogueTest(unittest.TestCase):
         self.assertIn("Reverse Pec Deck", item["canonicalName"])
         self.assertIn("machine rear delt fly", item["suppressedAliases"])
 
+    def test_schema_is_app_neutral_for_a_second_reader(self):
+        item = self.items[0]
+        self.assertIn("trackingCapabilities", item)
+        self.assertIn("recommendedForHiit", item)
+        self.assertIn("recommendedForStrength", item)
+        self.assertNotIn("humanUserId", item)
+        self.assertNotIn("strengthOnly", item)
+
     def test_reference_and_capability_failures_are_rejected(self):
         bad = [dict(item) for item in self.items]
         bad[0] = dict(bad[0], relatedExerciseIds=[bad[0]["exerciseId"]], trackingCapabilities=["assisted_load"])

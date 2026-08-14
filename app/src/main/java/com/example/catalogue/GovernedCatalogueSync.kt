@@ -32,6 +32,34 @@ enum class CatalogueSyncStatus {
 
 data class CatalogueSyncDecision(val accepted: Boolean, val status: CatalogueSyncStatus, val detail: String? = null)
 
+data class GovernedCatalogueApplyPlan(
+    val upserts: List<com.example.data.Exercise>,
+    val retainedHistoricalIds: Set<String>,
+    val preservedCustomIds: Set<String>,
+    val customCollisions: Set<String>
+)
+
+fun planGovernedCatalogueApply(
+    incoming: List<CatalogueExercise>, existing: List<com.example.data.Exercise>, acceptedAt: Long
+): GovernedCatalogueApplyPlan {
+    val custom = existing.filter { it.isCustom }
+    val customIds = custom.map { it.id }.toSet()
+    val governed = existing.filterNot { it.isCustom }
+    val governedById = governed.associateBy { it.id }
+    val incomingIds = incoming.map { it.id }.toSet()
+    return GovernedCatalogueApplyPlan(
+        upserts = incoming.filterNot { it.id in customIds }.map { exercise ->
+            val old = governedById[exercise.id]
+            val candidate = exercise.toRoom(acceptedAt).copy(createdAt = old?.createdAt ?: acceptedAt)
+            if (old != null && old.name == candidate.name && old.category == candidate.category) old
+            else candidate.copy(revision = (old?.revision ?: 0) + 1)
+        },
+        retainedHistoricalIds = governed.map { it.id }.filterNot { it in incomingIds }.toSet(),
+        preservedCustomIds = customIds,
+        customCollisions = customIds.intersect(incomingIds)
+    )
+}
+
 object GovernedCatalogueValidator {
     fun validate(payload: GovernedCataloguePayload): CatalogueSyncDecision {
         val manifest = payload.manifest
@@ -131,14 +159,10 @@ class GovernedCatalogueCoordinator(
         if (!decision.accepted) { recordFailure(bundled, checkedAt, decision.status); return decision }
         val dao = database.strengthDao()
         val existing = dao.getAllExercisesSync()
-        val customIds = existing.filter { it.isCustom }.map { it.id }.toSet()
-        val existingById = existing.filterNot { it.isCustom }.associateBy { it.id }
         val acceptedAt = now()
+        val plan = planGovernedCatalogueApply(payload.exercises, existing, acceptedAt)
         database.withTransaction {
-            dao.insertExercises(payload.exercises.filterNot { it.id in customIds }.map { exercise ->
-                val old = existingById[exercise.id]
-                exercise.toRoom(acceptedAt).copy(createdAt = old?.createdAt ?: acceptedAt, revision = (old?.revision ?: 0) + 1)
-            })
+            dao.insertExercises(plan.upserts)
             dao.insertCatalogueReleaseState(CatalogueReleaseState(
                 bundledVersion = bundled.metadata.catalogueVersion, acceptedReleaseId = payload.manifest.releaseId,
                 acceptedCatalogueVersion = payload.manifest.catalogueVersion, acceptedChecksum = payload.manifest.contentSha256,
@@ -176,7 +200,16 @@ class GovernedCatalogueCoordinator(
 object GovernedCatalogueSync {
     suspend fun start(context: Context, database: StrengthDatabase): CatalogueSyncDecision {
         val bundled = ExerciseCatalogueRuntime.snapshot ?: ExerciseCatalogueRuntime.load(context)
-        return GovernedCatalogueCoordinator(database, FirebaseGovernedCatalogueGateway()).synchronize(bundled)
+        val decision = GovernedCatalogueCoordinator(database, FirebaseGovernedCatalogueGateway()).synchronize(bundled)
+        val snapshot = ExerciseCatalogueRuntime.snapshot ?: bundled
+        context.getSharedPreferences("strength_catalogue", Context.MODE_PRIVATE).edit()
+            .putString("update_status", decision.status.name)
+            .putLong("last_update_check", System.currentTimeMillis())
+            .putString("source", if (snapshot.metadata.sourceId == "human-v1-governed-firestore") "GOVERNED" else "BUNDLED")
+            .apply {
+                if (decision.accepted) putLong("last_update_success", System.currentTimeMillis())
+            }.apply()
+        return decision
     }
 }
 

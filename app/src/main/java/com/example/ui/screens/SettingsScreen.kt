@@ -30,6 +30,8 @@ import com.example.BuildConfig
 import com.example.data.AuthState
 import com.example.data.UserProfile
 import com.example.catalogue.ExerciseCatalogueRuntime
+import com.example.catalogue.GovernedCatalogueSync
+import com.example.data.StrengthDatabase
 import com.example.core.sync.SyncManager
 import com.example.ui.components.ExperienceStatusCard
 import com.example.ui.presentation.*
@@ -73,7 +75,11 @@ fun SettingsScreen(
     val syncStatus by SyncManager.currentStatus.collectAsState()
     val pendingChanges by SyncManager.queueSize.collectAsState()
     val syncError by SyncManager.lastError.collectAsState()
-    val catalogue = remember { ExerciseCatalogueRuntime.snapshot ?: ExerciseCatalogueRuntime.load(context) }
+    var catalogue by remember { mutableStateOf(ExerciseCatalogueRuntime.snapshot ?: ExerciseCatalogueRuntime.load(context)) }
+    val cataloguePrefs = remember { context.getSharedPreferences("strength_catalogue", Context.MODE_PRIVATE) }
+    var catalogueStatus by remember { mutableStateOf(cataloguePrefs.getString("update_status", "BUNDLED_ACTIVE") ?: "BUNDLED_ACTIVE") }
+    var lastCatalogueSuccess by remember { mutableLongStateOf(cataloguePrefs.getLong("last_update_success", 0L)) }
+    var catalogueChecking by remember { mutableStateOf(false) }
     val notificationsGranted = remember {
         android.os.Build.VERSION.SDK_INT < 33 || androidx.core.content.ContextCompat.checkSelfPermission(
             context, android.Manifest.permission.POST_NOTIFICATIONS
@@ -143,7 +149,31 @@ fun SettingsScreen(
                     cataloguePresentation(catalogue.metadata.catalogueVersion, catalogue.exercises.size, customCount, catalogue.validation.valid, catalogue.fallbackActive),
                     "settings_catalogue_status"
                 )
-                if (BuildConfig.DEBUG) SettingsInfoRow(Icons.Default.Fingerprint, "Catalogue checksum", catalogue.metadata.payloadChecksum)
+                val source = if (catalogue.metadata.sourceId == "human-v1-governed-firestore") "Downloaded catalogue" else "Included with the app"
+                val friendlyStatus = when (catalogueStatus) {
+                    "REMOTE_ACCEPTED" -> "Catalogue is ready"
+                    "BUNDLED_ACTIVE" -> "Included catalogue is ready"
+                    "UNAVAILABLE", "TIMEOUT" -> "Could not check for updates"
+                    else -> if (catalogueStatus == "BUNDLED_CURRENT") "Catalogue is ready" else "Included catalogue retained"
+                }
+                SettingsInfoRow(Icons.Default.CloudDone, "Source", source)
+                SettingsInfoRow(Icons.Default.Info, "Update status", friendlyStatus)
+                SettingsInfoRow(Icons.Default.Schedule, "Last successful update", if (lastCatalogueSuccess == 0L) "Not yet" else java.text.DateFormat.getDateTimeInstance().format(java.util.Date(lastCatalogueSuccess)))
+                SettingsClickableRow(Icons.Default.Refresh, if (catalogueChecking) "Checking…" else "Check for updates", "Your current library stays available while checking", onClick = {
+                    if (!catalogueChecking) coroutineScope.launch {
+                        catalogueChecking = true
+                        val database = StrengthDatabase.getDatabase(context, coroutineScope)
+                        val decision = GovernedCatalogueSync.start(context, database)
+                        catalogue = ExerciseCatalogueRuntime.snapshot ?: catalogue
+                        catalogueStatus = decision.status.name
+                        lastCatalogueSuccess = cataloguePrefs.getLong("last_update_success", 0L)
+                        catalogueChecking = false
+                    }
+                })
+                if (BuildConfig.DEBUG) {
+                    SettingsInfoRow(Icons.Default.Fingerprint, "Catalogue checksum", catalogue.metadata.payloadChecksum)
+                    SettingsInfoRow(Icons.Default.BugReport, "Validation status", catalogueStatus)
+                }
             }
 
             // General Settings Card
