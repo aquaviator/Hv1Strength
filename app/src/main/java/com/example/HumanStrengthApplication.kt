@@ -5,8 +5,6 @@ import android.util.Log
 import androidx.work.Configuration
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 
 class HumanStrengthApplication : Application(), Configuration.Provider {
 
@@ -59,24 +57,6 @@ class HumanStrengthApplication : Application(), Configuration.Provider {
             AppCheckInitializationState.FAILED
         }
         return appCheckInitializationState
-    }
-
-    private fun configureEmulators() {
-        try {
-            val auth = FirebaseAuth.getInstance()
-            auth.useEmulator("10.0.2.2", 9099)
-            Log.i(TAG, "Using Firebase Auth Emulator at 10.0.2.2:9099")
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not configure Auth Emulator", e)
-        }
-
-        try {
-            val firestore = FirebaseFirestore.getInstance()
-            firestore.useEmulator("10.0.2.2", 8080)
-            Log.i(TAG, "Using Firestore Emulator at 10.0.2.2:8080")
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not configure Firestore Emulator", e)
-        }
     }
 
     companion object {
