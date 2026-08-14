@@ -15,6 +15,7 @@ interface EntitlementRepository {
     val appAccessState: StateFlow<AppAccessState>
     val cachedEntitlement: StateFlow<VerifiedEntitlement?>
     fun refreshAccessState()
+    fun prepareForUser(uid: String?) {}
     suspend fun verifyAndProcessPurchase(purchaseToken: String, productId: String, orderId: String?): Boolean
 }
 
@@ -45,6 +46,7 @@ class PlayEntitlementRepository(
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val trialRefreshMutex = Mutex()
+    @Volatile private var preparedUid: String? = currentUidProvider()
 
     private val _cachedEntitlement = MutableStateFlow<VerifiedEntitlement?>(discardLegacyPaidEntitlementCache())
     override val cachedEntitlement: StateFlow<VerifiedEntitlement?> = _cachedEntitlement.asStateFlow()
@@ -138,6 +140,8 @@ class PlayEntitlementRepository(
         cached: VerifiedEntitlement?
     ): AppAccessState {
         val now = System.currentTimeMillis()
+        val currentUid = currentUidProvider()
+        if (currentUid == null || preparedUid != currentUid) return AppAccessState.Initializing
 
         // 1. Check if cached verified entitlement is valid
         cached?.let { paidAccessState(it, now) }?.let { return it }
@@ -163,14 +167,7 @@ class PlayEntitlementRepository(
         }
 
         // 3. Resolve the backend-owned Human V1 account trial for the signed-in Firebase user.
-        val currentUid = currentUidProvider()
-        loadCachedAccountTrial(currentUid)?.let { return accountTrialState(it, now) }
-
-        if (currentUid != null) {
-            return trialRefreshMutex.withLock {
-                loadCachedAccountTrial(currentUid)?.let {
-                    return@withLock accountTrialState(it, System.currentTimeMillis())
-                }
+        return trialRefreshMutex.withLock {
                 when (val result = accountTrialClient.initializeOrGetTrial()) {
                     is AccountTrialResult.Active -> {
                         if (result.uid != currentUid) return@withLock AppAccessState.VerificationUnavailable
@@ -186,21 +183,32 @@ class PlayEntitlementRepository(
                         AppAccessState.Expired(result.trialEndsAtMillis, result.trialStartedAtMillis)
                     }
                     AccountTrialResult.Disabled -> AppAccessState.Unentitled
-                    AccountTrialResult.Unauthenticated -> AppAccessState.Unentitled
+                    AccountTrialResult.Unauthenticated -> AppAccessState.VerificationUnavailable
                     AccountTrialResult.Unavailable -> AppAccessState.VerificationUnavailable
                 }
-            }
-        }
-
-        return when {
-            subState is SubscriptionState.Loading -> AppAccessState.Initializing
-            cached != null && (!cached.isValidAt(now) || cached.status == "EXPIRED") -> AppAccessState.Expired()
-            else -> AppAccessState.Unentitled
         }
     }
 
+    override fun prepareForUser(uid: String?) {
+        if (preparedUid == uid) return
+        // Publish a safe state before associating the owner. This prevents a
+        // previous account's terminal state from being framed as the new user's.
+        _appAccessState.value = AppAccessState.Initializing
+        _cachedEntitlement.value = null
+        preparedUid = uid
+    }
+
     override fun refreshAccessState() {
+        val uid = currentUidProvider()
+        prepareForUser(uid)
+        if (uid == null) return
         externalScope.launch {
+            val cachedTrial = loadCachedAccountTrial(uid)
+            if (cachedTrial != null && cachedTrial.endsAtMillis > System.currentTimeMillis()) {
+                _appAccessState.value = accountTrialState(cachedTrial, System.currentTimeMillis())
+            } else if (!_appAccessState.value.hasAppAccess) {
+                _appAccessState.value = AppAccessState.Initializing
+            }
             val subState = billingRepository.subscriptionState.value
             val cached = _cachedEntitlement.value
             _appAccessState.value = resolveAccessState(subState, cached)

@@ -24,7 +24,14 @@ class ProfileViewModel(
 
     val subscriptionState: StateFlow<com.example.billing.SubscriptionState> = billingRepository.subscriptionState
     val productInfo: StateFlow<com.example.billing.SubscriptionProductInfo?> = billingRepository.productInfo
-    val appAccessState: StateFlow<com.example.billing.AppAccessState> = entitlementRepository.appAccessState
+    private val preparedAccessUid = MutableStateFlow<String?>(null)
+    val appAccessState: StateFlow<com.example.billing.AppAccessState> = combine(
+        authViewModel.authState,
+        entitlementRepository.appAccessState,
+        preparedAccessUid
+    ) { authState, accessState, ownerUid ->
+        accessStateForAuthenticatedUser(authState, ownerUid, accessState)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, com.example.billing.AppAccessState.Initializing)
     val hasAppAccess: StateFlow<Boolean> = appAccessState
         .map { it.hasAppAccess }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -33,7 +40,12 @@ class ProfileViewModel(
         viewModelScope.launch {
             authViewModel.authState.collect { authState ->
                 if (authState is AuthState.Authenticated) {
+                    entitlementRepository.prepareForUser(authState.profile.id)
+                    preparedAccessUid.value = authState.profile.id
                     entitlementRepository.refreshAccessState()
+                } else {
+                    preparedAccessUid.value = null
+                    entitlementRepository.prepareForUser(null)
                 }
             }
         }
@@ -719,4 +731,15 @@ class ProfileViewModel(
             }
         }
     }
+}
+
+internal fun accessStateForAuthenticatedUser(
+    authState: AuthState,
+    preparedUid: String?,
+    repositoryState: com.example.billing.AppAccessState
+): com.example.billing.AppAccessState {
+    val authenticatedUid = (authState as? AuthState.Authenticated)?.profile?.id
+        ?: return com.example.billing.AppAccessState.Initializing
+    return if (preparedUid == authenticatedUid) repositoryState
+    else com.example.billing.AppAccessState.Initializing
 }
