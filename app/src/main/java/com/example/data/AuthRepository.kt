@@ -180,7 +180,7 @@ class AuthRepository(
         restoreSession()
     }
 
-    private suspend fun offerVerifiedLegacyUpgrade(
+    private suspend fun continueVerifiedLegacyUpgrade(
         firebaseUid: String,
         identity: AuthoritativeHumanIdentity,
         legacy: UserProfile,
@@ -201,8 +201,9 @@ class AuthRepository(
         pendingLegacyPlan = strengthRepository.dao.prepareVerifiedLegacyMigration(
             legacy.id, firebaseUid, identity.humanUserId, target
         )
-        _authState.value = AuthState.LegacyUpgradeRequired(requireNotNull(pendingLegacyPlan).totals)
-        Log.i(TAG, "stage=legacy_upgrade result=OFFERED")
+        _authState.value = AuthState.LegacyUpgradeRunning("Preparing your Human V1 data")
+        Log.i(TAG, "stage=legacy_upgrade result=AUTOMATIC_HANDOFF_STARTED")
+        legacyUpgradeMutex.withLock { completeVerifiedLegacyUpgrade() }
         return true
     }
 
@@ -212,19 +213,23 @@ class AuthRepository(
     }
 
     suspend fun updateVerifiedLegacyAndContinue() = legacyUpgradeMutex.withLock {
+        completeVerifiedLegacyUpgrade()
+    }
+
+    private suspend fun completeVerifiedLegacyUpgrade() {
         val plan = pendingLegacyPlan ?: run {
-            _authState.value = AuthState.Error("The verified upgrade must be checked again before it can start.", AuthErrorKind.PROFILE_CONFLICT, true)
-            return@withLock
+            _authState.value = AuthState.Error("We couldn’t finish signing in. Your saved workouts remain on this phone.", AuthErrorKind.NETWORK, true)
+            return
         }
-        if (_authState.value !is AuthState.LegacyUpgradeRequired) return@withLock
-        _authState.value = AuthState.LegacyUpgradeRunning("Updating local ownership")
+        if (_authState.value !is AuthState.LegacyUpgradeRequired && _authState.value !is AuthState.LegacyUpgradeRunning) return
+        _authState.value = AuthState.LegacyUpgradeRunning("Preparing your Human V1 data")
         try {
             strengthRepository.dao.commitVerifiedLegacyMigration(plan)
             pendingLegacyPlan = null
             completeLegacyMigrationHandoff()
         } catch (e: Exception) {
             Log.e(TAG, "stage=legacy_upgrade result=FAILED_BEFORE_COMMIT")
-            _authState.value = AuthState.Error("The local update did not complete. Your existing data is unchanged.", AuthErrorKind.PROFILE_CONFLICT, true)
+            _authState.value = AuthState.Error("We couldn’t finish signing in. Your saved workouts remain on this phone.", AuthErrorKind.NETWORK, true)
         }
     }
 
@@ -312,7 +317,7 @@ class AuthRepository(
                     Log.i(TAG, "stage=local_profile result=$disposition")
                     if (disposition == LocalProfileDisposition.MEANINGFUL_DATA || disposition == LocalProfileDisposition.AMBIGUOUS) {
                         if (disposition == LocalProfileDisposition.MEANINGFUL_DATA && mismatchedProfile != null &&
-                            offerVerifiedLegacyUpgrade(userId, identity, mismatchedProfile, firebaseUser.displayName,
+                            continueVerifiedLegacyUpgrade(userId, identity, mismatchedProfile, firebaseUser.displayName,
                                 firebaseUser.email, firebaseUser.photoUrl?.toString(), ownership)) return@launch
                         _authState.value = AuthState.Error(
                             "Sign-in succeeded, but this device contains data belonging to a different local profile. Nothing was deleted or uploaded.",
@@ -486,7 +491,7 @@ class AuthRepository(
             Log.i(TAG, "stage=local_profile result=$disposition")
             if (disposition == LocalProfileDisposition.MEANINGFUL_DATA || disposition == LocalProfileDisposition.AMBIGUOUS) {
                 if (disposition == LocalProfileDisposition.MEANINGFUL_DATA && mismatchedProfile != null &&
-                    offerVerifiedLegacyUpgrade(fUid, identity, mismatchedProfile, displayName, email, photoUrl, ownership)) {
+                    continueVerifiedLegacyUpgrade(fUid, identity, mismatchedProfile, displayName, email, photoUrl, ownership)) {
                     return@withContext null
                 }
                 _authState.value = AuthState.Error(
