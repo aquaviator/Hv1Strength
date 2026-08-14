@@ -5,6 +5,12 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface StrengthDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCatalogueReleaseState(state: CatalogueReleaseState)
+
+    @Query("SELECT * FROM catalogue_release_state WHERE id = 1")
+    suspend fun getCatalogueReleaseState(): CatalogueReleaseState?
+
     @Query("SELECT * FROM body_weight WHERE humanUserId = :owner OR userId = :profileId")
     suspend fun legacyBodyWeights(profileId: String, owner: String): List<BodyWeight>
     @Query("SELECT * FROM tape_measurement WHERE humanUserId = :owner OR userId = :profileId")

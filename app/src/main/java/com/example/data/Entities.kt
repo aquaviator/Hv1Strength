@@ -7,6 +7,22 @@ import com.example.core.versioning.VersionedEntity
 
 data class LocalOwnershipSummary(val meaningfulRecordCount: Int, val otherProfileCount: Int)
 
+@Entity(tableName = "catalogue_release_state")
+data class CatalogueReleaseState(
+    @PrimaryKey val id: Int = 1,
+    val bundledVersion: String,
+    val acceptedReleaseId: String? = null,
+    val acceptedCatalogueVersion: String? = null,
+    val acceptedChecksum: String? = null,
+    val acceptedSchemaVersion: Int? = null,
+    val source: String = "BUNDLED",
+    val status: String = "BUNDLED_ACTIVE",
+    val previousReleaseId: String? = null,
+    val lastCheckAt: Long? = null,
+    val lastSuccessAt: Long? = null,
+    val lastFailure: String? = null
+)
+
 @Entity(tableName = "user_profile")
 data class UserProfile(
     @PrimaryKey val id: String, // "offline" or Google User ID

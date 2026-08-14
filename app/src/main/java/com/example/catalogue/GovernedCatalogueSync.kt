@@ -1,0 +1,193 @@
+package com.example.catalogue
+
+import android.content.Context
+import androidx.room.withTransaction
+import com.example.BuildConfig
+import com.example.data.CatalogueReleaseState
+import com.example.data.StrengthDatabase
+import com.google.android.gms.tasks.Task
+import com.google.firebase.firestore.FirebaseFirestore
+import java.security.MessageDigest
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
+
+data class GovernedReleaseManifest(
+    val releaseId: String, val schemaVersion: Int, val catalogueVersion: String,
+    val exerciseCount: Int, val contentSha256: String, val status: String,
+    val channel: String, val minimumStrengthVersionCode: Int, val previousReleaseId: String?
+)
+
+data class GovernedCataloguePayload(
+    val manifest: GovernedReleaseManifest,
+    val rawDocuments: List<Map<String, Any?>>,
+    val exercises: List<CatalogueExercise>
+)
+
+enum class CatalogueSyncStatus {
+    REMOTE_ACCEPTED, BUNDLED_CURRENT, UNAVAILABLE, PERMISSION_DENIED, AUTHENTICATION_FAILED,
+    APP_CHECK_FAILED, TIMEOUT, INVALID_MANIFEST, INVALID_SCHEMA, COUNT_MISMATCH,
+    CHECKSUM_MISMATCH, INVALID_REFERENCE, VERSION_INCOMPATIBLE, UNKNOWN_FAILURE
+}
+
+data class CatalogueSyncDecision(val accepted: Boolean, val status: CatalogueSyncStatus, val detail: String? = null)
+
+object GovernedCatalogueValidator {
+    fun validate(payload: GovernedCataloguePayload): CatalogueSyncDecision {
+        val manifest = payload.manifest
+        if (manifest.status != "published" || manifest.channel != "production")
+            return CatalogueSyncDecision(false, CatalogueSyncStatus.INVALID_MANIFEST)
+        if (manifest.schemaVersion != 1 || payload.rawDocuments.any { (it["schemaVersion"] as? Number)?.toInt() != 1 })
+            return CatalogueSyncDecision(false, CatalogueSyncStatus.INVALID_SCHEMA)
+        if (manifest.minimumStrengthVersionCode > BuildConfig.VERSION_CODE)
+            return CatalogueSyncDecision(false, CatalogueSyncStatus.VERSION_INCOMPATIBLE)
+        if (manifest.exerciseCount != payload.exercises.size || payload.rawDocuments.size != payload.exercises.size)
+            return CatalogueSyncDecision(false, CatalogueSyncStatus.COUNT_MISMATCH)
+        val ids = payload.exercises.map { it.id }
+        if (ids.distinct().size != ids.size) return CatalogueSyncDecision(false, CatalogueSyncStatus.INVALID_SCHEMA)
+        val idSet = ids.toSet()
+        if (payload.exercises.any { item ->
+                item.relatedIds.any { it !in idSet || it == item.id } ||
+                    item.regressionId?.let { it !in idSet || it == item.id } == true ||
+                    item.progressionId?.let { it !in idSet || it == item.id } == true ||
+                    item.replacementId?.let { it !in idSet || it == item.id } == true
+            }) return CatalogueSyncDecision(false, CatalogueSyncStatus.INVALID_REFERENCE)
+        val actual = checksum(payload.rawDocuments)
+        if (!manifest.contentSha256.equals(actual, true))
+            return CatalogueSyncDecision(false, CatalogueSyncStatus.CHECKSUM_MISMATCH, actual)
+        return CatalogueSyncDecision(true, CatalogueSyncStatus.REMOTE_ACCEPTED)
+    }
+
+    internal fun canonical(value: Any?): String = when (value) {
+        null -> "null"
+        is Boolean, is Number -> value.toString()
+        is String -> "\"" + value.flatMap { char -> when (char) {
+            '\\' -> listOf('\\', '\\'); '"' -> listOf('\\', '"'); '\n' -> listOf('\\', 'n')
+            '\r' -> listOf('\\', 'r'); '\t' -> listOf('\\', 't'); else -> listOf(char)
+        }}.joinToString("") + "\""
+        is List<*> -> value.joinToString(",", "[", "]") { canonical(it) }
+        is Map<*, *> -> value.entries.sortedBy { it.key.toString() }.joinToString(",", "{", "}") {
+            canonical(it.key.toString()) + ":" + canonical(it.value)
+        }
+        else -> canonical(value.toString())
+    }
+
+    internal fun checksum(documents: List<Map<String, Any?>>) = sha256(canonical(documents.sortedBy { it["exerciseId"].toString() }))
+
+    private fun sha256(value: String) = MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
+}
+
+interface GovernedCatalogueGateway { suspend fun fetch(): GovernedCataloguePayload }
+
+class FirebaseGovernedCatalogueGateway(private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()) : GovernedCatalogueGateway {
+    override suspend fun fetch(): GovernedCataloguePayload {
+        val current = firestore.collection("exercise_catalogue").document("current").get().awaitTask()
+        require(current.exists()) { "current manifest unavailable" }
+        val releaseId = current.getString("releaseId") ?: error("releaseId missing")
+        val release = firestore.collection("exercise_catalogue_releases").document(releaseId).get().awaitTask()
+        require(release.exists()) { "release manifest unavailable" }
+        val documents = firestore.collection("exercise_catalogue_releases").document(releaseId)
+            .collection("exercises").get().awaitTask().documents.map { it.data.orEmpty() }
+        val data = release.data.orEmpty()
+        return GovernedCataloguePayload(data.toManifest(), documents, documents.map(::toExercise))
+    }
+
+    private fun Map<String, Any?>.toManifest() = GovernedReleaseManifest(
+        string("releaseId"), int("schemaVersion"), string("catalogueVersion"), int("exerciseCount"),
+        string("contentSha256"), string("status"), string("channel"), int("minimumStrengthVersionCode"),
+        this["previousReleaseId"] as? String
+    )
+
+    private fun toExercise(data: Map<String, Any?>) = CatalogueExercise(
+        id = data.string("exerciseId"), name = data.string("displayName"), aliases = data.strings("aliases"),
+        category = data.string("category"), primaryMuscles = data.strings("primaryMuscles"),
+        secondaryMuscles = data.strings("secondaryMuscles"), equipment = data.strings("equipment"), type = data.string("exerciseType"),
+        capabilities = data.strings("trackingCapabilities").mapNotNull { wire -> MeasurementCapability.entries.find { it.wireName == wire } }.toSet(),
+        laterality = data.string("laterality"), bodyweight = "bodyweight" in data.strings("trackingCapabilities"),
+        active = data["deprecated"] != true, replacementId = data["replacementExerciseId"] as? String,
+        movementPattern = data.strings("movementPatterns").firstOrNull().orEmpty(), setup = data.string("setupInstructions"),
+        steps = data.strings("executionInstructions"), breathing = data.string("breathingGuidance"),
+        cues = data.strings("techniqueCues"), mistakes = data.strings("commonMistakes"), safety = data.string("safetyGuidance"),
+        regressionId = data.strings("regressionIds").firstOrNull(), progressionId = data.strings("progressionIds").firstOrNull(),
+        relatedIds = data.strings("relatedExerciseIds")
+    )
+}
+
+class GovernedCatalogueCoordinator(
+    private val database: StrengthDatabase,
+    private val gateway: GovernedCatalogueGateway,
+    private val now: () -> Long = System::currentTimeMillis
+) {
+    suspend fun synchronize(bundled: CatalogueSnapshot): CatalogueSyncDecision {
+        val checkedAt = now()
+        val payload = try { withTimeout(10_000) { gateway.fetch() } }
+        catch (error: Throwable) {
+            val status = classify(error)
+            recordFailure(bundled, checkedAt, status)
+            return CatalogueSyncDecision(false, status)
+        }
+        val decision = GovernedCatalogueValidator.validate(payload)
+        if (!decision.accepted) { recordFailure(bundled, checkedAt, decision.status); return decision }
+        val dao = database.strengthDao()
+        val existing = dao.getAllExercisesSync()
+        val customIds = existing.filter { it.isCustom }.map { it.id }.toSet()
+        val existingById = existing.filterNot { it.isCustom }.associateBy { it.id }
+        val acceptedAt = now()
+        database.withTransaction {
+            dao.insertExercises(payload.exercises.filterNot { it.id in customIds }.map { exercise ->
+                val old = existingById[exercise.id]
+                exercise.toRoom(acceptedAt).copy(createdAt = old?.createdAt ?: acceptedAt, revision = (old?.revision ?: 0) + 1)
+            })
+            dao.insertCatalogueReleaseState(CatalogueReleaseState(
+                bundledVersion = bundled.metadata.catalogueVersion, acceptedReleaseId = payload.manifest.releaseId,
+                acceptedCatalogueVersion = payload.manifest.catalogueVersion, acceptedChecksum = payload.manifest.contentSha256,
+                acceptedSchemaVersion = payload.manifest.schemaVersion, source = "REMOTE", status = decision.status.name,
+                previousReleaseId = payload.manifest.previousReleaseId, lastCheckAt = checkedAt, lastSuccessAt = acceptedAt
+            ))
+        }
+        ExerciseCatalogueRuntime.accept(CatalogueSnapshot(
+            CatalogueMetadata(1, payload.manifest.catalogueVersion, payload.manifest.channel, "", "human-v1-governed-firestore", payload.exercises.size, payload.manifest.contentSha256),
+            payload.exercises, CatalogueValidation(true, emptyList())
+        ))
+        return decision
+    }
+
+    private suspend fun recordFailure(bundled: CatalogueSnapshot, checkedAt: Long, status: CatalogueSyncStatus) {
+        val dao = database.strengthDao(); val previous = dao.getCatalogueReleaseState()
+        dao.insertCatalogueReleaseState((previous ?: CatalogueReleaseState(bundledVersion = bundled.metadata.catalogueVersion)).copy(
+            lastCheckAt = checkedAt, status = status.name, lastFailure = status.name
+        ))
+    }
+
+    private fun classify(error: Throwable): CatalogueSyncStatus {
+        val text = generateSequence(error) { it.cause }.joinToString(" ") { it.message.orEmpty() }.lowercase()
+        return when {
+            error is kotlinx.coroutines.TimeoutCancellationException -> CatalogueSyncStatus.TIMEOUT
+            "permission" in text -> CatalogueSyncStatus.PERMISSION_DENIED
+            "app check" in text || "appcheck" in text -> CatalogueSyncStatus.APP_CHECK_FAILED
+            "auth" in text -> CatalogueSyncStatus.AUTHENTICATION_FAILED
+            "network" in text || "unavailable" in text || "offline" in text -> CatalogueSyncStatus.UNAVAILABLE
+            else -> CatalogueSyncStatus.UNKNOWN_FAILURE
+        }
+    }
+}
+
+object GovernedCatalogueSync {
+    suspend fun start(context: Context, database: StrengthDatabase): CatalogueSyncDecision {
+        val bundled = ExerciseCatalogueRuntime.snapshot ?: ExerciseCatalogueRuntime.load(context)
+        return GovernedCatalogueCoordinator(database, FirebaseGovernedCatalogueGateway()).synchronize(bundled)
+    }
+}
+
+private suspend fun <T> Task<T>.awaitTask(): T = suspendCancellableCoroutine { continuation ->
+    addOnCompleteListener { task ->
+        if (!continuation.isActive) return@addOnCompleteListener
+        val error = task.exception
+        if (error != null) continuation.resumeWith(Result.failure(error)) else continuation.resume(task.result)
+    }
+}
+
+private fun Map<String, Any?>.string(key: String) = this[key] as? String ?: error("$key missing")
+private fun Map<String, Any?>.int(key: String) = (this[key] as? Number)?.toInt() ?: error("$key missing")
+private fun Map<String, Any?>.strings(key: String) = (this[key] as? List<*>)?.mapNotNull { it as? String }.orEmpty()

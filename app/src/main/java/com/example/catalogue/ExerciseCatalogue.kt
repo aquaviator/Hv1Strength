@@ -132,6 +132,7 @@ object ExerciseCatalogueRuntime {
     } catch (error: Throwable) {
         fallback(error.message ?: "Package could not be read").also { snapshot = it }
     }
+    fun accept(accepted: CatalogueSnapshot) { snapshot = accepted }
     fun fallback(reason: String) = CatalogueSnapshot(CatalogueMetadata(1, "fallback-1", "embedded", "", "safe-fallback", 3, ""),
         listOf(
             CatalogueExercise("bench_press", "Bench Press", emptyList(), "Chest", listOf("chest"), emptyList(), listOf("barbell"), "strength", setOf(MeasurementCapability.REPETITIONS, MeasurementCapability.LOAD), "bilateral", false, true),

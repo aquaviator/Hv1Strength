@@ -27,9 +27,10 @@ import kotlinx.coroutines.launch
         ActiveWorkoutBackup::class,
         TrainingPlan::class,
         PlannedWorkout::class,
-        LegacyOwnershipMigrationState::class
+        LegacyOwnershipMigrationState::class,
+        CatalogueReleaseState::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class StrengthDatabase : RoomDatabase() {
@@ -39,6 +40,12 @@ abstract class StrengthDatabase : RoomDatabase() {
     companion object {
         @Volatile
         private var INSTANCE: StrengthDatabase? = null
+
+        val MIGRATION_12_13 = object : androidx.room.migration.Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `catalogue_release_state` (`id` INTEGER NOT NULL, `bundledVersion` TEXT NOT NULL, `acceptedReleaseId` TEXT, `acceptedCatalogueVersion` TEXT, `acceptedChecksum` TEXT, `acceptedSchemaVersion` INTEGER, `source` TEXT NOT NULL, `status` TEXT NOT NULL, `previousReleaseId` TEXT, `lastCheckAt` INTEGER, `lastSuccessAt` INTEGER, `lastFailure` TEXT, PRIMARY KEY(`id`))")
+            }
+        }
 
         val MIGRATION_11_12 = object : androidx.room.migration.Migration(11, 12) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -735,7 +742,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         StrengthDatabase::class.java,
                         "strength_database"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                         .addCallback(StrengthDatabaseCallback(appCtx))
                         .build()
                     INSTANCE = instance
@@ -755,6 +762,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                 kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO).launch {
                     runCatching { com.example.catalogue.CatalogueReconciler(context, database).reconcile() }
                         .onFailure { android.util.Log.e("StrengthCatalogue", "Catalogue reconciliation failed; existing library retained", it) }
+                    com.example.catalogue.GovernedCatalogueSync.start(context, database)
                 }
             }
         }
