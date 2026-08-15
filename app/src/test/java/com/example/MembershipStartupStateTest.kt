@@ -46,7 +46,7 @@ class MembershipStartupStateTest {
 
     @Test fun expiredCacheIsCheckingUntilAuthoritativeExpiration() = runBlocking {
         val now = System.currentTimeMillis()
-        saveTrial("uid-b", now - 31 * DAY, now - DAY)
+        saveTrial("uid-b", now - 31 * DAY, now - DAY, now)
         val trial = DeferredTrialClient()
         val entitlement = create("uid-b", trial)
         entitlement.prepareForUser("uid-b")
@@ -59,7 +59,7 @@ class MembershipStartupStateTest {
 
     @Test fun activeCacheRemainsNonExpiredWhileRefreshing() = runBlocking {
         val now = System.currentTimeMillis()
-        saveTrial("uid-c", now - DAY, now + 10 * DAY)
+        saveTrial("uid-c", now - DAY, now + 10 * DAY, now)
         val trial = DeferredTrialClient()
         val entitlement = create("uid-c", trial)
         entitlement.prepareForUser("uid-c")
@@ -108,6 +108,29 @@ class MembershipStartupStateTest {
         assertFalse(rendered(entitlement.appAccessState.value).contains("expired", true))
     }
 
+    @Test fun activeVerifiedCacheAllowsTemporaryOfflineAccess() = runBlocking {
+        val now = System.currentTimeMillis()
+        saveTrial("uid-offline", now - DAY, now + 10 * DAY, now)
+        val entitlement = create("uid-offline", ImmediateTrialClient(AccountTrialResult.Unavailable))
+
+        entitlement.refreshAccessState()
+        waitUntil { entitlement.appAccessState.value is AppAccessState.TrialActive }
+        assertTrue(entitlement.appAccessState.value.hasAppAccess)
+    }
+
+    @Test fun deviceClockRollbackCannotRestoreAnExpiredCachedTrial() = runBlocking {
+        val now = System.currentTimeMillis()
+        saveTrial("uid-clock", now - 31 * DAY, now - DAY, now)
+        context.getSharedPreferences("human_strength_entitlements", Context.MODE_PRIVATE).edit()
+            .putLong("entitlement_last_observed_wall_millis", now + DAY)
+            .commit()
+        val entitlement = create("uid-clock", ImmediateTrialClient(AccountTrialResult.Unavailable))
+
+        entitlement.refreshAccessState()
+        waitUntil { entitlement.appAccessState.value is AppAccessState.VerificationUnavailable }
+        assertFalse(entitlement.appAccessState.value.hasAppAccess)
+    }
+
     private fun create(uid: String, trial: AccountTrialClient, billingRepository: BillingRepository = billing) = PlayEntitlementRepository(
         context, billingRepository, repository,
         verificationClient = object : EntitlementVerificationClient {
@@ -117,11 +140,13 @@ class MembershipStartupStateTest {
         currentUidProvider = { uid }
     )
 
-    private fun saveTrial(uid: String, started: Long, ends: Long) {
+    private fun saveTrial(uid: String, started: Long, ends: Long, serverNow: Long) {
         context.getSharedPreferences("human_strength_entitlements", Context.MODE_PRIVATE).edit()
             .putString("account_trial_uid", uid)
             .putLong("account_trial_started_millis", started)
             .putLong("account_trial_ends_millis", ends)
+            .putLong("account_trial_verified_server_millis", serverNow)
+            .putLong("entitlement_last_observed_wall_millis", serverNow)
             .commit()
     }
 

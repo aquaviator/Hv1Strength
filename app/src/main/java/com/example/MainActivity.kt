@@ -528,10 +528,10 @@ internal fun resolveStartupDestination(
     is AuthState.LegacyUpgradeRequired,
     is AuthState.LegacyUpgradeRunning,
     is AuthState.LegacyUpgradeHandoffRequired -> StartupDestination.Welcome
-    // Offline mode remains available only for builds where Firebase is genuinely
-    // unconfigured. Configured startup never treats a local profile as cloud auth.
+    // Legacy local-only states preserve their records but cannot bypass the
+    // authenticated, entitled application boundary.
     AuthState.Offline,
-    is AuthState.ProtectedLocal -> StartupDestination.FullApp
+    is AuthState.ProtectedLocal -> StartupDestination.Welcome
     is AuthState.Authenticated -> when {
         appAccessState is com.example.billing.AppAccessState.Initializing ->
             StartupDestination.AccessLoading

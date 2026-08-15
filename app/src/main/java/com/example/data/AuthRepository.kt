@@ -267,12 +267,12 @@ class AuthRepository(
 
     private fun restoreSession() {
         if (prefs.getString("auth_provider", null) == "protected_local") {
-            val protectedId = prefs.getString("auth_active_user_id", null)
-            scope.launch(Dispatchers.IO) {
-                val profile = protectedId?.let { strengthRepository.getUserProfile(it) }
-                _authState.value = profile?.let { AuthState.ProtectedLocal(it) } ?: AuthState.Initial
-                com.example.core.sync.SyncScheduler.cancelCloudSync(context)
-            }
+            com.example.core.sync.SyncScheduler.cancelCloudSync(context)
+            _authState.value = AuthState.Error(
+                "Workouts from another profile were found on this phone.",
+                AuthErrorKind.DIFFERENT_ACCOUNT,
+                true
+            )
             return
         }
         if (com.example.HumanStrengthApplication.isFirebaseConfigured) {
@@ -366,7 +366,8 @@ class AuthRepository(
                 } catch (e: Exception) {
                     Log.e(TAG, "Error restoring Firebase session", e)
                     _authState.value = AuthState.Error(
-                        e.localizedMessage ?: "Unable to restore cloud authentication"
+                        "Your saved data has not been changed. Please try again or sign out.",
+                        AuthErrorKind.TRUSTED_IDENTITY
                     )
                 }
             }
@@ -381,7 +382,7 @@ class AuthRepository(
             clearPersistedAuthentication()
             _authState.value = AuthState.Error("Firebase authentication is required to restore a Human account")
         } else if (isLoggedIn && authProvider == "offline") {
-            _authState.value = AuthState.Offline
+            _authState.value = AuthState.Initial
         } else {
             _authState.value = AuthState.Initial
         }
@@ -423,7 +424,7 @@ class AuthRepository(
             .apply()
     }
 
-    suspend fun signInAnonymously() = withContext(Dispatchers.IO) {
+    internal suspend fun signInAnonymously() = withContext(Dispatchers.IO) {
         prefs.edit()
             .putBoolean("auth_is_logged_in", true)
             .putString("auth_provider", "offline")
@@ -445,21 +446,6 @@ class AuthRepository(
         }
 
         _authState.value = AuthState.Offline
-    }
-
-    suspend fun openProtectedLocalProfile(): Result<Unit> = withContext(Dispatchers.IO) {
-        val profile = pendingProtectedProfile
-            ?: return@withContext Result.failure(IllegalStateException("Protected local profile is unavailable"))
-        com.example.core.sync.SyncScheduler.cancelCloudSync(context)
-        prefs.edit()
-            .putBoolean("auth_is_logged_in", true)
-            .putString("auth_provider", "protected_local")
-            .putString("auth_active_user_id", profile.id)
-            .putString("auth_human_user_id", profile.humanUserId)
-            .putBoolean("auth_profile_handoff_complete", false)
-            .apply()
-        _authState.value = AuthState.ProtectedLocal(profile)
-        Result.success(Unit)
     }
 
     suspend fun signInWithGoogle(idToken: String, displayName: String?, email: String?, photoUrl: String?): UserProfile? = withContext(Dispatchers.IO) {
@@ -710,7 +696,7 @@ class AuthRepository(
                 .putBoolean("auth_profile_handoff_complete", false)
                 .apply()
 
-            _authState.value = AuthState.Offline
+            _authState.value = AuthState.Initial
             Log.i(TAG, "Cloud account deletion completed successfully. Local data preserved.")
             Result.success(Unit)
         } catch (e: Exception) {

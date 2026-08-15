@@ -42,8 +42,6 @@ class AuthViewModel(
 
     fun cancelAuthenticatedAccount() = viewModelScope.launch { authRepository.signOut(keepLocalData = true) }
 
-    fun openProtectedLocalProfile() = viewModelScope.launch { authRepository.openProtectedLocalProfile() }
-
     fun updateVerifiedLegacyAndContinue() = viewModelScope.launch { authRepository.updateVerifiedLegacyAndContinue() }
     fun retryLegacyMigrationHandoff() = viewModelScope.launch { authRepository.retryLegacyMigrationHandoff() }
     fun markLegacyBackupCompleted() = viewModelScope.launch { authRepository.markLegacyBackupCompleted() }

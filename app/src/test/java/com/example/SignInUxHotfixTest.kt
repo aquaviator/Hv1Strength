@@ -59,15 +59,22 @@ class SignInUxHotfixTest {
 
     @Test fun differentAccountUsesProtectedLocalExportAndSignOutWithoutRetry() {
         val copy = signInDialogCopy(AuthErrorKind.DIFFERENT_ACCOUNT, "ignored")
-        assertEquals(listOf("Open the local profile", "Export its data", "Sign out"), copy.actions)
+        assertEquals(listOf("Export its data", "Sign out"), copy.actions)
         assertFalse(copy.actions.any { it.contains("retry", true) || it.contains("update", true) })
     }
 
     @Test fun networkFailureIsNotPresentedAsADataConflict() {
         val copy = signInDialogCopy(AuthErrorKind.NETWORK, "ignored")
-        assertEquals("Connection needed to sign in", copy.title)
-        assertEquals(listOf("Try again", "Continue without an account", "Cancel"), copy.actions)
+        assertEquals("Connection required for first sign-in", copy.title)
+        assertEquals(listOf("Sign in with Google", "Try again"), copy.actions)
         assertFalse(copy.message.contains("different versions", true))
+    }
+
+    @Test fun trustedIdentityFailureUsesPrivacySafeWording() {
+        val copy = signInDialogCopy(AuthErrorKind.TRUSTED_IDENTITY, "Human identity binding conflict")
+        assertEquals("We couldn’t finish signing in", copy.title)
+        assertEquals("Your saved data has not been changed. Please try again or sign out.", copy.message)
+        assertFalse((copy.title + copy.message).contains("binding", true))
     }
 
     @Test fun normalUserCopyNeverClaimsGoogleProfileMutation() {

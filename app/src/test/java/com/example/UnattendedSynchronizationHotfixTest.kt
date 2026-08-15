@@ -75,16 +75,16 @@ class UnattendedSynchronizationHotfixTest {
         val disconnected = signInDialogCopy(AuthErrorKind.NETWORK, "ignored")
 
         assertEquals(listOf("Review items", "Continue", "Sign out"), conflict.actions)
-        assertEquals(listOf("Open the local profile", "Export its data", "Sign out"), other.actions)
-        assertEquals("Connection needed to sign in", disconnected.title)
-        assertEquals(listOf("Try again", "Continue without an account", "Cancel"), disconnected.actions)
+        assertEquals(listOf("Export its data", "Sign out"), other.actions)
+        assertEquals("Connection required for first sign-in", disconnected.title)
+        assertEquals(listOf("Sign in with Google", "Try again"), disconnected.actions)
     }
 
-    @Test fun protectedLocalProfileOpensAppWithoutBecomingAuthenticatedCloudOwner() {
+    @Test fun protectedLocalProfileCannotBypassRequiredAuthentication() {
         val profile = UserProfile(id = "local-owner", humanUserId = "human_localowner000000000000000000000")
         val state = AuthState.ProtectedLocal(profile)
 
-        assertEquals(StartupDestination.FullApp, resolveStartupDestination(state, com.example.billing.AppAccessState.Initializing))
+        assertEquals(StartupDestination.Welcome, resolveStartupDestination(state, com.example.billing.AppAccessState.Initializing))
         val presentation = syncPresentation(state, "Synced", 0, null)
         assertEquals("Saved on this phone", presentation.title)
         assertTrue(presentation.detail.contains("different account"))

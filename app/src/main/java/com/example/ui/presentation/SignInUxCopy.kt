@@ -13,14 +13,18 @@ fun signInDialogCopy(kind: AuthErrorKind, fallback: String): SignInDialogCopy = 
     AuthErrorKind.DIFFERENT_ACCOUNT -> SignInDialogCopy(
         "Workouts from another profile are saved on this phone",
         "They will not be connected to or uploaded into the account you just signed in with.",
-        listOf("Open the local profile", "Export its data", "Sign out")
+        listOf("Export its data", "Sign out")
     )
     AuthErrorKind.NETWORK -> SignInDialogCopy(
-        "Connection needed to sign in",
-        "Connect to the internet to sign in with Google. You can still start without an account.",
-        listOf("Try again", "Continue without an account", "Cancel")
+        "Connection required for first sign-in",
+        "Sign in to start your one-month Human V1 trial. After setup, your workouts are saved on this phone and synchronize automatically when you reconnect.",
+        listOf("Sign in with Google", "Try again")
     )
-    AuthErrorKind.APP_CHECK -> SignInDialogCopy("Device verification unavailable", fallback, listOf("Try again", "Continue without an account", "Cancel"))
-    AuthErrorKind.TRUSTED_IDENTITY -> SignInDialogCopy("Account verification incomplete", fallback, listOf("Try again", "Sign out"))
-    AuthErrorKind.UNKNOWN -> SignInDialogCopy("Sign-in could not finish", fallback, listOf("Try again", "Sign out"))
+    AuthErrorKind.APP_CHECK -> SignInDialogCopy("We couldn’t finish signing in", "Your saved data has not been changed. Please try again or sign out.", listOf("Try again", "Sign out"))
+    AuthErrorKind.TRUSTED_IDENTITY -> SignInDialogCopy("We couldn’t finish signing in", "Your saved data has not been changed. Please try again or sign out.", listOf("Try again", "Sign out"))
+    AuthErrorKind.UNKNOWN -> SignInDialogCopy(
+        "We couldn’t finish signing in",
+        "Your saved data has not been changed. Please try again or sign out.",
+        listOf("Try again", "Sign out")
+    )
 }

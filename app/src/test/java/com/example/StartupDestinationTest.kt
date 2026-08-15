@@ -63,4 +63,17 @@ class StartupDestinationTest {
             resolveStartupDestination(authenticated, AppAccessState.VerificationUnavailable)
         )
     }
+
+    @Test
+    fun legacyOfflineAndProtectedLocalStatesCannotEnterTheApp() {
+        val local = UserProfile(id = "offline", authProvider = "offline", isOfflineUser = true)
+        assertEquals(
+            StartupDestination.Welcome,
+            resolveStartupDestination(AuthState.Offline, AppAccessState.TrialActive(30, 1L))
+        )
+        assertEquals(
+            StartupDestination.Welcome,
+            resolveStartupDestination(AuthState.ProtectedLocal(local), AppAccessState.TrialActive(30, 1L))
+        )
+    }
 }
