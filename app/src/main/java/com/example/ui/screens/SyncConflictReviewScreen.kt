@@ -30,12 +30,12 @@ import java.util.Date
 @Composable
 fun SyncConflictReviewScreen(
     conflicts: List<SyncConflictSummary>,
-    onUseOffline: () -> Unit,
+    onContinue: () -> Unit,
     onSignOut: () -> Unit,
     onBack: () -> Unit
 ) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Items need review") }) }
+        topBar = { TopAppBar(title = { Text("Some items need review") }) }
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding).testTag("conflict_review_list"),
@@ -49,7 +49,7 @@ fun SyncConflictReviewScreen(
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Text(
-                        "Item-level resolution is not available in this hotfix. You can keep training offline or sign out.",
+                        "Item-level resolution is not available in this hotfix. You can continue training while affected items remain protected.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -59,8 +59,8 @@ fun SyncConflictReviewScreen(
             }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onUseOffline, modifier = Modifier.fillMaxWidth().testTag("conflict_use_offline")) {
-                        Text("Use offline for now")
+                    Button(onClick = onContinue, modifier = Modifier.fillMaxWidth().testTag("conflict_continue")) {
+                        Text("Continue")
                     }
                     OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth().testTag("conflict_sign_out")) {
                         Text("Sign out")

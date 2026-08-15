@@ -99,11 +99,15 @@ fun SettingsScreen(
         ) {
             // Account Profile Section
             SettingsSectionCard(title = "ACCOUNT & PROFILE") {
-                val profile = (authState as? AuthState.Authenticated)?.profile
-                val subtitle = if (profile != null) {
-                    "Signed in as ${profile.displayName}"
-                } else {
-                    "Offline local mode. Click to sign in."
+                val profile = when (val currentAuth = authState) {
+                    is AuthState.Authenticated -> currentAuth.profile
+                    is AuthState.ProtectedLocal -> currentAuth.profile
+                    else -> null
+                }
+                val subtitle = when (authState) {
+                    is AuthState.Authenticated -> "Signed in as ${profile?.displayName ?: "Human V1 member"}"
+                    is AuthState.ProtectedLocal -> "Protected local profile — synchronization disabled"
+                    else -> "Local profile. Connect an account to synchronize."
                 }
                 SettingsClickableRow(
                     icon = Icons.Default.AccountCircle,
@@ -117,6 +121,14 @@ fun SettingsScreen(
                     "settings_sync_status",
                     onAction = if (BuildConfig.DEBUG) onNavigateToSyncDebug else null
                 )
+                if (authState is AuthState.Authenticated) {
+                    SettingsClickableRow(
+                        icon = Icons.Default.Sync,
+                        title = "Check now",
+                        subtitle = "Request a secure synchronization check",
+                        onClick = { com.example.core.sync.SyncScheduler.scheduleImmediate(context) }
+                    )
+                }
             }
 
             SettingsSectionCard(title = "MEMBERSHIP") {

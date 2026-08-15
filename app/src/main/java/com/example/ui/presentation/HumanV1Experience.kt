@@ -19,6 +19,7 @@ fun authenticationPresentation(state: AuthState): ExperienceStatus = when (state
     is AuthState.LegacyUpgradeRunning -> ExperienceStatus("Updating local data", state.stage, ExperienceTone.NEUTRAL)
     is AuthState.LegacyUpgradeHandoffRequired -> ExperienceStatus("Finish account setup", state.message, ExperienceTone.ATTENTION, "Try again")
     AuthState.Offline -> ExperienceStatus("Training offline", "Workouts are saved on this device. Cloud sync is unavailable.", ExperienceTone.ATTENTION, "Connect account")
+    is AuthState.ProtectedLocal -> ExperienceStatus("Protected local profile", "This profile remains local and is not connected to the signed-in account.", ExperienceTone.ATTENTION, "Account settings")
     is AuthState.Authenticated -> ExperienceStatus("Human V1 account ready", "Your trusted account is verified and cloud features are available.", ExperienceTone.POSITIVE)
     is AuthState.Error -> if (state.message.contains("conflict", true) || state.message.contains("binding", true)) {
         ExperienceStatus("Account needs attention", "This account cannot safely use the current cloud identity. Local training remains available.", ExperienceTone.BLOCKED, "Review account")
@@ -41,13 +42,17 @@ fun membershipStatus(state: AppAccessState): ExperienceStatus = when (state) {
 }
 
 fun syncPresentation(auth: AuthState, status: String, pending: Int, lastError: String?): ExperienceStatus {
-    if (auth is AuthState.Offline) return ExperienceStatus("Saved locally", "Connect an account to enable cloud sync.", ExperienceTone.NEUTRAL)
-    if (auth is AuthState.Loading || auth is AuthState.Initial) return ExperienceStatus("Waiting for account verification", "Cloud changes remain safely paused.", ExperienceTone.NEUTRAL)
-    if (auth is AuthState.Error) return ExperienceStatus("Waiting for account verification", "Cloud sync is blocked until the account is safe.", ExperienceTone.ATTENTION, "Review account")
-    if (!lastError.isNullOrBlank() || status.contains("fail", true) || status.contains("error", true)) return ExperienceStatus("Sync needs attention", "Your data remains saved locally.", ExperienceTone.ATTENTION, "Retry sync")
-    if (status.contains("sync", true) && !status.equals("synced", true)) return ExperienceStatus("Syncing", "Securely updating your cloud copy.", ExperienceTone.NEUTRAL)
-    if (pending > 0) return ExperienceStatus("Waiting for connection", "$pending local change${if (pending == 1) "" else "s"} waiting.", ExperienceTone.ATTENTION, "Retry sync")
-    return ExperienceStatus("Synced", "Cloud copy is up to date.", ExperienceTone.POSITIVE)
+    if (auth is AuthState.Offline) return ExperienceStatus("Saved on this phone", "This local profile is not connected to an account.", ExperienceTone.NEUTRAL)
+    if (auth is AuthState.ProtectedLocal) return ExperienceStatus("Saved on this phone", "Synchronization is disabled because this profile belongs to a different account.", ExperienceTone.ATTENTION)
+    if (auth is AuthState.Loading || auth is AuthState.Initial) return ExperienceStatus("Saved on this phone", "Preparing secure synchronization.", ExperienceTone.NEUTRAL)
+    if (auth is AuthState.Error) return ExperienceStatus("Saved on this phone", "Synchronization is paused until the account is safe.", ExperienceTone.ATTENTION, "Review account")
+    if (status == "ItemsNeedReview") return ExperienceStatus("Some items need review", "Conflicting items remain protected; other changes can continue synchronizing.", ExperienceTone.ATTENTION, "Review items")
+    if (status == "WaitingForIdentity") return ExperienceStatus("Saved on this phone", "Preparing secure synchronization.", ExperienceTone.NEUTRAL)
+    if (status == "WaitingForConnection") return ExperienceStatus("Saved on this phone", "We’ll synchronize automatically when you’re connected.", ExperienceTone.ATTENTION)
+    if (status == "Synchronizing" || status.contains("syncing", true) || status.contains("upload", true) || status.contains("download", true)) return ExperienceStatus("Synchronizing", "Your changes are already saved on this phone.", ExperienceTone.NEUTRAL)
+    if (status == "SavedRetrying" || !lastError.isNullOrBlank()) return ExperienceStatus("Saved on this phone", "Online synchronization is temporarily unavailable. We’ll try again automatically.", ExperienceTone.ATTENTION)
+    if (pending > 0) return ExperienceStatus("Saved on this phone", "$pending local change${if (pending == 1) " is" else "s are"} waiting for automatic synchronization.", ExperienceTone.ATTENTION)
+    return ExperienceStatus("Synced", "Your Human V1 data is up to date.", ExperienceTone.POSITIVE)
 }
 
 fun cataloguePresentation(version: String, governedCount: Int, customCount: Int, valid: Boolean, fallback: Boolean): ExperienceStatus = when {

@@ -93,7 +93,7 @@ fun WelcomeScreen(
     
     // Check if we are already authenticated or in offline mode, and navigate if so
     LaunchedEffect(authState) {
-        if (authState is AuthState.Authenticated || authState is AuthState.Offline) {
+        if (authState is AuthState.Authenticated || authState is AuthState.Offline || authState is AuthState.ProtectedLocal) {
             onNavigateToHome()
         }
     }
@@ -194,7 +194,7 @@ fun WelcomeScreen(
                     onClick = {
                         coroutineScope.launch {
                             viewModel.authRepository.signInAnonymously()
-                            Toast.makeText(context, "Welcome! Mode: Offline-First Local", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Local profile ready", Toast.LENGTH_SHORT).show()
                         }
                     },
                     modifier = Modifier
@@ -208,7 +208,7 @@ fun WelcomeScreen(
                     )
                 ) {
                     Text(
-                        text = "Continue Offline",
+                        text = "Continue without an account",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
                     )
@@ -238,14 +238,14 @@ fun WelcomeScreen(
             confirmButton = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (repositoryError.kind == AuthErrorKind.DATA_CONFLICT) {
-                        Button(onClick = { }, modifier = Modifier.fillMaxWidth().testTag("review_differences")) { Text("Review differences") }
-                        OutlinedButton(onClick = viewModel::continueWithExistingLocalData,
-                            modifier = Modifier.fillMaxWidth().testTag("use_offline_after_conflict")) { Text("Use offline for now") }
+                        Button(onClick = { }, modifier = Modifier.fillMaxWidth().testTag("review_differences")) { Text("Review items") }
+                        OutlinedButton(onClick = { },
+                            modifier = Modifier.fillMaxWidth().testTag("continue_after_conflict")) { Text("Continue") }
                     } else if (repositoryError.kind == AuthErrorKind.DIFFERENT_ACCOUNT) {
                         Button(
-                            onClick = viewModel::continueWithExistingLocalData,
+                            onClick = viewModel::openProtectedLocalProfile,
                             modifier = Modifier.fillMaxWidth().testTag("continue_existing_local_data")
-                        ) { Text("Use this data offline") }
+                        ) { Text("Open the local profile") }
                         OutlinedButton(
                              onClick = {
                                  coroutineScope.launch {
@@ -258,23 +258,23 @@ fun WelcomeScreen(
                                  }
                              },
                              modifier = Modifier.fillMaxWidth().testTag("export_protected_local_data")
-                        ) { Text("Export the data") }
+                        ) { Text("Export its data") }
                     } else if (repositoryError.kind == AuthErrorKind.NETWORK) {
                         Button(onClick = beginGoogleSignIn, modifier = Modifier.fillMaxWidth().testTag("retry_authentication")) { Text("Try again") }
-                        OutlinedButton(onClick = viewModel::continueWithExistingLocalData,
-                            modifier = Modifier.fillMaxWidth().testTag("use_offline_after_network")) { Text("Use offline") }
+                        OutlinedButton(onClick = { coroutineScope.launch { viewModel.authRepository.signInAnonymously() } },
+                            modifier = Modifier.fillMaxWidth().testTag("continue_without_account_after_network")) { Text("Continue without an account") }
                     } else {
                         Button(
                             onClick = beginGoogleSignIn,
                             modifier = Modifier.fillMaxWidth().testTag("retry_authentication")
                         ) { Text("Try again") }
-                        if (repositoryError.canContinueOffline) OutlinedButton(onClick = viewModel::continueWithExistingLocalData,
-                            modifier = Modifier.fillMaxWidth()) { Text("Use offline") }
+                        if (repositoryError.canContinueOffline) OutlinedButton(onClick = viewModel::openProtectedLocalProfile,
+                            modifier = Modifier.fillMaxWidth()) { Text("Open the local profile") }
                     }
                     OutlinedButton(
                         onClick = viewModel::cancelAuthenticatedAccount,
                         modifier = Modifier.fillMaxWidth().testTag("cancel_authenticated_account")
-                    ) { Text("Sign out") }
+                    ) { Text(if (repositoryError.kind == AuthErrorKind.NETWORK) "Cancel" else "Sign out") }
                 }
             }
         )
