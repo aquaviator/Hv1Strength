@@ -51,22 +51,22 @@ class SignInUxHotfixTest {
 
     @Test fun genuineConflictUsesHumanV1WordingAndSafeActions() {
         val copy = signInDialogCopy(AuthErrorKind.DATA_CONFLICT, "ignored")
-        assertEquals("Some saved items need your attention", copy.title)
+        assertEquals("Some items need review", copy.title)
         assertTrue(copy.message.contains("Human V1 online data"))
         assertTrue(copy.message.contains("Nothing has been overwritten"))
-        assertEquals(listOf("Review differences", "Use offline for now", "Sign out"), copy.actions)
+        assertEquals(listOf("Review items", "Continue", "Sign out"), copy.actions)
     }
 
-    @Test fun differentAccountUsesOfflineExportAndSignOutWithoutRetry() {
+    @Test fun differentAccountUsesProtectedLocalExportAndSignOutWithoutRetry() {
         val copy = signInDialogCopy(AuthErrorKind.DIFFERENT_ACCOUNT, "ignored")
-        assertEquals(listOf("Use this data offline", "Export the data", "Sign out"), copy.actions)
+        assertEquals(listOf("Open the local profile", "Export its data", "Sign out"), copy.actions)
         assertFalse(copy.actions.any { it.contains("retry", true) || it.contains("update", true) })
     }
 
     @Test fun networkFailureIsNotPresentedAsADataConflict() {
         val copy = signInDialogCopy(AuthErrorKind.NETWORK, "ignored")
-        assertEquals("We couldn’t finish signing in", copy.title)
-        assertEquals(listOf("Try again", "Use offline", "Sign out"), copy.actions)
+        assertEquals("Connection needed to sign in", copy.title)
+        assertEquals(listOf("Try again", "Continue without an account", "Cancel"), copy.actions)
         assertFalse(copy.message.contains("different versions", true))
     }
 

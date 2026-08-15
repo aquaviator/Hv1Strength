@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.first
 /** DUMP-protected debug-only controller. It can create only the fixed synthetic fixture. */
 class V31AcceptanceController : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action !in setOf(ACTION_ARM_MATCHING, ACTION_ARM_CONFLICT, ACTION_RUN_SYNC, ACTION_REPORT, ACTION_DISARM, ACTION_RESET)) return
+        if (intent.action !in setOf(ACTION_ARM_MATCHING, ACTION_ARM_CONFLICT, ACTION_RUN_SYNC, ACTION_QUEUE_LOCAL_WEIGHT, ACTION_REPORT, ACTION_DISARM, ACTION_RESET)) return
         if (intent.action == ACTION_DISARM) { DebugAcceptanceIdentity.disarm(context); return }
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
@@ -22,6 +22,7 @@ class V31AcceptanceController : BroadcastReceiver() {
                     ACTION_ARM_MATCHING -> armMatching(context)
                     ACTION_ARM_CONFLICT -> armConflict(context)
                     ACTION_RUN_SYNC -> runSync(context)
+                    ACTION_QUEUE_LOCAL_WEIGHT -> queueLocalWeight(context)
                     ACTION_RESET -> reset(context)
                     else -> report(context)
                 }
@@ -136,10 +137,24 @@ class V31AcceptanceController : BroadcastReceiver() {
         report(context)
     }
 
+    private suspend fun queueLocalWeight(context: Context) {
+        check(DebugAcceptanceIdentity.isValidAcceptanceSession(context))
+        val dao = StrengthDatabase.getDatabase(context, CoroutineScope(Dispatchers.IO)).strengthDao()
+        StrengthRepository(dao, context).insertBodyWeight(BodyWeight(
+            weight = 81f,
+            date = System.currentTimeMillis(),
+            userId = DebugAcceptanceIdentity.SYNTHETIC_UID,
+            humanUserId = DebugAcceptanceIdentity.SYNTHETIC_HUMAN
+        ))
+        Log.i(TAG, "result=LOCAL_WEIGHT_QUEUED durable=true")
+        report(context)
+    }
+
     companion object {
         const val ACTION_ARM_MATCHING = "com.example.debug.V31_ARM_MATCHING"
         const val ACTION_ARM_CONFLICT = "com.example.debug.V32_1_ARM_CONFLICT"
         const val ACTION_RUN_SYNC = "com.example.debug.V32_1_RUN_SYNC"
+        const val ACTION_QUEUE_LOCAL_WEIGHT = "com.example.debug.V32_1_QUEUE_LOCAL_WEIGHT"
         const val ACTION_REPORT = "com.example.debug.V31_REPORT"
         const val ACTION_DISARM = "com.example.debug.V31_DISARM"
         const val ACTION_RESET = "com.example.debug.V31_RESET_SYNTHETIC_SESSION"
