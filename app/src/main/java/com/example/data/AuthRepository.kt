@@ -20,6 +20,7 @@ sealed class AuthState {
     object Loading : AuthState()
     data class Authenticated(val profile: UserProfile) : AuthState()
     object Offline : AuthState()
+    data class ProtectedLocal(val profile: UserProfile) : AuthState()
     data class LegacyUpgradeRequired(val totals: LegacyOwnershipTotals, val backupCompleted: Boolean = false) : AuthState()
     data class LegacyUpgradeRunning(val stage: String) : AuthState()
     data class LegacyUpgradeHandoffRequired(val message: String) : AuthState()
@@ -137,6 +138,7 @@ class AuthRepository(
     
     private val _authState = MutableStateFlow<AuthState>(AuthState.Initial)
     val authState: StateFlow<AuthState> = _authState
+    private var pendingProtectedProfile: UserProfile? = null
 
     private val resolvedDependencies = authDependencies ?: BuildVariantAuthDependenciesFactory.create(context)
     private val identityClient: HumanIdentityClient = identityClient ?: resolvedDependencies.identityClient
@@ -264,6 +266,15 @@ class AuthRepository(
     }
 
     private fun restoreSession() {
+        if (prefs.getString("auth_provider", null) == "protected_local") {
+            val protectedId = prefs.getString("auth_active_user_id", null)
+            scope.launch(Dispatchers.IO) {
+                val profile = protectedId?.let { strengthRepository.getUserProfile(it) }
+                _authState.value = profile?.let { AuthState.ProtectedLocal(it) } ?: AuthState.Initial
+                com.example.core.sync.SyncScheduler.cancelCloudSync(context)
+            }
+            return
+        }
         if (com.example.HumanStrengthApplication.isFirebaseConfigured) {
             _authState.value = AuthState.Loading
             scope.launch(Dispatchers.IO) {
@@ -319,6 +330,7 @@ class AuthRepository(
                         if (disposition == LocalProfileDisposition.MEANINGFUL_DATA && mismatchedProfile != null &&
                             continueVerifiedLegacyUpgrade(userId, identity, mismatchedProfile, firebaseUser.displayName,
                                 firebaseUser.email, firebaseUser.photoUrl?.toString(), ownership)) return@launch
+                        pendingProtectedProfile = mismatchedProfile
                         _authState.value = AuthState.Error(
                             "Sign-in succeeded, but this device contains data belonging to a different local profile. Nothing was deleted or uploaded.",
                             AuthErrorKind.DIFFERENT_ACCOUNT, offlineProfile != null
@@ -435,6 +447,21 @@ class AuthRepository(
         _authState.value = AuthState.Offline
     }
 
+    suspend fun openProtectedLocalProfile(): Result<Unit> = withContext(Dispatchers.IO) {
+        val profile = pendingProtectedProfile
+            ?: return@withContext Result.failure(IllegalStateException("Protected local profile is unavailable"))
+        com.example.core.sync.SyncScheduler.cancelCloudSync(context)
+        prefs.edit()
+            .putBoolean("auth_is_logged_in", true)
+            .putString("auth_provider", "protected_local")
+            .putString("auth_active_user_id", profile.id)
+            .putString("auth_human_user_id", profile.humanUserId)
+            .putBoolean("auth_profile_handoff_complete", false)
+            .apply()
+        _authState.value = AuthState.ProtectedLocal(profile)
+        Result.success(Unit)
+    }
+
     suspend fun signInWithGoogle(idToken: String, displayName: String?, email: String?, photoUrl: String?): UserProfile? = withContext(Dispatchers.IO) {
         _authState.value = AuthState.Loading
         try {
@@ -494,6 +521,7 @@ class AuthRepository(
                     continueVerifiedLegacyUpgrade(fUid, identity, mismatchedProfile, displayName, email, photoUrl, ownership)) {
                     return@withContext null
                 }
+                pendingProtectedProfile = mismatchedProfile
                 _authState.value = AuthState.Error(
                     message = if (disposition == LocalProfileDisposition.AMBIGUOUS)
                         "This device contains multiple local profiles. Sign-in succeeded, but synchronization is paused until the profiles are reviewed."
@@ -608,9 +636,11 @@ class AuthRepository(
     suspend fun deleteCloudAccount(): Result<Unit> = withContext(Dispatchers.IO) {
         val activeUserId = prefs.getString("auth_active_user_id", "offline") ?: "offline"
         val currentUser = firebaseAuth?.currentUser
+        val trustedCloudSession = prefs.getString("auth_provider", null) == "google" &&
+            prefs.getBoolean("auth_profile_handoff_complete", false)
 
-        if (currentUser == null && activeUserId == "offline") {
-            return@withContext Result.failure(IllegalStateException("No active cloud account found to delete. App is in offline mode."))
+        if (!trustedCloudSession || currentUser == null || activeUserId == "offline") {
+            return@withContext Result.failure(IllegalStateException("No active trusted cloud account is available to delete."))
         }
 
         try {

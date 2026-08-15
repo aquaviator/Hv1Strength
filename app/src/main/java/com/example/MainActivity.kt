@@ -455,8 +455,7 @@ fun MainAppScreen(
             composable("conflict_review") {
                 SyncConflictReviewScreen(
                     conflicts = syncConflicts,
-                    onUseOffline = {
-                        viewModel.continueWithExistingLocalData()
+                    onContinue = {
                         navController.navigate("workout") { popUpTo("conflict_review") { inclusive = true } }
                     },
                     onSignOut = {
@@ -531,7 +530,8 @@ internal fun resolveStartupDestination(
     is AuthState.LegacyUpgradeHandoffRequired -> StartupDestination.Welcome
     // Offline mode remains available only for builds where Firebase is genuinely
     // unconfigured. Configured startup never treats a local profile as cloud auth.
-    AuthState.Offline -> StartupDestination.FullApp
+    AuthState.Offline,
+    is AuthState.ProtectedLocal -> StartupDestination.FullApp
     is AuthState.Authenticated -> when {
         appAccessState is com.example.billing.AppAccessState.Initializing ->
             StartupDestination.AccessLoading

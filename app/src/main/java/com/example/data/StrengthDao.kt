@@ -512,7 +512,7 @@ interface StrengthDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun enqueueCommand(command: CommandQueueEntity)
 
-    @Query("SELECT * FROM command_queue WHERE status = 'PENDING' OR (status = 'FAILED' AND attempts < 5 AND (nextRetryAt IS NULL OR nextRetryAt <= :now)) ORDER BY createdAt ASC")
+    @Query("SELECT * FROM command_queue WHERE status = 'PENDING' OR (status = 'PROCESSING' AND attempts < 5) OR (status = 'FAILED' AND attempts < 5 AND (nextRetryAt IS NULL OR nextRetryAt <= :now)) ORDER BY createdAt ASC")
     suspend fun getPendingCommands(now: Long): List<CommandQueueEntity>
 
     @Query("SELECT * FROM command_queue ORDER BY createdAt DESC")

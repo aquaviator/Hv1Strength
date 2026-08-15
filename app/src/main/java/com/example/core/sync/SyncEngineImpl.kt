@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -81,9 +83,9 @@ class SyncEngineImpl internal constructor(
     fun updateConnectivity(state: ConnectivityState) {
         _connectivity.value = state
         if (state == ConnectivityState.OFFLINE) {
-            SyncManager.updateStatus("Offline")
+            SyncManager.updateStatus("WaitingForConnection")
         } else {
-            SyncManager.updateStatus("Idle")
+            SyncManager.updateStatus("Synchronizing")
         }
     }
 
@@ -130,10 +132,12 @@ class SyncEngineImpl internal constructor(
         }
     }
 
-    override suspend fun synchronizeAll(): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun synchronizeAll(): Result<Unit> = synchronizationMutex.withLock {
+        withContext(Dispatchers.IO) {
         if (_activeSyncing.value) return@withContext Result.success(Unit)
         _activeSyncing.value = true
-        SyncManager.updateStatus("Uploading")
+        SyncManager.updateStatus("Synchronizing")
+        SyncManager.updateLastError(null)
 
         try {
             // The repository is the synchronization store boundary. Reopening
@@ -145,7 +149,7 @@ class SyncEngineImpl internal constructor(
                 ?: com.example.data.BuildVariantSyncIdentityFactory.resolve(context, repository)
                 ?: resolvePersistedIdentity()
             if (identityResolution is SyncIdentityResolution.Blocked) {
-                SyncManager.updateStatus("Identity blocked: ${identityResolution.reason}")
+                SyncManager.updateStatus("WaitingForIdentity")
                 _activeSyncing.value = false
                 return@withContext Result.success(Unit)
             }
@@ -239,26 +243,29 @@ class SyncEngineImpl internal constructor(
             }
 
             // Update remaining queue size
-            val updatedCommands = repository.getPendingCommands(System.currentTimeMillis())
-            SyncManager.updateQueueSize(updatedCommands.size)
-            SyncManager.updatePendingUploads(updatedCommands.size)
+            val outstandingCommands = UnattendedSyncPolicy.outstandingCount(repository.getAllCommands())
+            SyncManager.updateQueueSize(outstandingCommands)
+            SyncManager.updatePendingUploads(outstandingCommands)
 
             // 3. Download Remote Changes
-            SyncManager.updateStatus("Downloading")
+            SyncManager.updateStatus("Synchronizing")
             downloadRemoteChanges(humanUserId, deviceId, dao)
 
             // 4. Mark successful synchronization
             SyncManager.updateLastSync(System.currentTimeMillis())
-            SyncManager.updateStatus(if (SyncManager.conflictCount.value > 0) "Items need review" else "Idle")
+            SyncManager.updateStatus(UnattendedSyncPolicy.completionStatus(
+                SyncManager.conflictCount.value, outstandingCommands
+            ))
             _activeSyncing.value = false
             Result.success(Unit)
 
         } catch (e: Exception) {
             Log.e(TAG, "Sync process failed", e)
             SyncManager.updateLastError(e.localizedMessage)
-            SyncManager.updateStatus("Error")
+            SyncManager.updateStatus("SavedRetrying")
             _activeSyncing.value = false
             Result.failure(e)
+        }
         }
     }
 
@@ -596,7 +603,7 @@ class SyncEngineImpl internal constructor(
                             repository.markTemplateConflict(it.id, metadata)
                         }
                     }
-                    SyncManager.updateStatus("Items need review")
+                    SyncManager.updateStatus("ItemsNeedReview")
                     SyncManager.updateConflictCount(SyncManager.conflictCount.value + 1)
                     throw RecordConflictException("Item needs review")
                 }
@@ -1413,6 +1420,8 @@ class SyncEngineImpl internal constructor(
         entityType == "WORKOUT_TEMPLATE" || (entityType == "CUSTOM_EXERCISE" && (entity as? Exercise)?.isCustom == true)
 
     companion object {
+        private val synchronizationMutex = Mutex()
+
         internal fun isProvenConcurrentEdit(
             localRevision: Long,
             localUpdatedAt: Long,

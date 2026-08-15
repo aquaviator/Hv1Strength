@@ -1,6 +1,8 @@
 package com.example
 
 import android.app.Application
+import android.app.Activity
+import android.os.Bundle
 import android.util.Log
 import androidx.work.Configuration
 import com.google.firebase.FirebaseApp
@@ -25,6 +27,23 @@ class HumanStrengthApplication : Application(), Configuration.Provider {
         
         Log.i(TAG, "onCreate: Application initialization started. Global crash handler installed.")
         initializeFirebase()
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityResumed(activity: Activity) {
+                val prefs = getSharedPreferences("strength_settings", MODE_PRIVATE)
+                if (com.example.core.sync.UnattendedSyncPolicy.shouldRequestForegroundSync(
+                        prefs.getBoolean("auth_is_logged_in", false),
+                        prefs.getString("auth_provider", null),
+                        prefs.getBoolean("auth_profile_handoff_complete", false)
+                    )
+                ) com.example.core.sync.SyncScheduler.scheduleImmediate(this@HumanStrengthApplication)
+            }
+            override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
     }
 
     private fun initializeFirebase() {
@@ -32,7 +51,7 @@ class HumanStrengthApplication : Application(), Configuration.Provider {
             val firebaseApp = FirebaseApp.getApps(this).firstOrNull()
                 ?: FirebaseApp.initializeApp(this)
             if (firebaseApp != null) {
-                Log.i(TAG, "Firebase initialized for project ${firebaseApp.options.projectId}")
+                Log.i(TAG, "stage=firebase result=READY")
                 initializeAppCheck(BuildConfig.DEBUG)
                 true
             } else {

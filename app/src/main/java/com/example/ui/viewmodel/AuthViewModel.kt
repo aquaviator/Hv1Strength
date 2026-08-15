@@ -23,6 +23,7 @@ class AuthViewModel(
     val activeUserId: StateFlow<String> = authRepository.authState.map { state ->
         when (state) {
             is AuthState.Authenticated -> state.profile.id
+            is AuthState.ProtectedLocal -> state.profile.id
             is AuthState.Offline -> "offline"
             else -> "offline"
         }
@@ -41,10 +42,7 @@ class AuthViewModel(
 
     fun cancelAuthenticatedAccount() = viewModelScope.launch { authRepository.signOut(keepLocalData = true) }
 
-    fun continueWithExistingLocalData() = viewModelScope.launch {
-        authRepository.signOut(keepLocalData = true)
-        authRepository.signInAnonymously()
-    }
+    fun openProtectedLocalProfile() = viewModelScope.launch { authRepository.openProtectedLocalProfile() }
 
     fun updateVerifiedLegacyAndContinue() = viewModelScope.launch { authRepository.updateVerifiedLegacyAndContinue() }
     fun retryLegacyMigrationHandoff() = viewModelScope.launch { authRepository.retryLegacyMigrationHandoff() }

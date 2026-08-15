@@ -290,7 +290,7 @@ class StrengthViewModel(
         photoUrl: String?
     ) = authViewModel.signInWithGoogle(idToken, displayName, email, photoUrl)
     fun cancelAuthenticatedAccount() = authViewModel.cancelAuthenticatedAccount()
-    fun continueWithExistingLocalData() = authViewModel.continueWithExistingLocalData()
+    fun openProtectedLocalProfile() = authViewModel.openProtectedLocalProfile()
     fun updateVerifiedLegacyAndContinue() = authViewModel.updateVerifiedLegacyAndContinue()
     fun retryLegacyMigrationHandoff() = authViewModel.retryLegacyMigrationHandoff()
     fun markLegacyBackupCompleted() = authViewModel.markLegacyBackupCompleted()
