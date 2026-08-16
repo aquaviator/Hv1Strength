@@ -15,6 +15,7 @@ interface EntitlementRepository {
     val appAccessState: StateFlow<AppAccessState>
     val cachedEntitlement: StateFlow<VerifiedEntitlement?>
     fun refreshAccessState()
+    fun prepareForUser(uid: String?) {}
     suspend fun verifyAndProcessPurchase(purchaseToken: String, productId: String, orderId: String?): Boolean
 }
 
@@ -41,10 +42,13 @@ class PlayEntitlementRepository(
     private val KEY_TRIAL_UID = "account_trial_uid"
     private val KEY_TRIAL_STARTED_MILLIS = "account_trial_started_millis"
     private val KEY_TRIAL_ENDS_MILLIS = "account_trial_ends_millis"
+    private val KEY_TRIAL_VERIFIED_SERVER_MILLIS = "account_trial_verified_server_millis"
+    private val KEY_LAST_OBSERVED_WALL_MILLIS = "entitlement_last_observed_wall_millis"
     private val MILLIS_PER_DAY = 24L * 60L * 60L * 1000L
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val trialRefreshMutex = Mutex()
+    @Volatile private var preparedUid: String? = currentUidProvider()
 
     private val _cachedEntitlement = MutableStateFlow<VerifiedEntitlement?>(discardLegacyPaidEntitlementCache())
     override val cachedEntitlement: StateFlow<VerifiedEntitlement?> = _cachedEntitlement.asStateFlow()
@@ -87,42 +91,58 @@ class PlayEntitlementRepository(
     private data class CachedAccountTrial(
         val uid: String,
         val startedAtMillis: Long,
-        val endsAtMillis: Long
+        val endsAtMillis: Long,
+        val verifiedServerNowMillis: Long
     )
 
     private fun loadCachedAccountTrial(uid: String?): CachedAccountTrial? {
         if (uid == null || prefs.getString(KEY_TRIAL_UID, null) != uid) return null
         val startedAt = prefs.getLong(KEY_TRIAL_STARTED_MILLIS, 0L)
         val endsAt = prefs.getLong(KEY_TRIAL_ENDS_MILLIS, 0L)
-        if (startedAt <= 0L || endsAt <= startedAt) return null
-        return CachedAccountTrial(uid, startedAt, endsAt)
+        val verifiedServerNow = prefs.getLong(KEY_TRIAL_VERIFIED_SERVER_MILLIS, 0L)
+        if (startedAt <= 0L || endsAt <= startedAt || verifiedServerNow <= 0L) return null
+        return CachedAccountTrial(uid, startedAt, endsAt, verifiedServerNow)
     }
 
-    private fun saveCachedAccountTrial(uid: String, startedAtMillis: Long, endsAtMillis: Long) {
+    private fun saveCachedAccountTrial(
+        uid: String,
+        startedAtMillis: Long,
+        endsAtMillis: Long,
+        verifiedServerNowMillis: Long
+    ) {
+        val observedWall = maxOf(
+            prefs.getLong(KEY_LAST_OBSERVED_WALL_MILLIS, 0L),
+            verifiedServerNowMillis,
+            System.currentTimeMillis()
+        )
         prefs.edit()
             .putString(KEY_TRIAL_UID, uid)
             .putLong(KEY_TRIAL_STARTED_MILLIS, startedAtMillis)
             .putLong(KEY_TRIAL_ENDS_MILLIS, endsAtMillis)
+            .putLong(KEY_TRIAL_VERIFIED_SERVER_MILLIS, verifiedServerNowMillis)
+            .putLong(KEY_LAST_OBSERVED_WALL_MILLIS, observedWall)
             .apply()
     }
 
     private fun accountTrialState(trial: CachedAccountTrial, nowMillis: Long): AppAccessState {
-        if (trial.endsAtMillis <= nowMillis) {
+        val trustedNow = trustedOfflineNow(nowMillis, trial.verifiedServerNowMillis)
+        if (trial.endsAtMillis <= trustedNow) {
             return AppAccessState.Expired(trial.endsAtMillis, trial.startedAtMillis)
         }
-        val remainingMillis = trial.endsAtMillis - nowMillis
+        val remainingMillis = trial.endsAtMillis - trustedNow
         val daysRemaining = ((remainingMillis + MILLIS_PER_DAY - 1L) / MILLIS_PER_DAY).toInt()
         return AppAccessState.TrialActive(daysRemaining, trial.endsAtMillis, trial.startedAtMillis)
     }
 
     private fun paidAccessState(entitlement: VerifiedEntitlement, nowMillis: Long): AppAccessState? {
-        if (!entitlement.isValidAt(nowMillis)) return null
+        val trustedNow = trustedOfflineNow(nowMillis)
+        if (!entitlement.isValidAt(trustedNow)) return null
         return when (entitlement.status) {
             "ACTIVE" -> AppAccessState.Subscribed(entitlement.expiryTimestampMillis)
             "TRIAL_ACTIVE" -> {
                 val daysRemaining = maxOf(
                     1,
-                    ((entitlement.expiryTimestampMillis - nowMillis) / MILLIS_PER_DAY).toInt()
+                    ((entitlement.expiryTimestampMillis - trustedNow) / MILLIS_PER_DAY).toInt()
                 )
                 AppAccessState.TrialActive(daysRemaining, entitlement.expiryTimestampMillis)
             }
@@ -133,11 +153,22 @@ class PlayEntitlementRepository(
         }
     }
 
+    private fun trustedOfflineNow(nowMillis: Long, serverNowMillis: Long = 0L): Long {
+        val previous = prefs.getLong(KEY_LAST_OBSERVED_WALL_MILLIS, 0L)
+        val trustedNow = maxOf(nowMillis, serverNowMillis, previous)
+        if (trustedNow > previous) {
+            prefs.edit().putLong(KEY_LAST_OBSERVED_WALL_MILLIS, trustedNow).apply()
+        }
+        return trustedNow
+    }
+
     private suspend fun resolveAccessState(
         subState: SubscriptionState,
         cached: VerifiedEntitlement?
     ): AppAccessState {
         val now = System.currentTimeMillis()
+        val currentUid = currentUidProvider()
+        if (currentUid == null || preparedUid != currentUid) return AppAccessState.Initializing
 
         // 1. Check if cached verified entitlement is valid
         cached?.let { paidAccessState(it, now) }?.let { return it }
@@ -163,44 +194,68 @@ class PlayEntitlementRepository(
         }
 
         // 3. Resolve the backend-owned Human V1 account trial for the signed-in Firebase user.
-        val currentUid = currentUidProvider()
-        loadCachedAccountTrial(currentUid)?.let { return accountTrialState(it, now) }
-
-        if (currentUid != null) {
-            return trialRefreshMutex.withLock {
-                loadCachedAccountTrial(currentUid)?.let {
-                    return@withLock accountTrialState(it, System.currentTimeMillis())
-                }
+        return trialRefreshMutex.withLock {
+                val cachedTrialAccess = loadCachedAccountTrial(currentUid)
+                    ?.let { accountTrialState(it, System.currentTimeMillis()) }
+                    ?.takeIf { it.hasAppAccess }
                 when (val result = accountTrialClient.initializeOrGetTrial()) {
                     is AccountTrialResult.Active -> {
                         if (result.uid != currentUid) return@withLock AppAccessState.VerificationUnavailable
-                        saveCachedAccountTrial(result.uid, result.trialStartedAtMillis, result.trialEndsAtMillis)
+                        saveCachedAccountTrial(
+                            result.uid,
+                            result.trialStartedAtMillis,
+                            result.trialEndsAtMillis,
+                            result.serverNowMillis
+                        )
                         accountTrialState(
-                            CachedAccountTrial(result.uid, result.trialStartedAtMillis, result.trialEndsAtMillis),
+                            CachedAccountTrial(
+                                result.uid,
+                                result.trialStartedAtMillis,
+                                result.trialEndsAtMillis,
+                                result.serverNowMillis
+                            ),
                             result.serverNowMillis
                         )
                     }
                     is AccountTrialResult.Expired -> {
                         if (result.uid != currentUid) return@withLock AppAccessState.VerificationUnavailable
-                        saveCachedAccountTrial(result.uid, result.trialStartedAtMillis, result.trialEndsAtMillis)
+                        saveCachedAccountTrial(
+                            result.uid,
+                            result.trialStartedAtMillis,
+                            result.trialEndsAtMillis,
+                            result.serverNowMillis
+                        )
                         AppAccessState.Expired(result.trialEndsAtMillis, result.trialStartedAtMillis)
                     }
                     AccountTrialResult.Disabled -> AppAccessState.Unentitled
-                    AccountTrialResult.Unauthenticated -> AppAccessState.Unentitled
-                    AccountTrialResult.Unavailable -> AppAccessState.VerificationUnavailable
+                    AccountTrialResult.Unauthenticated -> AppAccessState.VerificationUnavailable
+                    AccountTrialResult.Unavailable -> cachedTrialAccess
+                        ?: AppAccessState.VerificationUnavailable
                 }
-            }
-        }
-
-        return when {
-            subState is SubscriptionState.Loading -> AppAccessState.Initializing
-            cached != null && (!cached.isValidAt(now) || cached.status == "EXPIRED") -> AppAccessState.Expired()
-            else -> AppAccessState.Unentitled
         }
     }
 
+    override fun prepareForUser(uid: String?) {
+        if (preparedUid == uid) return
+        // Publish a safe state before associating the owner. This prevents a
+        // previous account's terminal state from being framed as the new user's.
+        _appAccessState.value = AppAccessState.Initializing
+        _cachedEntitlement.value = null
+        preparedUid = uid
+    }
+
     override fun refreshAccessState() {
+        val uid = currentUidProvider()
+        prepareForUser(uid)
+        if (uid == null) return
         externalScope.launch {
+            val cachedTrial = loadCachedAccountTrial(uid)
+            if (cachedTrial != null) {
+                val cachedState = accountTrialState(cachedTrial, System.currentTimeMillis())
+                if (cachedState.hasAppAccess) _appAccessState.value = cachedState
+            } else if (!_appAccessState.value.hasAppAccess) {
+                _appAccessState.value = AppAccessState.Initializing
+            }
             val subState = billingRepository.subscriptionState.value
             val cached = _cachedEntitlement.value
             _appAccessState.value = resolveAccessState(subState, cached)

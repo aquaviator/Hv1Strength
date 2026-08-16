@@ -6,9 +6,12 @@ import java.util.concurrent.TimeUnit
 
 object SyncScheduler {
 
+    private const val IMMEDIATE_WORK = "ImmediateSyncWork"
+    private const val PERIODIC_WORK = "PeriodicSyncWork"
+
     fun cancelCloudSync(context: Context) {
-        WorkManager.getInstance(context).cancelUniqueWork("ImmediateSyncWork")
-        WorkManager.getInstance(context).cancelUniqueWork("PeriodicSyncWork")
+        WorkManager.getInstance(context).cancelUniqueWork(IMMEDIATE_WORK)
+        WorkManager.getInstance(context).cancelUniqueWork(PERIODIC_WORK)
     }
 
     fun scheduleImmediate(context: Context) {
@@ -21,11 +24,12 @@ object SyncScheduler {
 
         val request = OneTimeWorkRequestBuilder<ImmediateSyncWorker>()
             .setConstraints(constraints)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
             .build()
 
         WorkManager.getInstance(context).enqueueUniqueWork(
-            "ImmediateSyncWork",
-            ExistingWorkPolicy.REPLACE,
+            IMMEDIATE_WORK,
+            ExistingWorkPolicy.KEEP,
             request
         )
     }
@@ -46,7 +50,7 @@ object SyncScheduler {
             .build()
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            "PeriodicSyncWork",
+            PERIODIC_WORK,
             ExistingPeriodicWorkPolicy.KEEP,
             request
         )

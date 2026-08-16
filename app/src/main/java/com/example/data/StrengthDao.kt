@@ -103,7 +103,7 @@ interface StrengthDao {
             sourceHumanUserId = plan.sourceHumanUserId, targetHumanUserId = plan.targetHumanUserId,
             phase = "ROOM_COMMITTED", updatedAt = plan.now))
     }
-    @Query("SELECT (SELECT COUNT(*) FROM body_weight WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM tape_measurement WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM workout_template WHERE (humanUserId = :humanId OR userId = :profileId) AND NOT (userId IS NULL AND globalId IN ('template_push', 'template_pull', 'template_legs_abs') AND revision = 1 AND syncStatus = 'LOCAL_ONLY' AND deletedAt IS NULL)) + (SELECT COUNT(*) FROM workout_session WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM logged_set WHERE humanUserId = :humanId) + (SELECT COUNT(*) FROM exercise WHERE isCustom = 1 AND humanUserId = :humanId) + (SELECT COUNT(*) FROM training_plan WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM planned_workout WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM command_queue WHERE humanUserId = :humanId) + (SELECT COUNT(*) FROM active_workout_backup)")
+    @Query("SELECT (SELECT COUNT(*) FROM body_weight WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM tape_measurement WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM workout_template WHERE (humanUserId = :humanId OR userId = :profileId) AND NOT (userId IS NULL AND globalId IN ('template_push', 'template_pull', 'template_legs', 'template_legs_abs') AND revision = 1 AND syncStatus = 'LOCAL_ONLY' AND deletedAt IS NULL)) + (SELECT COUNT(*) FROM workout_session WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM logged_set WHERE humanUserId = :humanId) + (SELECT COUNT(*) FROM exercise WHERE isCustom = 1 AND humanUserId = :humanId) + (SELECT COUNT(*) FROM training_plan WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM planned_workout WHERE humanUserId = :humanId OR userId = :profileId) + (SELECT COUNT(*) FROM command_queue WHERE humanUserId = :humanId) + (SELECT COUNT(*) FROM active_workout_backup)")
     suspend fun countMeaningfulOwnedRecords(profileId: String, humanId: String): Int
 
     @Query("SELECT COUNT(*) FROM user_profile WHERE deletedAt IS NULL AND humanUserId != '' AND humanUserId != :authoritativeHumanId")
@@ -466,6 +466,18 @@ interface StrengthDao {
     @Query("UPDATE body_weight SET syncStatus = 'CONFLICT', conflictState = :conflictData WHERE id = :id")
     suspend fun markBodyWeightConflict(id: Int, conflictData: String)
 
+    @Query("UPDATE exercise SET syncStatus = 'CONFLICT', conflictState = :conflictData WHERE id = :id AND isCustom = 1")
+    suspend fun markExerciseConflict(id: String, conflictData: String)
+
+    @Query("UPDATE workout_template SET syncStatus = 'CONFLICT', conflictState = :conflictData WHERE id = :id")
+    suspend fun markTemplateConflict(id: Int, conflictData: String)
+
+    @Query("SELECT * FROM exercise WHERE syncStatus = 'CONFLICT' AND isCustom = 1 ORDER BY updatedAt DESC")
+    fun getConflictExercisesFlow(): Flow<List<Exercise>>
+
+    @Query("SELECT * FROM workout_template WHERE syncStatus = 'CONFLICT' ORDER BY updatedAt DESC")
+    fun getConflictTemplatesFlow(): Flow<List<WorkoutTemplate>>
+
 
     // ==========================================
     // GLOBAL ID SELECTORS FOR SYNC
@@ -506,7 +518,7 @@ interface StrengthDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun enqueueCommand(command: CommandQueueEntity)
 
-    @Query("SELECT * FROM command_queue WHERE status = 'PENDING' OR (status = 'FAILED' AND attempts < 5 AND (nextRetryAt IS NULL OR nextRetryAt <= :now)) ORDER BY createdAt ASC")
+    @Query("SELECT * FROM command_queue WHERE status = 'PENDING' OR (status = 'PROCESSING' AND attempts < 5) OR (status = 'FAILED' AND attempts < 5 AND (nextRetryAt IS NULL OR nextRetryAt <= :now)) ORDER BY createdAt ASC")
     suspend fun getPendingCommands(now: Long): List<CommandQueueEntity>
 
     @Query("SELECT * FROM command_queue ORDER BY createdAt DESC")

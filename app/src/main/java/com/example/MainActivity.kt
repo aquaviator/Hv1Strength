@@ -189,6 +189,16 @@ fun MainAppScreen(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val startupDestination = resolveStartupDestination(authState, appAccessState)
+    val syncConflicts by viewModel.syncConflictSummaries.collectAsState()
+    var conflictReviewShownThisSession by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(syncConflicts, authState, currentRoute) {
+        if (!conflictReviewShownThisSession && syncConflicts.isNotEmpty() &&
+            authState is AuthState.Authenticated && currentRoute != null && currentRoute != "conflict_review") {
+            conflictReviewShownThisSession = true
+            navController.navigate("conflict_review") { launchSingleTop = true }
+        }
+    }
 
     LaunchedEffect(Unit) {
         com.example.service.workout.WorkoutExecutionServiceController.navigationRequests.collect {
@@ -442,6 +452,19 @@ fun MainAppScreen(
                     }
                 )
             }
+            composable("conflict_review") {
+                SyncConflictReviewScreen(
+                    conflicts = syncConflicts,
+                    onContinue = {
+                        navController.navigate("workout") { popUpTo("conflict_review") { inclusive = true } }
+                    },
+                    onSignOut = {
+                        viewModel.cancelAuthenticatedAccount()
+                        navController.navigate("welcome") { popUpTo(0) { inclusive = true } }
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
             composable("planner") {
                 PlannerScreen(viewModel, notificationOccurrenceId = plannerReminderTarget,
                     onNotificationHandled = {
@@ -505,9 +528,10 @@ internal fun resolveStartupDestination(
     is AuthState.LegacyUpgradeRequired,
     is AuthState.LegacyUpgradeRunning,
     is AuthState.LegacyUpgradeHandoffRequired -> StartupDestination.Welcome
-    // Offline mode remains available only for builds where Firebase is genuinely
-    // unconfigured. Configured startup never treats a local profile as cloud auth.
-    AuthState.Offline -> StartupDestination.FullApp
+    // Legacy local-only states preserve their records but cannot bypass the
+    // authenticated, entitled application boundary.
+    AuthState.Offline,
+    is AuthState.ProtectedLocal -> StartupDestination.Welcome
     is AuthState.Authenticated -> when {
         appAccessState is com.example.billing.AppAccessState.Initializing ->
             StartupDestination.AccessLoading

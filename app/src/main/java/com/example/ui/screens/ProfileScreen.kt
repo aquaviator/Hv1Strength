@@ -124,7 +124,11 @@ fun ProfileScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = if (userProfile?.authProvider == "google") "GOOGLE PROFILE" else "LOCAL PROFILE",
+                        text = when {
+                            authState is AuthState.ProtectedLocal -> "PROTECTED LOCAL PROFILE"
+                            userProfile?.authProvider == "google" -> "GOOGLE PROFILE"
+                            else -> "LOCAL PROFILE"
+                        },
                         style = MaterialTheme.typography.titleSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -185,7 +189,11 @@ fun ProfileScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = userProfile?.email ?: "Offline Mode (No cloud backup)",
+                                text = when {
+                                    authState is AuthState.ProtectedLocal -> "Synchronization disabled"
+                                    !userProfile?.email.isNullOrBlank() -> userProfile?.email.orEmpty()
+                                    else -> "Local profile (No cloud synchronization)"
+                                },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.testTag("profile_email")
@@ -198,13 +206,21 @@ fun ProfileScreen(
                     ProfileInfoRow(
                         icon = Icons.Default.VerifiedUser,
                         label = "Profile Type",
-                        value = if (userProfile?.authProvider == "google") "Google Account" else "Local Profile"
+                        value = when {
+                            authState is AuthState.ProtectedLocal -> "Protected Local Profile"
+                            userProfile?.authProvider == "google" -> "Google Account"
+                            else -> "Local Profile"
+                        }
                     )
 
                     ProfileInfoRow(
                         icon = Icons.Default.VerifiedUser,
                         label = "Storage",
-                        value = if (userProfile?.authProvider == "google") "Cloud synchronization enabled" else "Data stored on this device"
+                        value = when {
+                            authState is AuthState.ProtectedLocal -> "Saved on this phone — synchronization disabled"
+                            userProfile?.authProvider == "google" -> "Cloud synchronization enabled"
+                            else -> "Data stored on this device"
+                        }
                     )
 
                     ProfileInfoRow(
@@ -646,7 +662,7 @@ fun ProfileScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Google Actions Link/Merge local data
-            if (userProfile?.authProvider == "google") {
+            if (authState is AuthState.Authenticated && userProfile?.authProvider == "google") {
                 Card(
                     modifier = Modifier.fillMaxWidth().testTag("profile_link_section"),
                     shape = RoundedCornerShape(20.dp),
@@ -682,7 +698,8 @@ fun ProfileScreen(
             }
 
             // Cloud Account Deletion Card (Only shown for authenticated cloud users)
-            if (userProfile?.authProvider == "google" || userProfile?.isOfflineUser == false) {
+            if (authState is AuthState.Authenticated &&
+                (userProfile?.authProvider == "google" || userProfile?.isOfflineUser == false)) {
                 Card(
                     modifier = Modifier.fillMaxWidth().testTag("profile_cloud_account_section"),
                     shape = RoundedCornerShape(20.dp),
@@ -726,9 +743,9 @@ fun ProfileScreen(
                     .height(50.dp)
                     .testTag("profile_signout_button")
             ) {
-                Icon(Icons.Default.ExitToApp, contentDescription = "Sign Out")
+                Icon(Icons.Default.ExitToApp, contentDescription = "Sign out")
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Sign Out of Account", fontWeight = FontWeight.Black)
+                Text(if (authState is AuthState.ProtectedLocal) "Sign out" else "Sign Out of Account", fontWeight = FontWeight.Black)
             }
 
             Spacer(modifier = Modifier.height(16.dp))

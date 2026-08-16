@@ -33,6 +33,9 @@ private class AcceptanceEntitlementRepository(private val context: Context) : En
     override val appAccessState: StateFlow<AppAccessState> = state
     override val cachedEntitlement: StateFlow<VerifiedEntitlement?> = MutableStateFlow(null)
     override fun refreshAccessState() { state.value = accessState() }
+    override fun prepareForUser(uid: String?) {
+        state.value = if (uid == null) AppAccessState.Initializing else accessState()
+    }
     override suspend fun verifyAndProcessPurchase(purchaseToken: String, productId: String, orderId: String?) = false
     private fun accessState(): AppAccessState = if (DebugAcceptanceIdentity.isValidAcceptanceSession(context)) {
         val now = System.currentTimeMillis()

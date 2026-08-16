@@ -20,6 +20,7 @@ sealed class AuthState {
     object Loading : AuthState()
     data class Authenticated(val profile: UserProfile) : AuthState()
     object Offline : AuthState()
+    data class ProtectedLocal(val profile: UserProfile) : AuthState()
     data class LegacyUpgradeRequired(val totals: LegacyOwnershipTotals, val backupCompleted: Boolean = false) : AuthState()
     data class LegacyUpgradeRunning(val stage: String) : AuthState()
     data class LegacyUpgradeHandoffRequired(val message: String) : AuthState()
@@ -30,7 +31,7 @@ sealed class AuthState {
     ) : AuthState()
 }
 
-enum class AuthErrorKind { PROFILE_CONFLICT, APP_CHECK, NETWORK, TRUSTED_IDENTITY, UNKNOWN }
+enum class AuthErrorKind { DATA_CONFLICT, DIFFERENT_ACCOUNT, APP_CHECK, NETWORK, TRUSTED_IDENTITY, UNKNOWN }
 
 internal sealed interface ProfileHandoffResolution {
     data class Ready(val profile: UserProfile) : ProfileHandoffResolution
@@ -137,6 +138,7 @@ class AuthRepository(
     
     private val _authState = MutableStateFlow<AuthState>(AuthState.Initial)
     val authState: StateFlow<AuthState> = _authState
+    private var pendingProtectedProfile: UserProfile? = null
 
     private val resolvedDependencies = authDependencies ?: BuildVariantAuthDependenciesFactory.create(context)
     private val identityClient: HumanIdentityClient = identityClient ?: resolvedDependencies.identityClient
@@ -180,7 +182,7 @@ class AuthRepository(
         restoreSession()
     }
 
-    private suspend fun offerVerifiedLegacyUpgrade(
+    private suspend fun continueVerifiedLegacyUpgrade(
         firebaseUid: String,
         identity: AuthoritativeHumanIdentity,
         legacy: UserProfile,
@@ -201,8 +203,9 @@ class AuthRepository(
         pendingLegacyPlan = strengthRepository.dao.prepareVerifiedLegacyMigration(
             legacy.id, firebaseUid, identity.humanUserId, target
         )
-        _authState.value = AuthState.LegacyUpgradeRequired(requireNotNull(pendingLegacyPlan).totals)
-        Log.i(TAG, "stage=legacy_upgrade result=OFFERED")
+        _authState.value = AuthState.LegacyUpgradeRunning("Preparing your Human V1 data")
+        Log.i(TAG, "stage=legacy_upgrade result=AUTOMATIC_HANDOFF_STARTED")
+        legacyUpgradeMutex.withLock { completeVerifiedLegacyUpgrade() }
         return true
     }
 
@@ -212,19 +215,23 @@ class AuthRepository(
     }
 
     suspend fun updateVerifiedLegacyAndContinue() = legacyUpgradeMutex.withLock {
+        completeVerifiedLegacyUpgrade()
+    }
+
+    private suspend fun completeVerifiedLegacyUpgrade() {
         val plan = pendingLegacyPlan ?: run {
-            _authState.value = AuthState.Error("The verified upgrade must be checked again before it can start.", AuthErrorKind.PROFILE_CONFLICT, true)
-            return@withLock
+            _authState.value = AuthState.Error("We couldn’t finish signing in. Your saved workouts remain on this phone.", AuthErrorKind.NETWORK, true)
+            return
         }
-        if (_authState.value !is AuthState.LegacyUpgradeRequired) return@withLock
-        _authState.value = AuthState.LegacyUpgradeRunning("Updating local ownership")
+        if (_authState.value !is AuthState.LegacyUpgradeRequired && _authState.value !is AuthState.LegacyUpgradeRunning) return
+        _authState.value = AuthState.LegacyUpgradeRunning("Preparing your Human V1 data")
         try {
             strengthRepository.dao.commitVerifiedLegacyMigration(plan)
             pendingLegacyPlan = null
             completeLegacyMigrationHandoff()
         } catch (e: Exception) {
             Log.e(TAG, "stage=legacy_upgrade result=FAILED_BEFORE_COMMIT")
-            _authState.value = AuthState.Error("The local update did not complete. Your existing data is unchanged.", AuthErrorKind.PROFILE_CONFLICT, true)
+            _authState.value = AuthState.Error("We couldn’t finish signing in. Your saved workouts remain on this phone.", AuthErrorKind.NETWORK, true)
         }
     }
 
@@ -249,7 +256,7 @@ class AuthRepository(
             Log.e(TAG, "stage=legacy_handoff result=RETRY_REQUIRED")
             strengthRepository.dao.updateMigrationPhase("HANDOFF_REQUIRED", System.currentTimeMillis())
             com.example.core.sync.SyncScheduler.cancelCloudSync(context)
-            _authState.value = AuthState.LegacyUpgradeHandoffRequired("Your local data is safe. Finishing account setup can be retried.")
+            _authState.value = AuthState.Error("We couldn’t finish signing in. Check your connection and try again. Your saved workouts remain on this phone.", AuthErrorKind.NETWORK, true)
         }
     }
 
@@ -259,6 +266,15 @@ class AuthRepository(
     }
 
     private fun restoreSession() {
+        if (prefs.getString("auth_provider", null) == "protected_local") {
+            com.example.core.sync.SyncScheduler.cancelCloudSync(context)
+            _authState.value = AuthState.Error(
+                "Workouts from another profile were found on this phone.",
+                AuthErrorKind.DIFFERENT_ACCOUNT,
+                true
+            )
+            return
+        }
         if (com.example.HumanStrengthApplication.isFirebaseConfigured) {
             _authState.value = AuthState.Loading
             scope.launch(Dispatchers.IO) {
@@ -275,7 +291,7 @@ class AuthRepository(
                     if (migrationState?.phase == "ROOM_COMMITTED" || migrationState?.phase == "HANDOFF_REQUIRED") {
                         if (migrationState.sourceProfileId != userId) {
                             com.example.core.sync.SyncScheduler.cancelCloudSync(context)
-                            _authState.value = AuthState.Error("A local account update is awaiting the verified account that started it.", AuthErrorKind.PROFILE_CONFLICT, true)
+                            _authState.value = AuthState.Error("Workouts from another profile were found on this phone.", AuthErrorKind.DIFFERENT_ACCOUNT, true)
                         } else completeLegacyMigrationHandoff()
                         return@launch
                     }
@@ -312,11 +328,12 @@ class AuthRepository(
                     Log.i(TAG, "stage=local_profile result=$disposition")
                     if (disposition == LocalProfileDisposition.MEANINGFUL_DATA || disposition == LocalProfileDisposition.AMBIGUOUS) {
                         if (disposition == LocalProfileDisposition.MEANINGFUL_DATA && mismatchedProfile != null &&
-                            offerVerifiedLegacyUpgrade(userId, identity, mismatchedProfile, firebaseUser.displayName,
+                            continueVerifiedLegacyUpgrade(userId, identity, mismatchedProfile, firebaseUser.displayName,
                                 firebaseUser.email, firebaseUser.photoUrl?.toString(), ownership)) return@launch
+                        pendingProtectedProfile = mismatchedProfile
                         _authState.value = AuthState.Error(
                             "Sign-in succeeded, but this device contains data belonging to a different local profile. Nothing was deleted or uploaded.",
-                            AuthErrorKind.PROFILE_CONFLICT, offlineProfile != null
+                            AuthErrorKind.DIFFERENT_ACCOUNT, offlineProfile != null
                         )
                         return@launch
                     }
@@ -328,7 +345,7 @@ class AuthRepository(
                     ) as? ProfileHandoffResolution.Ready)?.profile
                     if (profile == null) {
                         clearAuthoritativeIdentityState()
-                        _authState.value = AuthState.Error("The trusted account could not be matched to a safe local profile.", AuthErrorKind.PROFILE_CONFLICT)
+                        _authState.value = AuthState.Error("Workouts from another profile were found on this phone.", AuthErrorKind.DIFFERENT_ACCOUNT)
                         return@launch
                     }
 
@@ -349,7 +366,8 @@ class AuthRepository(
                 } catch (e: Exception) {
                     Log.e(TAG, "Error restoring Firebase session", e)
                     _authState.value = AuthState.Error(
-                        e.localizedMessage ?: "Unable to restore cloud authentication"
+                        "Your saved data has not been changed. Please try again or sign out.",
+                        AuthErrorKind.TRUSTED_IDENTITY
                     )
                 }
             }
@@ -364,7 +382,7 @@ class AuthRepository(
             clearPersistedAuthentication()
             _authState.value = AuthState.Error("Firebase authentication is required to restore a Human account")
         } else if (isLoggedIn && authProvider == "offline") {
-            _authState.value = AuthState.Offline
+            _authState.value = AuthState.Initial
         } else {
             _authState.value = AuthState.Initial
         }
@@ -406,7 +424,7 @@ class AuthRepository(
             .apply()
     }
 
-    suspend fun signInAnonymously() = withContext(Dispatchers.IO) {
+    internal suspend fun signInAnonymously() = withContext(Dispatchers.IO) {
         prefs.edit()
             .putBoolean("auth_is_logged_in", true)
             .putString("auth_provider", "offline")
@@ -486,14 +504,15 @@ class AuthRepository(
             Log.i(TAG, "stage=local_profile result=$disposition")
             if (disposition == LocalProfileDisposition.MEANINGFUL_DATA || disposition == LocalProfileDisposition.AMBIGUOUS) {
                 if (disposition == LocalProfileDisposition.MEANINGFUL_DATA && mismatchedProfile != null &&
-                    offerVerifiedLegacyUpgrade(fUid, identity, mismatchedProfile, displayName, email, photoUrl, ownership)) {
+                    continueVerifiedLegacyUpgrade(fUid, identity, mismatchedProfile, displayName, email, photoUrl, ownership)) {
                     return@withContext null
                 }
+                pendingProtectedProfile = mismatchedProfile
                 _authState.value = AuthState.Error(
                     message = if (disposition == LocalProfileDisposition.AMBIGUOUS)
                         "This device contains multiple local profiles. Sign-in succeeded, but synchronization is paused until the profiles are reviewed."
                     else "Sign-in succeeded, but this device already contains data belonging to a different local profile. Nothing was deleted or uploaded.",
-                    kind = AuthErrorKind.PROFILE_CONFLICT,
+                    kind = AuthErrorKind.DIFFERENT_ACCOUNT,
                     canContinueOffline = offlineProfile != null
                 )
                 return@withContext null
@@ -505,7 +524,7 @@ class AuthRepository(
             ) as? ProfileHandoffResolution.Ready)?.profile
             if (profile == null) {
                 clearAuthoritativeIdentityState()
-                _authState.value = AuthState.Error("The trusted account could not be matched to a safe local profile.", AuthErrorKind.PROFILE_CONFLICT)
+                _authState.value = AuthState.Error("Workouts from another profile were found on this phone.", AuthErrorKind.DIFFERENT_ACCOUNT)
                 return@withContext null
             }
 
@@ -532,7 +551,7 @@ class AuthRepository(
             throw e
         } catch (e: com.google.firebase.FirebaseNetworkException) {
             Log.e(TAG, "Google Sign-In network failure", e)
-            _authState.value = AuthState.Error("Network unavailable. Check your connection and try again.", AuthErrorKind.NETWORK)
+            _authState.value = AuthState.Error("We couldn’t finish signing in. Check your connection and try again. Your saved workouts remain on this phone.", AuthErrorKind.NETWORK, true)
             return@withContext null
         } catch (e: com.google.firebase.auth.FirebaseAuthException) {
             Log.e(TAG, "Firebase rejected Google authentication (${e.errorCode})")
@@ -603,9 +622,11 @@ class AuthRepository(
     suspend fun deleteCloudAccount(): Result<Unit> = withContext(Dispatchers.IO) {
         val activeUserId = prefs.getString("auth_active_user_id", "offline") ?: "offline"
         val currentUser = firebaseAuth?.currentUser
+        val trustedCloudSession = prefs.getString("auth_provider", null) == "google" &&
+            prefs.getBoolean("auth_profile_handoff_complete", false)
 
-        if (currentUser == null && activeUserId == "offline") {
-            return@withContext Result.failure(IllegalStateException("No active cloud account found to delete. App is in offline mode."))
+        if (!trustedCloudSession || currentUser == null || activeUserId == "offline") {
+            return@withContext Result.failure(IllegalStateException("No active trusted cloud account is available to delete."))
         }
 
         try {
@@ -675,7 +696,7 @@ class AuthRepository(
                 .putBoolean("auth_profile_handoff_complete", false)
                 .apply()
 
-            _authState.value = AuthState.Offline
+            _authState.value = AuthState.Initial
             Log.i(TAG, "Cloud account deletion completed successfully. Local data preserved.")
             Result.success(Unit)
         } catch (e: Exception) {

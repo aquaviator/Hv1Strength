@@ -27,10 +27,10 @@ class PeriodicSyncWorker(
             if (result.isSuccess) {
                 Result.success()
             } else {
-                Result.failure()
+                Result.retry()
             }
         } catch (e: Exception) {
-            Result.failure()
+            Result.retry()
         }
     }
 }

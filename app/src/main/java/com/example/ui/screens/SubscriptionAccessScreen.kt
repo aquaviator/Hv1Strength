@@ -288,6 +288,7 @@ fun SubscriptionAccessScreen(
                                 ?: auth.profile.id
                             "Signed in as $display"
                         }
+                        is AuthState.ProtectedLocal -> "Protected local profile (Synchronization disabled)"
                         is AuthState.Offline -> "Guest / Offline mode (Local data preserved)"
                         else -> "Not signed in"
                     }

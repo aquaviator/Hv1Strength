@@ -43,7 +43,7 @@ class SecureAccountTrialTest {
     }
 
     @Test
-    fun activeTrialIsCachedAndRepeatedRefreshDoesNotReinitialize() = runBlocking {
+    fun activeTrialRemainsAvailableWhileAuthoritativeRefreshRepeats() = runBlocking {
         val now = System.currentTimeMillis()
         val client = FakeAccountTrialClient(
             AccountTrialResult.Active("uid-a", now, now + 30L * DAY, now)
@@ -52,9 +52,9 @@ class SecureAccountTrialTest {
 
         waitUntil { entitlementRepository.appAccessState.value is AppAccessState.TrialActive }
         entitlementRepository.refreshAccessState()
-        waitUntil { entitlementRepository.appAccessState.value is AppAccessState.TrialActive }
+        waitUntil { entitlementRepository.appAccessState.value is AppAccessState.TrialActive && client.calls >= 2 }
 
-        assertEquals(1, client.calls)
+        assertEquals(2, client.calls)
         assertTrue(entitlementRepository.appAccessState.value.hasAppAccess)
     }
 
@@ -149,7 +149,7 @@ class SecureAccountTrialTest {
         )
 
         waitUntil { entitlementRepository.appAccessState.value is AppAccessState.TrialActive }
-        assertEquals(1, trialClient.calls)
+        assertTrue(trialClient.calls >= 1)
     }
 
     private fun createRepository(

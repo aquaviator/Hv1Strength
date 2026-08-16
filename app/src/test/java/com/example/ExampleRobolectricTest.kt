@@ -197,9 +197,10 @@ class ExampleRobolectricTest {
         // Mark processing
         repository.markCommandProcessing(pending.first().id)
         
-        var updated = repository.getPendingCommands()
-        // Wait, "PENDING" query only gets status = 'PENDING', so it should be empty now
-        assertTrue(updated.isEmpty())
+        val updated = repository.getPendingCommands()
+        // PROCESSING remains eligible so a force-stop cannot strand the command.
+        assertEquals("cmd_123", updated.single().commandId)
+        assertEquals("PROCESSING", updated.single().status)
 
         // Mark succeeded
         repository.markCommandSucceeded(pending.first().id)

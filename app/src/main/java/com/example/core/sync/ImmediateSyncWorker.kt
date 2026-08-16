@@ -25,12 +25,13 @@ class ImmediateSyncWorker(
         return try {
             val result = syncEngine.synchronizeAll()
             if (result.isSuccess) {
-                Result.success()
+                if (UnattendedSyncPolicy.workerShouldRetry(true, repository.getAllCommands())) Result.retry()
+                else Result.success()
             } else {
-                Result.failure()
+                Result.retry()
             }
         } catch (e: Exception) {
-            Result.failure()
+            Result.retry()
         }
     }
 }

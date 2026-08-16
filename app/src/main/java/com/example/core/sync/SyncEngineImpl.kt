@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -29,6 +31,8 @@ class SyncEngineImpl internal constructor(
     private val deviceIdOverride: String? = null,
     private val identityResolverOverride: (suspend () -> SyncIdentityResolution)? = null
 ) : SyncEngine {
+
+    private class RecordConflictException(message: String) : IllegalStateException(message)
 
     private val TAG = "SyncEngineImpl"
     private val syncScope = CoroutineScope(Dispatchers.IO)
@@ -55,7 +59,7 @@ class SyncEngineImpl internal constructor(
     init {
         if (firestoreOverride != null || com.example.HumanStrengthApplication.isFirebaseConfigured) {
             try {
-                firestore = firestoreOverride ?: FirebaseFirestore.getInstance()
+                firestore = firestoreOverride ?: com.example.data.BuildVariantSyncFirestoreFactory.create(context)
             } catch (e: Exception) {
                 Log.w(TAG, "Firestore not initialized. Operating in offline/fallback mode.", e)
             }
@@ -79,9 +83,9 @@ class SyncEngineImpl internal constructor(
     fun updateConnectivity(state: ConnectivityState) {
         _connectivity.value = state
         if (state == ConnectivityState.OFFLINE) {
-            SyncManager.updateStatus("Offline")
+            SyncManager.updateStatus("WaitingForConnection")
         } else {
-            SyncManager.updateStatus("Idle")
+            SyncManager.updateStatus("Synchronizing")
         }
     }
 
@@ -128,10 +132,12 @@ class SyncEngineImpl internal constructor(
         }
     }
 
-    override suspend fun synchronizeAll(): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun synchronizeAll(): Result<Unit> = synchronizationMutex.withLock {
+        withContext(Dispatchers.IO) {
         if (_activeSyncing.value) return@withContext Result.success(Unit)
         _activeSyncing.value = true
-        SyncManager.updateStatus("Uploading")
+        SyncManager.updateStatus("Synchronizing")
+        SyncManager.updateLastError(null)
 
         try {
             // The repository is the synchronization store boundary. Reopening
@@ -139,9 +145,11 @@ class SyncEngineImpl internal constructor(
             // redirect downloads into the wrong local store.
             val dao = repository.dao
 
-            val identityResolution = identityResolverOverride?.invoke() ?: resolvePersistedIdentity()
+            val identityResolution = identityResolverOverride?.invoke()
+                ?: com.example.data.BuildVariantSyncIdentityFactory.resolve(context, repository)
+                ?: resolvePersistedIdentity()
             if (identityResolution is SyncIdentityResolution.Blocked) {
-                SyncManager.updateStatus("Identity blocked: ${identityResolution.reason}")
+                SyncManager.updateStatus("WaitingForIdentity")
                 _activeSyncing.value = false
                 return@withContext Result.success(Unit)
             }
@@ -190,6 +198,16 @@ class SyncEngineImpl internal constructor(
                         errorMessage = null
                     )
                     successfulUploads++
+                } catch (e: RecordConflictException) {
+                    Log.w(TAG, "A record-level conflict blocked one command; other synchronization may continue")
+                    repository.updateCommandStatus(
+                        id = command.id,
+                        status = "BLOCKED_CONFLICT",
+                        attempts = nextAttempts,
+                        lastAttemptAt = System.currentTimeMillis(),
+                        nextRetryAt = null,
+                        errorMessage = "Item needs review"
+                    )
                 } catch (e: Exception) {
                     Log.e(TAG, "Error processing command ${command.commandId}", e)
                     val errorMsg = e.localizedMessage ?: "Unknown error"
@@ -225,26 +243,29 @@ class SyncEngineImpl internal constructor(
             }
 
             // Update remaining queue size
-            val updatedCommands = repository.getPendingCommands(System.currentTimeMillis())
-            SyncManager.updateQueueSize(updatedCommands.size)
-            SyncManager.updatePendingUploads(updatedCommands.size)
+            val outstandingCommands = UnattendedSyncPolicy.outstandingCount(repository.getAllCommands())
+            SyncManager.updateQueueSize(outstandingCommands)
+            SyncManager.updatePendingUploads(outstandingCommands)
 
             // 3. Download Remote Changes
-            SyncManager.updateStatus("Downloading")
+            SyncManager.updateStatus("Synchronizing")
             downloadRemoteChanges(humanUserId, deviceId, dao)
 
             // 4. Mark successful synchronization
             SyncManager.updateLastSync(System.currentTimeMillis())
-            SyncManager.updateStatus("Idle")
+            SyncManager.updateStatus(UnattendedSyncPolicy.completionStatus(
+                SyncManager.conflictCount.value, outstandingCommands
+            ))
             _activeSyncing.value = false
             Result.success(Unit)
 
         } catch (e: Exception) {
             Log.e(TAG, "Sync process failed", e)
             SyncManager.updateLastError(e.localizedMessage)
-            SyncManager.updateStatus("Error")
+            SyncManager.updateStatus("SavedRetrying")
             _activeSyncing.value = false
             Result.failure(e)
+        }
         }
     }
 
@@ -561,6 +582,32 @@ class SyncEngineImpl internal constructor(
         }
 
         if (docRef != null && afterCommit != null) {
+            if (entityType == "CUSTOM_EXERCISE" || entityType == "WORKOUT_TEMPLATE") {
+                val remote = docRef.get().await()
+                val localRevision = (docData["revision"] as? Long) ?: 1L
+                val localUpdatedAt = (docData["updatedAt"] as? Long) ?: 0L
+                val localOrigin = docData["originDeviceId"] as? String
+                val remoteRevision = remote.getLong("revision")
+                val remoteUpdatedAt = remote.getLong("updatedAt")
+                val remoteOrigin = remote.getString("originDeviceId")
+                if (remote.exists() && isProvenConcurrentEdit(
+                        localRevision, localUpdatedAt, localOrigin,
+                        remoteRevision, remoteUpdatedAt, remoteOrigin
+                    )) {
+                    val metadata = conflictMetadata(localUpdatedAt, requireNotNull(remoteUpdatedAt))
+                    when (entityType) {
+                        "CUSTOM_EXERCISE" -> repository.getExerciseByGlobalId(entityGlobalId)?.let {
+                            if (it.isCustom) repository.markExerciseConflict(it.id, metadata)
+                        }
+                        "WORKOUT_TEMPLATE" -> repository.getTemplateByGlobalId(entityGlobalId)?.let {
+                            repository.markTemplateConflict(it.id, metadata)
+                        }
+                    }
+                    SyncManager.updateStatus("ItemsNeedReview")
+                    SyncManager.updateConflictCount(SyncManager.conflictCount.value + 1)
+                    throw RecordConflictException("Item needs review")
+                }
+            }
             // Completion is monotonic. A stale planner edit must never replace a
             // completion already accepted from another device.
             if (entityType == "PLANNED_WORKOUT" && docData["status"] != "COMPLETED") {
@@ -703,12 +750,14 @@ class SyncEngineImpl internal constructor(
                         if (remoteRevision > localEntity.revision ||
                             (remoteRevision == localEntity.revision && remoteUpdatedAt > localEntity.updatedAt)) {
                             
-                            if (isLocalUnsynced) {
+                            if (isLocalUnsynced && isConflictEligible(entityType, localEntity) &&
+                                isProvenConcurrentEdit(localEntity.revision, localEntity.updatedAt,
+                                    localEntity.originDeviceId, remoteRevision, remoteUpdatedAt, remoteOriginDevice)) {
                                 conflictsDetected++
                                 markLocalConflict(
                                     entityType, 
                                     localEntity, 
-                                    "Remote is newer (rev $remoteRevision, updated $remoteUpdatedAt) but local has unsynced changes (rev ${localEntity.revision}, updated ${localEntity.updatedAt})", 
+                                    conflictMetadata(localEntity.updatedAt, remoteUpdatedAt),
                                     dao
                                 )
                             } else {
@@ -719,12 +768,14 @@ class SyncEngineImpl internal constructor(
                             // Local is newer, no action required
                         } else if (remoteRevision == localEntity.revision && remoteUpdatedAt == localEntity.updatedAt) {
                             // Check simultaneous device modifications
-                            if (remoteOriginDevice != deviceId && remoteOriginDevice.isNotEmpty() && isLocalUnsynced) {
+                            if (isConflictEligible(entityType, localEntity) &&
+                                isProvenConcurrentEdit(localEntity.revision, localEntity.updatedAt,
+                                    localEntity.originDeviceId, remoteRevision, remoteUpdatedAt, remoteOriginDevice)) {
                                 conflictsDetected++
                                 markLocalConflict(
                                     entityType, 
                                     localEntity, 
-                                    "Simultaneous modifications detected on different devices with equal revisions", 
+                                    conflictMetadata(localEntity.updatedAt, remoteUpdatedAt),
                                     dao
                                 )
                             }
@@ -1363,5 +1414,26 @@ class SyncEngineImpl internal constructor(
 
     override suspend fun resetSyncWorkers() {
         updatePendingCounts()
+    }
+
+    private fun isConflictEligible(entityType: String, entity: VersionedEntity): Boolean =
+        entityType == "WORKOUT_TEMPLATE" || (entityType == "CUSTOM_EXERCISE" && (entity as? Exercise)?.isCustom == true)
+
+    companion object {
+        private val synchronizationMutex = Mutex()
+
+        internal fun isProvenConcurrentEdit(
+            localRevision: Long,
+            localUpdatedAt: Long,
+            localOrigin: String?,
+            remoteRevision: Long?,
+            remoteUpdatedAt: Long?,
+            remoteOrigin: String?
+        ): Boolean = remoteRevision == localRevision && remoteUpdatedAt != null &&
+            remoteUpdatedAt != localUpdatedAt && !localOrigin.isNullOrBlank() &&
+            !remoteOrigin.isNullOrBlank() && localOrigin != remoteOrigin
+
+        internal fun conflictMetadata(localUpdatedAt: Long, remoteUpdatedAt: Long): String =
+            "v1|local=$localUpdatedAt|online=$remoteUpdatedAt"
     }
 }

@@ -18,6 +18,9 @@
             android:permission="android.permission.DUMP">
             <intent-filter>
                 <action android:name="com.example.debug.V31_ARM_MATCHING" />
+                <action android:name="com.example.debug.V32_1_ARM_CONFLICT" />
+                <action android:name="com.example.debug.V32_1_RUN_SYNC" />
+                <action android:name="com.example.debug.V32_1_QUEUE_LOCAL_WEIGHT" />
                 <action android:name="com.example.debug.V31_REPORT" />
                 <action android:name="com.example.debug.V31_DISARM" />
                 <action android:name="com.example.debug.V31_RESET_SYNTHETIC_SESSION" />

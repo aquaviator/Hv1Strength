@@ -1,12 +1,12 @@
 package com.example
 
 import android.app.Application
+import android.app.Activity
+import android.os.Bundle
 import android.util.Log
 import androidx.work.Configuration
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 
 class HumanStrengthApplication : Application(), Configuration.Provider {
 
@@ -27,6 +27,23 @@ class HumanStrengthApplication : Application(), Configuration.Provider {
         
         Log.i(TAG, "onCreate: Application initialization started. Global crash handler installed.")
         initializeFirebase()
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityResumed(activity: Activity) {
+                val prefs = getSharedPreferences("strength_settings", MODE_PRIVATE)
+                if (com.example.core.sync.UnattendedSyncPolicy.shouldRequestForegroundSync(
+                        prefs.getBoolean("auth_is_logged_in", false),
+                        prefs.getString("auth_provider", null),
+                        prefs.getBoolean("auth_profile_handoff_complete", false)
+                    )
+                ) com.example.core.sync.SyncScheduler.scheduleImmediate(this@HumanStrengthApplication)
+            }
+            override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
     }
 
     private fun initializeFirebase() {
@@ -34,7 +51,7 @@ class HumanStrengthApplication : Application(), Configuration.Provider {
             val firebaseApp = FirebaseApp.getApps(this).firstOrNull()
                 ?: FirebaseApp.initializeApp(this)
             if (firebaseApp != null) {
-                Log.i(TAG, "Firebase initialized for project ${firebaseApp.options.projectId}")
+                Log.i(TAG, "stage=firebase result=READY")
                 initializeAppCheck(BuildConfig.DEBUG)
                 true
             } else {
@@ -59,24 +76,6 @@ class HumanStrengthApplication : Application(), Configuration.Provider {
             AppCheckInitializationState.FAILED
         }
         return appCheckInitializationState
-    }
-
-    private fun configureEmulators() {
-        try {
-            val auth = FirebaseAuth.getInstance()
-            auth.useEmulator("10.0.2.2", 9099)
-            Log.i(TAG, "Using Firebase Auth Emulator at 10.0.2.2:9099")
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not configure Auth Emulator", e)
-        }
-
-        try {
-            val firestore = FirebaseFirestore.getInstance()
-            firestore.useEmulator("10.0.2.2", 8080)
-            Log.i(TAG, "Using Firestore Emulator at 10.0.2.2:8080")
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not configure Firestore Emulator", e)
-        }
     }
 
     companion object {

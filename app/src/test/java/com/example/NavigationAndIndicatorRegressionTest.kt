@@ -79,6 +79,32 @@ class NavigationAndIndicatorRegressionTest {
         return viewModel!!
     }
 
+    /** Creates a trusted, entitled account fixture without exposing a product bypass. */
+    @Suppress("UNCHECKED_CAST")
+    private fun authenticateFixture(vm: StrengthViewModel) {
+        val authField = vm.authViewModel.authRepository.javaClass.getDeclaredField("_authState")
+            .apply { isAccessible = true }
+        val authFlow = authField.get(vm.authViewModel.authRepository)
+            as kotlinx.coroutines.flow.MutableStateFlow<AuthState>
+        val profile = UserProfile(
+            id = "navigation-test-uid",
+            firebaseUid = "navigation-test-uid",
+            authProvider = "google",
+            isOfflineUser = false,
+            humanUserId = "human_navigationtest000000000000000000"
+        )
+        authFlow.value = AuthState.Authenticated(profile)
+        waitUntil { vm.authState.value is AuthState.Authenticated }
+
+        val entitlement = vm.profileViewModel.entitlementRepository
+        val accessField = entitlement.javaClass.getDeclaredField("_appAccessState")
+            .apply { isAccessible = true }
+        val accessFlow = accessField.get(entitlement)
+            as kotlinx.coroutines.flow.MutableStateFlow<com.example.billing.AppAccessState>
+        accessFlow.value = com.example.billing.AppAccessState.Subscribed(Long.MAX_VALUE)
+        waitUntil { vm.appAccessState.value.hasAppAccess }
+    }
+
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
@@ -98,10 +124,7 @@ class NavigationAndIndicatorRegressionTest {
     fun testNavigation_historyToWorkout() {
         val vm = getLazyViewModel()
         // Force authentication so we don't start on welcome screen
-        runBlocking {
-            vm.authViewModel.authRepository.signInAnonymously()
-        }
-        waitUntil { vm.authState.value is AuthState.Offline }
+        authenticateFixture(vm)
 
         lateinit var navController: NavHostController
 
@@ -129,10 +152,7 @@ class NavigationAndIndicatorRegressionTest {
     @Test
     fun testNavigation_workoutToHistory() {
         val vm = getLazyViewModel()
-        runBlocking {
-            vm.authViewModel.authRepository.signInAnonymously()
-        }
-        waitUntil { vm.authState.value is AuthState.Offline }
+        authenticateFixture(vm)
 
         lateinit var navController: NavHostController
 
@@ -156,10 +176,7 @@ class NavigationAndIndicatorRegressionTest {
     @Test
     fun testNavigation_backstackBehavior() {
         val vm = getLazyViewModel()
-        runBlocking {
-            vm.authViewModel.authRepository.signInAnonymously()
-        }
-        waitUntil { vm.authState.value is AuthState.Offline }
+        authenticateFixture(vm)
 
         lateinit var navController: NavHostController
 
@@ -195,10 +212,7 @@ class NavigationAndIndicatorRegressionTest {
     @Test
     fun testNavigation_repeatedTabSelection() {
         val vm = getLazyViewModel()
-        runBlocking {
-            vm.authViewModel.authRepository.signInAnonymously()
-        }
-        waitUntil { vm.authState.value is AuthState.Offline }
+        authenticateFixture(vm)
 
         lateinit var navController: NavHostController
 
@@ -224,10 +238,7 @@ class NavigationAndIndicatorRegressionTest {
     @Test
     fun testNavigation_reproduceWorkoutSummaryToHistoryToWorkout() {
         val vm = getLazyViewModel()
-        runBlocking {
-            vm.authViewModel.authRepository.signInAnonymously()
-        }
-        waitUntil { vm.authState.value is AuthState.Offline }
+        authenticateFixture(vm)
 
         lateinit var navController: NavHostController
 
@@ -335,10 +346,8 @@ class NavigationAndIndicatorRegressionTest {
         // 1. Confirm we started on Welcome destination
         assertEquals("welcome", navController.currentDestination?.route)
 
-        // 2. Perform authentication -> enter offline mode
-        runBlocking {
-            vm.authViewModel.authRepository.signInAnonymously()
-        }
+        // 2. Install a trusted, entitled account fixture.
+        authenticateFixture(vm)
         composeTestRule.waitForIdle()
         waitUntil { navController.currentDestination?.route == "workout" }
 
@@ -367,10 +376,7 @@ class NavigationAndIndicatorRegressionTest {
     @Test
     fun testNavigation_activeWorkoutProtection() {
         val vm = getLazyViewModel()
-        runBlocking {
-            vm.authViewModel.authRepository.signInAnonymously()
-        }
-        waitUntil { vm.authState.value is AuthState.Offline }
+        authenticateFixture(vm)
 
         lateinit var navController: NavHostController
 
@@ -693,10 +699,7 @@ class NavigationAndIndicatorRegressionTest {
     @Test
     fun testNavigation_workoutToProfile() {
         val vm = getLazyViewModel()
-        runBlocking {
-            vm.authViewModel.authRepository.signInAnonymously()
-        }
-        waitUntil { vm.authState.value is AuthState.Offline }
+        authenticateFixture(vm)
 
         lateinit var navController: NavHostController
 
@@ -729,10 +732,7 @@ class NavigationAndIndicatorRegressionTest {
     @Test
     fun testNavigation_repeatedProfileClicksSingleTop() {
         val vm = getLazyViewModel()
-        runBlocking {
-            vm.authViewModel.authRepository.signInAnonymously()
-        }
-        waitUntil { vm.authState.value is AuthState.Offline }
+        authenticateFixture(vm)
 
         lateinit var navController: NavHostController
 
