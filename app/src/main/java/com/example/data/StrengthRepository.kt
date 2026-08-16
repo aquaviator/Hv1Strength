@@ -348,7 +348,7 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
         val finalExercise = if (isNew) {
             exercise.copy(
                 globalId = if (exercise.isCustom) GlobalIdGenerator.generate("exercise") else exercise.id,
-                humanUserId = if (exercise.isCustom) "human_offlineusr" else "global",
+                humanUserId = if (exercise.isCustom) exercise.humanUserId.ifBlank { "human_offlineusr" } else "global",
                 createdAt = now,
                 updatedAt = now,
                 revision = 1,

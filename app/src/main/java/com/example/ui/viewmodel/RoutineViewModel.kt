@@ -215,7 +215,7 @@ class RoutineViewModel(
                 name = name,
                 category = category,
                 isCustom = true,
-                humanUserId = authViewModel.activeUserId.value
+                humanUserId = authViewModel.activeHumanUserId.value
             )
             repository.insertExercise(exercise)
             com.example.catalogue.ExerciseCapabilityResolver.persistCustom(context, customId, profile)

@@ -29,6 +29,14 @@ class AuthViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, "offline")
 
+    val activeHumanUserId: StateFlow<String> = authRepository.authState.map { state ->
+        when (state) {
+            is AuthState.Authenticated -> state.profile.humanUserId
+            is AuthState.ProtectedLocal -> state.profile.humanUserId
+            else -> "human_offlineusr"
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, "human_offlineusr")
+
     fun signInWithGoogle(
         idToken: String,
         displayName: String?,
