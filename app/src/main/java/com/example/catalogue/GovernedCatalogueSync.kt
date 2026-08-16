@@ -27,7 +27,8 @@ data class GovernedCataloguePayload(
 enum class CatalogueSyncStatus {
     REMOTE_ACCEPTED, BUNDLED_CURRENT, UNAVAILABLE, PERMISSION_DENIED, AUTHENTICATION_FAILED,
     APP_CHECK_FAILED, TIMEOUT, INVALID_MANIFEST, INVALID_SCHEMA, COUNT_MISMATCH,
-    CHECKSUM_MISMATCH, INVALID_REFERENCE, VERSION_INCOMPATIBLE, UNKNOWN_FAILURE
+    CHECKSUM_MISMATCH, INVALID_REFERENCE, INVALID_CAPABILITY, MISSING_REQUIRED_ID,
+    VERSION_INCOMPATIBLE, UNKNOWN_FAILURE
 }
 
 data class CatalogueSyncDecision(val accepted: Boolean, val status: CatalogueSyncStatus, val detail: String? = null)
@@ -38,6 +39,10 @@ data class GovernedCatalogueApplyPlan(
     val preservedCustomIds: Set<String>,
     val customCollisions: Set<String>
 )
+
+internal class CatalogueGatewayException(
+    val status: CatalogueSyncStatus
+) : IllegalStateException(status.name)
 
 fun planGovernedCatalogueApply(
     incoming: List<CatalogueExercise>, existing: List<com.example.data.Exercise>, acceptedAt: Long
@@ -61,7 +66,9 @@ fun planGovernedCatalogueApply(
 }
 
 object GovernedCatalogueValidator {
-    fun validate(payload: GovernedCataloguePayload): CatalogueSyncDecision {
+    private val supportedCapabilities = MeasurementCapability.entries.map { it.wireName }.toSet()
+
+    fun validate(payload: GovernedCataloguePayload, requiredIds: Set<String> = emptySet()): CatalogueSyncDecision {
         val manifest = payload.manifest
         if (manifest.status != "published" || manifest.channel != "production")
             return CatalogueSyncDecision(false, CatalogueSyncStatus.INVALID_MANIFEST)
@@ -72,8 +79,16 @@ object GovernedCatalogueValidator {
         if (manifest.exerciseCount != payload.exercises.size || payload.rawDocuments.size != payload.exercises.size)
             return CatalogueSyncDecision(false, CatalogueSyncStatus.COUNT_MISMATCH)
         val ids = payload.exercises.map { it.id }
-        if (ids.distinct().size != ids.size) return CatalogueSyncDecision(false, CatalogueSyncStatus.INVALID_SCHEMA)
+        val rawIds = payload.rawDocuments.map { it["exerciseId"] as? String }
+        if (ids.distinct().size != ids.size || rawIds.any { it.isNullOrBlank() } || rawIds.distinct().size != rawIds.size || rawIds.filterNotNull().toSet() != ids.toSet())
+            return CatalogueSyncDecision(false, CatalogueSyncStatus.INVALID_SCHEMA)
         val idSet = ids.toSet()
+        if (!idSet.containsAll(requiredIds)) return CatalogueSyncDecision(false, CatalogueSyncStatus.MISSING_REQUIRED_ID)
+        if (payload.rawDocuments.any { document ->
+                val capabilities = (document["trackingCapabilities"] as? List<*>)?.mapNotNull { it as? String }.orEmpty()
+                capabilities.isEmpty() || capabilities.any { it !in supportedCapabilities } ||
+                    (("assisted_load" in capabilities || "weighted_bodyweight" in capabilities) && "bodyweight" !in capabilities)
+            }) return CatalogueSyncDecision(false, CatalogueSyncStatus.INVALID_CAPABILITY)
         if (payload.exercises.any { item ->
                 item.relatedIds.any { it !in idSet || it == item.id } ||
                     item.regressionId?.let { it !in idSet || it == item.id } == true ||
@@ -111,14 +126,19 @@ interface GovernedCatalogueGateway { suspend fun fetch(): GovernedCataloguePaylo
 class FirebaseGovernedCatalogueGateway(private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()) : GovernedCatalogueGateway {
     override suspend fun fetch(): GovernedCataloguePayload {
         val current = firestore.collection("exercise_catalogue").document("current").get().awaitTask()
-        require(current.exists()) { "current manifest unavailable" }
-        val releaseId = current.getString("releaseId") ?: error("releaseId missing")
+        if (!current.exists()) throw CatalogueGatewayException(CatalogueSyncStatus.UNAVAILABLE)
+        val releaseId = current.getString("releaseId")
+            ?: throw CatalogueGatewayException(CatalogueSyncStatus.INVALID_MANIFEST)
         val release = firestore.collection("exercise_catalogue_releases").document(releaseId).get().awaitTask()
-        require(release.exists()) { "release manifest unavailable" }
+        if (!release.exists()) throw CatalogueGatewayException(CatalogueSyncStatus.INVALID_MANIFEST)
         val documents = firestore.collection("exercise_catalogue_releases").document(releaseId)
             .collection("exercises").get().awaitTask().documents.map { it.data.orEmpty() }
         val data = release.data.orEmpty()
-        return GovernedCataloguePayload(data.toManifest(), documents, documents.map(::toExercise))
+        return try {
+            GovernedCataloguePayload(data.toManifest(), documents, documents.map(::toExercise))
+        } catch (_: Exception) {
+            throw CatalogueGatewayException(CatalogueSyncStatus.INVALID_MANIFEST)
+        }
     }
 
     private fun Map<String, Any?>.toManifest() = GovernedReleaseManifest(
@@ -155,7 +175,7 @@ class GovernedCatalogueCoordinator(
             recordFailure(bundled, checkedAt, status)
             return CatalogueSyncDecision(false, status)
         }
-        val decision = GovernedCatalogueValidator.validate(payload)
+        val decision = GovernedCatalogueValidator.validate(payload, bundled.exercises.map { it.id }.toSet())
         if (!decision.accepted) { recordFailure(bundled, checkedAt, decision.status); return decision }
         val dao = database.strengthDao()
         val existing = dao.getAllExercisesSync()
@@ -185,13 +205,14 @@ class GovernedCatalogueCoordinator(
     }
 
     private fun classify(error: Throwable): CatalogueSyncStatus {
+        if (error is CatalogueGatewayException) return error.status
         val text = generateSequence(error) { it.cause }.joinToString(" ") { it.message.orEmpty() }.lowercase()
         return when {
             error is kotlinx.coroutines.TimeoutCancellationException -> CatalogueSyncStatus.TIMEOUT
             "permission" in text -> CatalogueSyncStatus.PERMISSION_DENIED
             "app check" in text || "appcheck" in text -> CatalogueSyncStatus.APP_CHECK_FAILED
             "auth" in text -> CatalogueSyncStatus.AUTHENTICATION_FAILED
-            "network" in text || "unavailable" in text || "offline" in text -> CatalogueSyncStatus.UNAVAILABLE
+            "network" in text || "unavailable" in text || "offline" in text || "interrupted" in text -> CatalogueSyncStatus.UNAVAILABLE
             else -> CatalogueSyncStatus.UNKNOWN_FAILURE
         }
     }

@@ -11,6 +11,7 @@ import json
 import os
 import re
 import urllib.request
+import urllib.error
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -160,6 +161,15 @@ def emulator_write(project: str, release: dict[str, Any], exercises: list[dict[s
     if not host or host not in {"127.0.0.1:8080", "localhost:8080"}: raise ValueError("explicit local Firestore emulator required")
     root = f"projects/{project}/databases/(default)/documents"
     release_id = release["releaseId"]
+    release_url = f"http://{host}/v1/{root}/exercise_catalogue_releases/{release_id}"
+    owner_headers = {"Authorization": "Bearer owner"}
+    try:
+        urllib.request.urlopen(urllib.request.Request(release_url, headers=owner_headers), timeout=10).read()
+    except urllib.error.HTTPError as error:
+        if error.code != 404:
+            raise
+    else:
+        raise ValueError(f"immutable release already exists: {release_id}")
     def firestore_value(value: Any) -> dict[str, Any]:
         if value is None: return {"nullValue": None}
         if isinstance(value, bool): return {"booleanValue": value}
@@ -176,8 +186,15 @@ def emulator_write(project: str, release: dict[str, Any], exercises: list[dict[s
     writes.extend(write(f"exercise_catalogue_releases/{release_id}/exercises/{item['exerciseId']}", item) for item in exercises)
     writes.append(write("exercise_catalogue/current", manifest))
     payload = {"writes": writes}
-    request = urllib.request.Request(f"http://{host}/v1/{root}:batchWrite", data=canonical_json(payload).encode(), method="POST", headers={"Content-Type": "application/json"})
-    urllib.request.urlopen(request, timeout=10).read()
+    request = urllib.request.Request(
+        f"http://{host}/v1/{root}:commit",
+        data=canonical_json(payload).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json", **owner_headers},
+    )
+    response = json.loads(urllib.request.urlopen(request, timeout=10).read())
+    if len(response.get("writeResults", [])) != len(writes):
+        raise RuntimeError("emulator commit did not confirm every immutable document")
 
 
 def main(argv: Iterable[str] | None = None) -> int:
