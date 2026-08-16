@@ -7,7 +7,8 @@ import org.junit.Test
 
 class GovernedCatalogueValidatorTest {
     private val raw = mapOf<String, Any?>(
-        "exerciseId" to "bench_press", "schemaVersion" to 1L, "displayName" to "Bench Press"
+        "exerciseId" to "bench_press", "schemaVersion" to 1L, "displayName" to "Bench Press",
+        "trackingCapabilities" to listOf("repetitions", "load")
     )
     private val exercise = CatalogueExercise(
         "bench_press", "Bench Press", emptyList(), "Chest", listOf("chest"), emptyList(), listOf("barbell"),
@@ -50,5 +51,38 @@ class GovernedCatalogueValidatorTest {
 
     @Test fun rejectsIncompatibleMinimumVersion() {
         assertEquals(CatalogueSyncStatus.VERSION_INCOMPATIBLE, GovernedCatalogueValidator.validate(payload(minimumVersion = Int.MAX_VALUE)).status)
+    }
+
+    @Test fun rejectsDuplicateDocumentIdentity() {
+        val duplicate = listOf(raw, raw)
+        val exercises = listOf(exercise, exercise.copy(name = "Duplicate"))
+        assertEquals(CatalogueSyncStatus.INVALID_SCHEMA,
+            GovernedCatalogueValidator.validate(payload(duplicate, exercises, GovernedCatalogueValidator.checksum(duplicate), 2)).status)
+    }
+
+    @Test fun rejectsMissingOriginalGovernedIdentity() {
+        assertEquals(CatalogueSyncStatus.MISSING_REQUIRED_ID,
+            GovernedCatalogueValidator.validate(payload(), setOf("bench_press", "squat")).status)
+    }
+
+    @Test fun rejectsUnknownAndUnsafeCapabilityCombinations() {
+        val unknown = listOf(raw + ("trackingCapabilities" to listOf("repetitions", "telepathy")))
+        assertEquals(CatalogueSyncStatus.INVALID_CAPABILITY,
+            GovernedCatalogueValidator.validate(payload(documents = unknown, checksum = GovernedCatalogueValidator.checksum(unknown))).status)
+        val unsafe = listOf(raw + ("trackingCapabilities" to listOf("assisted_load")))
+        assertEquals(CatalogueSyncStatus.INVALID_CAPABILITY,
+            GovernedCatalogueValidator.validate(payload(documents = unsafe, checksum = GovernedCatalogueValidator.checksum(unsafe))).status)
+    }
+
+    @Test fun rejectsSelfReference() {
+        val self = exercise.copy(relatedIds = listOf(exercise.id))
+        assertEquals(CatalogueSyncStatus.INVALID_REFERENCE,
+            GovernedCatalogueValidator.validate(payload(exercises = listOf(self))).status)
+    }
+
+    @Test fun rejectsUnsupportedDocumentSchema() {
+        val unsupported = listOf(raw + ("schemaVersion" to 2L))
+        assertEquals(CatalogueSyncStatus.INVALID_SCHEMA,
+            GovernedCatalogueValidator.validate(payload(documents = unsupported, checksum = GovernedCatalogueValidator.checksum(unsupported))).status)
     }
 }

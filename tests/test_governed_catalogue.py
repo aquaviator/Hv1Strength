@@ -2,6 +2,8 @@ import importlib.util
 import json
 import pathlib
 import unittest
+from unittest import mock
+import urllib.error
 
 ROOT = pathlib.Path(__file__).parents[1]
 SPEC = importlib.util.spec_from_file_location("governed_catalogue", ROOT / "tools/governed_catalogue.py")
@@ -36,6 +38,19 @@ class GovernedCatalogueTest(unittest.TestCase):
         self.assertNotIn("humanUserId", item)
         self.assertNotIn("strengthOnly", item)
 
+    def test_second_reader_can_consume_every_exercise_without_strength_ownership_fields(self):
+        required = {"exerciseId", "schemaVersion", "displayName", "trackingCapabilities",
+                    "recommendedForHiit", "recommendedForStrength", "cardioSuitable", "timedIntervalSuitable"}
+        for item in self.items:
+            self.assertTrue(required.issubset(item))
+            self.assertNotIn("humanUserId", item)
+            self.assertNotIn("firebaseUid", item)
+            self.assertIsInstance(item["recommendedForHiit"], bool)
+            self.assertIsInstance(item["recommendedForStrength"], bool)
+        self.assertTrue(any("duration" in item["trackingCapabilities"] for item in self.items))
+        self.assertTrue(any(item["cardioSuitable"] for item in self.items))
+        self.assertTrue(any("load" in item["trackingCapabilities"] for item in self.items))
+
     def test_reference_and_capability_failures_are_rejected(self):
         bad = [dict(item) for item in self.items]
         bad[0] = dict(bad[0], relatedExerciseIds=[bad[0]["exerciseId"]], trackingCapabilities=["assisted_load"])
@@ -57,6 +72,27 @@ class GovernedCatalogueTest(unittest.TestCase):
     def test_production_project_cannot_be_written(self):
         with self.assertRaisesRegex(ValueError, "demo-"):
             MODULE.emulator_write("hv1-platform", self.release, self.items)
+
+    def test_existing_immutable_release_is_refused_before_any_write(self):
+        with mock.patch.dict(MODULE.os.environ, {"FIRESTORE_EMULATOR_HOST": "127.0.0.1:8080"}), \
+             mock.patch.object(MODULE.urllib.request, "urlopen", return_value=mock.Mock(read=lambda: b"{}")) as opened:
+            with self.assertRaisesRegex(ValueError, "immutable release already exists"):
+                MODULE.emulator_write("demo-hv1-strength-local", self.release, self.items)
+            self.assertEqual(1, opened.call_count)
+
+    def test_missing_emulator_endpoint_fails_closed(self):
+        with mock.patch.dict(MODULE.os.environ, {}, clear=True):
+            with self.assertRaisesRegex(ValueError, "explicit local Firestore emulator"):
+                MODULE.emulator_write("demo-hv1-strength-local", self.release, self.items)
+
+    def test_emulator_publication_uses_one_atomic_commit(self):
+        not_found = urllib.error.HTTPError("local", 404, "missing", {}, None)
+        confirmed = {"writeResults": [{} for _ in range(len(self.items) + 2)]}
+        with mock.patch.dict(MODULE.os.environ, {"FIRESTORE_EMULATOR_HOST": "127.0.0.1:8080"}), \
+             mock.patch.object(MODULE.urllib.request, "urlopen", side_effect=[not_found, mock.Mock(read=lambda: json.dumps(confirmed).encode())]) as opened:
+            MODULE.emulator_write("demo-hv1-strength-local", self.release, self.items)
+            request = opened.call_args_list[1].args[0]
+            self.assertTrue(request.full_url.endswith(":commit"))
 
 
 if __name__ == "__main__": unittest.main()
