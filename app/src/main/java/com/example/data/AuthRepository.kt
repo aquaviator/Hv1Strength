@@ -1,6 +1,8 @@
 package com.example.data
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
@@ -94,6 +96,29 @@ internal fun appCheckIdentityGate(state: com.example.AppCheckInitializationState
     com.example.AppCheckInitializationState.UNAVAILABLE -> "App Check is unavailable"
     com.example.AppCheckInitializationState.FAILED -> "App Check initialization failed"
 }
+
+internal fun canRestoreVerifiedOfflineSession(
+    firebaseUid: String,
+    profile: UserProfile?,
+    persistedActiveUserId: String?,
+    persistedHumanUserId: String?,
+    persistedIdentityStatus: String?,
+    persistedSchemaVersion: Long?,
+    profileHandoffComplete: Boolean
+): Boolean = profile != null &&
+    profile.id == firebaseUid &&
+    profile.firebaseUid == firebaseUid &&
+    !profile.isOfflineUser &&
+    profile.authProvider == "google" &&
+    persistedActiveUserId == firebaseUid &&
+    isValidAuthoritativeHumanId(profile.humanUserId) &&
+    profile.humanUserId == persistedHumanUserId &&
+    persistedIdentityStatus == ACTIVE_IDENTITY_STATUS &&
+    persistedSchemaVersion == SUPPORTED_IDENTITY_SCHEMA_VERSION &&
+    profileHandoffComplete
+
+internal fun HumanIdentityResult.allowsVerifiedOfflineRestore(): Boolean =
+    this == HumanIdentityResult.NetworkError || this == HumanIdentityResult.BackendError
 
 internal fun resolveAuthoritativeProfileHandoff(
     firebaseUid: String,
@@ -295,6 +320,23 @@ class AuthRepository(
                         } else completeLegacyMigrationHandoff()
                         return@launch
                     }
+                    val existingProfile = strengthRepository.getUserProfile(userId)
+                    if (!hasInternetConnection() && canRestoreVerifiedOfflineSession(
+                            firebaseUid = userId,
+                            profile = existingProfile,
+                            persistedActiveUserId = prefs.getString("auth_active_user_id", null),
+                            persistedHumanUserId = prefs.getString("auth_human_user_id", null),
+                            persistedIdentityStatus = prefs.getString("auth_identity_status", null),
+                            persistedSchemaVersion = prefs.takeIf { it.contains("auth_identity_schema_version") }
+                                ?.getLong("auth_identity_schema_version", 0L),
+                            profileHandoffComplete = prefs.getBoolean("auth_profile_handoff_complete", false)
+                        )) {
+                        Log.i(TAG, "stage=session_restore result=VERIFIED_OFFLINE_CACHE")
+                        _authState.value = AuthState.Authenticated(requireNotNull(existingProfile))
+                        com.example.core.sync.SyncScheduler.scheduleImmediate(context)
+                        com.example.core.sync.SyncScheduler.schedulePeriodic(context)
+                        return@launch
+                    }
                     if (prefs.getString("auth_active_user_id", null)?.let { it != userId } == true) {
                         clearAuthoritativeIdentityState()
                     }
@@ -310,11 +352,26 @@ class AuthRepository(
                     Log.i(TAG, "stage=identity_request result=${identityResult.safeResultName()}")
                     val identity = (identityResult as? HumanIdentityResult.Success)?.identity
                     if (identity == null) {
+                        if (identityResult.allowsVerifiedOfflineRestore() && canRestoreVerifiedOfflineSession(
+                                firebaseUid = userId,
+                                profile = existingProfile,
+                                persistedActiveUserId = prefs.getString("auth_active_user_id", null),
+                                persistedHumanUserId = prefs.getString("auth_human_user_id", null),
+                                persistedIdentityStatus = prefs.getString("auth_identity_status", null),
+                                persistedSchemaVersion = prefs.takeIf { it.contains("auth_identity_schema_version") }
+                                    ?.getLong("auth_identity_schema_version", 0L),
+                                profileHandoffComplete = prefs.getBoolean("auth_profile_handoff_complete", false)
+                            )) {
+                            Log.i(TAG, "stage=session_restore result=VERIFIED_OFFLINE_CACHE_AFTER_UNAVAILABLE")
+                            _authState.value = AuthState.Authenticated(requireNotNull(existingProfile))
+                            com.example.core.sync.SyncScheduler.scheduleImmediate(context)
+                            com.example.core.sync.SyncScheduler.schedulePeriodic(context)
+                            return@launch
+                        }
                         clearAuthoritativeIdentityState()
                         _authState.value = AuthState.Error(identityResult.safeMessage(), AuthErrorKind.TRUSTED_IDENTITY)
                         return@launch
                     }
-                    val existingProfile = strengthRepository.getUserProfile(userId)
                     val offlineProfile = strengthRepository.getUserProfile("offline")
                     val persistedHumanId = prefs.getString("auth_human_user_id", null)
                     val mismatchedProfile = existingProfile?.takeIf { it.humanUserId.isNotBlank() && it.humanUserId != identity.humanUserId }
@@ -386,6 +443,14 @@ class AuthRepository(
         } else {
             _authState.value = AuthState.Initial
         }
+    }
+
+    private fun hasInternetConnection(): Boolean {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val network = manager.activeNetwork ?: return false
+        val capabilities = manager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     private fun clearPersistedAuthentication() {
