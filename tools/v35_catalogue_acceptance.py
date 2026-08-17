@@ -82,7 +82,9 @@ def main() -> int:
     parser.add_argument("--project", default="demo-hv1-strength-local")
     parser.add_argument("--source", type=Path, default=Path("app/src/main/assets/strength-exercise-catalogue.json"))
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--write-emulator", action="store_true")
+    operation = parser.add_mutually_exclusive_group()
+    operation.add_argument("--publish-emulator", action="store_true")
+    operation.add_argument("--activate-emulator", action="store_true")
     args = parser.parse_args()
     if not args.project.startswith("demo-"):
         raise ValueError("V35 acceptance variants require a demo- project")
@@ -92,10 +94,20 @@ def main() -> int:
         args.output.mkdir(parents=True, exist_ok=True)
         (args.output / "manifest.json").write_text(governed.canonical_json(release) + "\n", encoding="utf-8")
         (args.output / "exercises.json").write_text(governed.canonical_json(exercises) + "\n", encoding="utf-8")
-    if args.write_emulator:
-        governed.emulator_write(args.project, release, exercises)
+    if args.publish_emulator or args.activate_emulator:
+        host = governed.os.environ.get("FIRESTORE_EMULATOR_HOST")
+        if host not in {"127.0.0.1:8080", "localhost:8080"}:
+            raise ValueError("explicit local Firestore emulator required")
+        store = governed.FirestoreRestStore(args.project, host, None)
+    if args.publish_emulator:
+        governed.publish_release(store, release, exercises)
+    if args.activate_emulator:
+        governed.activate_release(
+            store, release["releaseId"], release["catalogueVersion"],
+            release["exerciseCount"], release["contentSha256"], args.published_at
+        )
     print(governed.canonical_json({
-        "valid": True, "mode": "emulator-write" if args.write_emulator else "dry-run",
+        "valid": True, "mode": "emulator-publish" if args.publish_emulator else "emulator-activate" if args.activate_emulator else "dry-run",
         "variant": args.variant, "releaseId": args.release_id,
         "exerciseCount": len(exercises), "contentSha256": release["contentSha256"],
     }))
