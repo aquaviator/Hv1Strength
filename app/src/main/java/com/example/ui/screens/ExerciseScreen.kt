@@ -4,10 +4,9 @@ import android.text.format.DateFormat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -20,10 +19,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.launch
 import com.example.data.Exercise
 import com.example.data.LoggedSet
 import com.example.data.WorkoutSession
@@ -31,6 +36,176 @@ import com.example.data.UserProfile
 import com.example.catalogue.*
 import com.example.ui.viewmodel.StrengthViewModel
 import java.util.*
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun ExerciseSectionSelector(
+    selectedSection: LibrarySection,
+    onSectionSelected: (LibrarySection) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FlowRow(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("exercise_section_selector"),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        LibrarySection.entries.forEach { section ->
+            val isSelected = selectedSection == section
+            FilterChip(
+                selected = isSelected,
+                onClick = { onSectionSelected(section) },
+                label = { Text(section.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                modifier = Modifier
+                    .testTag("exercise_section_${section.name.lowercase()}")
+                    .semantics {
+                        role = Role.Tab
+                        selected = isSelected
+                    }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun CustomExerciseDialog(
+    name: String,
+    category: String,
+    trackingProfile: CustomTrackingProfile,
+    showNameError: Boolean,
+    onNameChange: (String) -> Unit,
+    onCategoryChange: (String) -> Unit,
+    onTrackingProfileChange: (CustomTrackingProfile) -> Unit,
+    onDismiss: () -> Unit,
+    onInvalidName: () -> Unit,
+    onSave: () -> Unit
+) {
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val categories = listOf("Chest", "Back", "Legs", "Shoulders", "Arms", "Abs")
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(decorFitsSystemWindows = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.92f)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
+                .testTag("custom_exercise_dialog"),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .testTag("custom_exercise_form"),
+                contentPadding = PaddingValues(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    Text(
+                        "New Custom Exercise",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = onNameChange,
+                        label = { Text("Exercise Name (e.g. Incline Bench Press)") },
+                        supportingText = if (showNameError) ({ Text("Enter an exercise name") }) else null,
+                        isError = showNameError,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("custom_exercise_name_input"),
+                        singleLine = true
+                    )
+                }
+                item {
+                    Text(
+                        "Select Muscle Group Category",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                item {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        categories.forEach { option ->
+                            FilterChip(
+                                selected = category == option,
+                                onClick = { onCategoryChange(option) },
+                                label = { Text(option) },
+                                modifier = Modifier.testTag("custom_category_${option.lowercase()}")
+                            )
+                        }
+                    }
+                }
+                item { Text("Track", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold) }
+                item {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        CustomTrackingProfile.entries.forEach { profile ->
+                            FilterChip(
+                                selected = trackingProfile == profile,
+                                onClick = { onTrackingProfileChange(profile) },
+                                label = { Text(profile.label) },
+                                modifier = Modifier.testTag("custom_tracking_${profile.name.lowercase()}")
+                            )
+                        }
+                    }
+                }
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss, modifier = Modifier.testTag("cancel_custom_exercise_button")) {
+                            Text("Cancel")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                if (name.isBlank()) {
+                                    onInvalidName()
+                                    scope.launch { listState.animateScrollToItem(1) }
+                                } else {
+                                    onSave()
+                                }
+                            },
+                            modifier = Modifier.testTag("save_custom_exercise_button")
+                        ) {
+                            Text("Save")
+                        }
+                    }
+                }
+                item {
+                    Text(
+                        "End of custom exercise form",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("custom_exercise_form_end")
+                    )
+                }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -62,10 +237,11 @@ fun ExerciseScreen(
     val cataloguePrefs = remember { context.getSharedPreferences("strength_catalogue", android.content.Context.MODE_PRIVATE) }
     val lastReconciled = remember(catalogue) { cataloguePrefs.getLong("last_reconciled", 0L) }
 
-    var showCreateExerciseDialog by remember { mutableStateOf(false) }
-    var customExerciseName by remember { mutableStateOf("") }
-    var customExerciseCategory by remember { mutableStateOf("Chest") }
-    var customTrackingProfile by remember { mutableStateOf(com.example.catalogue.CustomTrackingProfile.REPS_LOAD) }
+    var showCreateExerciseDialog by rememberSaveable { mutableStateOf(false) }
+    var customExerciseName by rememberSaveable { mutableStateOf("") }
+    var customExerciseCategory by rememberSaveable { mutableStateOf("Chest") }
+    var customTrackingProfile by rememberSaveable { mutableStateOf(com.example.catalogue.CustomTrackingProfile.REPS_LOAD) }
+    var customExerciseNameError by rememberSaveable { mutableStateOf(false) }
 
     var selectedExerciseForHistory by remember { mutableStateOf<Exercise?>(null) }
 
@@ -83,6 +259,8 @@ fun ExerciseScreen(
                         onClick = {
                             customExerciseName = ""
                             customExerciseCategory = "Chest"
+                            customTrackingProfile = com.example.catalogue.CustomTrackingProfile.REPS_LOAD
+                            customExerciseNameError = false
                             showCreateExerciseDialog = true
                         },
                         modifier = Modifier.testTag("create_exercise_fab")
@@ -119,13 +297,7 @@ fun ExerciseScreen(
                 }
             )
 
-            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LibrarySection.entries.forEach { section ->
-                    FilterChip(selected = selectedSection == section, onClick = { selectedSection = section },
-                        label = { Text(section.name.lowercase().replaceFirstChar { it.uppercase() }) },
-                        modifier = Modifier.testTag("exercise_section_${section.name.lowercase()}"))
-                }
-            }
+            ExerciseSectionSelector(selectedSection = selectedSection, onSectionSelected = { selectedSection = it })
 
             val activeFilterCount = selectedCategories.size + selectedMuscles.size + selectedEquipment.size + selectedCapabilities.size +
                 (if (selectedSource == ExerciseSource.ALL) 0 else 1) + (if (selectedSection == LibrarySection.ALL) 0 else 1)
@@ -309,100 +481,21 @@ fun ExerciseScreen(
 
     // Create Custom Exercise Dialog
     if (showCreateExerciseDialog) {
-        Dialog(onDismissRequest = { showCreateExerciseDialog = false }) {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .padding(20.dp)
-                        .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Text(
-                        "New Custom Exercise",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Black
-                    )
-
-                    OutlinedTextField(
-                        value = customExerciseName,
-                        onValueChange = { customExerciseName = it },
-                        label = { Text("Exercise Name (e.g. Incline Bench Press)") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("custom_exercise_name_input"),
-                        singleLine = true
-                    )
-
-                    Text(
-                        "Select Muscle Group Category",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    val categoriesList = listOf("Chest", "Back", "Legs", "Shoulders", "Arms", "Abs")
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Column {
-                            // Split list into 2 columns of chips for ergonomics
-                            categoriesList.chunked(3).forEach { rowCats ->
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    rowCats.forEach { cat ->
-                                        FilterChip(
-                                            selected = customExerciseCategory == cat,
-                                            onClick = { customExerciseCategory = cat },
-                                            label = { Text(cat) }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Text("Track", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        com.example.catalogue.CustomTrackingProfile.entries.chunked(2).forEach { profiles ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                profiles.forEach { profile ->
-                                    FilterChip(selected = customTrackingProfile == profile, onClick = { customTrackingProfile = profile }, label = { Text(profile.label) })
-                                }
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(onClick = { showCreateExerciseDialog = false }) {
-                            Text("Cancel")
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = {
-                                if (customExerciseName.isNotBlank()) {
-                                    viewModel.createCustomExercise(
-                                        customExerciseName,
-                                        customExerciseCategory,
-                                        customTrackingProfile
-                                    )
-                                    showCreateExerciseDialog = false
-                                }
-                            },
-                            enabled = customExerciseName.isNotBlank(),
-                            modifier = Modifier.testTag("save_custom_exercise_button")
-                        ) {
-                            Text("Save")
-                        }
-                    }
-                }
+        CustomExerciseDialog(
+            name = customExerciseName,
+            category = customExerciseCategory,
+            trackingProfile = customTrackingProfile,
+            showNameError = customExerciseNameError,
+            onNameChange = { customExerciseName = it; customExerciseNameError = false },
+            onCategoryChange = { customExerciseCategory = it },
+            onTrackingProfileChange = { customTrackingProfile = it },
+            onDismiss = { showCreateExerciseDialog = false },
+            onInvalidName = { customExerciseNameError = true },
+            onSave = {
+                viewModel.createCustomExercise(customExerciseName, customExerciseCategory, customTrackingProfile)
+                showCreateExerciseDialog = false
             }
-        }
+        )
     }
 
     selectedExerciseForHistory?.let { exercise ->
