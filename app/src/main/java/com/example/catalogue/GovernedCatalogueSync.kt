@@ -169,7 +169,7 @@ class FirebaseGovernedCatalogueGateway(private val firestore: FirebaseFirestore 
             compoundClassification = data.optionalString("compoundClassification"), programmingGuidance = data.strings("programmingGuidance"),
             typicalUseCases = data.strings("typicalUseCases"), contraindications = data.strings("contraindications"),
             cautions = data.strings("cautions"), stopConditions = data.strings("stopConditions"), clinicalSupervision = data.strings("clinicalSupervision"),
-            evidence = data.maps("evidence").map { EvidenceClaim(it.optionalString("claim"), it.optionalString("citation"), it.optionalString("sourceUrl"), it.optionalString("reviewedAt"), it.optionalString("reviewer")) }
+            evidence = data.maps("evidence").map { EvidenceClaim(it.optionalString("claim"), it.optionalString("citation"), it.optionalString("sourceUrl"), it.optionalString("reviewedAt"), it.optionalString("reviewer"), it.optionalString("strength"), it.optionalString("limitations"), it.optionalString("doi"), it.optionalString("pmid")) }
         )
     )
 }

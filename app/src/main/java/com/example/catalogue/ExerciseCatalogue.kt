@@ -14,7 +14,8 @@ enum class MeasurementCapability(val wireName: String) {
 }
 
 data class EvidenceClaim(val claim: String, val citation: String, val sourceUrl: String,
-    val reviewedAt: String = "", val reviewer: String = "")
+    val reviewedAt: String = "", val reviewer: String = "", val strength: String = "",
+    val limitations: String = "", val doi: String = "", val pmid: String = "")
 
 data class ExerciseIntelligence(
     val purpose: String = "", val secondaryCategories: List<String> = emptyList(),
@@ -153,7 +154,7 @@ private fun JSONObject.intelligence(): ExerciseIntelligence = ExerciseIntelligen
     programmingGuidance = optStrings("programmingGuidance"), typicalUseCases = optStrings("typicalUseCases"),
     contraindications = optStrings("contraindications"), cautions = optStrings("cautions"), stopConditions = optStrings("stopConditions"),
     clinicalSupervision = optStrings("clinicalSupervision"), evidence = optJSONArray("evidence")?.let { a -> (0 until a.length()).map { i ->
-        a.getJSONObject(i).let { EvidenceClaim(it.optString("claim"), it.optString("citation"), it.optString("sourceUrl"), it.optString("reviewedAt"), it.optString("reviewer")) }
+        a.getJSONObject(i).let { EvidenceClaim(it.optString("claim"), it.optString("citation"), it.optString("sourceUrl"), it.optString("reviewedAt"), it.optString("reviewer"), it.optString("strength"), it.optString("limitations"), it.optString("doi"), it.optString("pmid")) }
     }} ?: emptyList())
 fun normalize(parts: List<String>): String = Normalizer.normalize(parts.joinToString(" "), Normalizer.Form.NFD)
     .replace(Regex("\\p{M}+"), "").lowercase()

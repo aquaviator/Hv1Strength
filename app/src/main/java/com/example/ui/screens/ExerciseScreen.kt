@@ -23,6 +23,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -521,7 +523,7 @@ fun ExerciseScreen(
                     item { DetailTextSection("Safety", details.safety ?: "No governed safety notes are available. Use a comfortable range and seek qualified guidance when needed.") }
                     if (details.intelligence.programmingGuidance.isNotEmpty()) item { DetailListSection("Programming guidance", details.intelligence.programmingGuidance) }
                     if (details.intelligence.typicalUseCases.isNotEmpty()) item { DetailListSection("Common uses", details.intelligence.typicalUseCases) }
-                    item { OutlinedButton(onClick = { showAdvanced = !showAdvanced }, Modifier.fillMaxWidth().testTag("exercise_advanced_details_toggle")) { Text(if (showAdvanced) "Hide advanced details" else "Show advanced details") } }
+                    item { OutlinedButton(onClick = { showAdvanced = !showAdvanced }, Modifier.fillMaxWidth().testTag("exercise_advanced_details_toggle").semantics { stateDescription = if (showAdvanced) "Expanded" else "Collapsed" }) { Text(if (showAdvanced) "Hide advanced details" else "Show advanced details") } }
                     if (showAdvanced) {
                         item { DetailSection("Biomechanics", listOf(
                             "Joint actions" to details.intelligence.jointActions.joinToString().ifBlank { "Not yet reviewed" },
@@ -536,6 +538,10 @@ fun ExerciseScreen(
                         items(details.intelligence.evidence, key = { "evidence_${it.sourceUrl}_${it.claim}" }) { evidence ->
                             Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(evidence.claim); Text(evidence.citation, fontWeight = FontWeight.Bold)
+                                if (evidence.strength.isNotBlank()) Text("Evidence strength: ${evidence.strength}")
+                                if (evidence.limitations.isNotBlank()) Text("Limitations: ${evidence.limitations}")
+                                if (evidence.doi.isNotBlank()) Text("DOI: ${evidence.doi}")
+                                if (evidence.pmid.isNotBlank()) Text("PMID: ${evidence.pmid}")
                                 if (evidence.sourceUrl.startsWith("https://")) TextButton(onClick = { uriHandler.openUri(evidence.sourceUrl) }) { Text("Open citation") }
                             } }
                         }
@@ -707,16 +713,16 @@ fun ExerciseScreen(
 
 @Composable
 private fun DetailTextSection(title: String, text: String) = Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(text)
+    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() }); Text(text)
 }
 @Composable
 private fun DetailListSection(title: String, values: List<String>, numbered: Boolean = false) = Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
     if (values.isEmpty()) Text("Not available for this custom exercise.") else values.forEachIndexed { index, value -> Text(if (numbered) "${index + 1}. $value" else "• $value") }
 }
 @Composable
 private fun DetailSection(title: String, values: List<Pair<String, String>>) = Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.testTag("exercise_details_metadata")) {
-    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); values.forEach { (label, value) -> Text("$label: $value") }
+    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() }); values.forEach { (label, value) -> Text("$label: $value") }
 }
 
 private fun toggleChoice(current: List<String>, value: String): List<String> =
