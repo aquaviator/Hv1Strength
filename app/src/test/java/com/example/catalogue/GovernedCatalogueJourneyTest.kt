@@ -3,6 +3,7 @@ package com.example.catalogue
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.example.BuildConfig
 import com.example.data.CommandQueueEntity
 import com.example.data.Exercise
 import com.example.data.LoggedSet
@@ -109,7 +110,7 @@ class GovernedCatalogueJourneyTest {
         val invalidCapabilities = valid.copy(manifest = valid.manifest.copy(releaseId = "bad-capabilities", contentSha256 = GovernedCatalogueValidator.checksum(invalidCapabilitiesDocs)), rawDocuments = invalidCapabilitiesDocs)
         val unsupportedSchemaDocs = valid.rawDocuments.map { it + ("schemaVersion" to 2L) }
         val unsupportedSchema = valid.copy(manifest = valid.manifest.copy(releaseId = "bad-schema", schemaVersion = 2, contentSha256 = GovernedCatalogueValidator.checksum(unsupportedSchemaDocs)), rawDocuments = unsupportedSchemaDocs)
-        val tooNew = valid.copy(manifest = valid.manifest.copy(releaseId = "too-new", minimumStrengthVersionCode = 36))
+        val tooNew = valid.copy(manifest = valid.manifest.copy(releaseId = "too-new", minimumStrengthVersionCode = BuildConfig.VERSION_CODE + 1))
         val draft = valid.copy(manifest = valid.manifest.copy(releaseId = "draft", status = "draft"))
 
         val cases = listOf(
