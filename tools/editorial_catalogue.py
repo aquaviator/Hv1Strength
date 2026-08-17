@@ -76,6 +76,9 @@ def validate_rich_exercise(item: dict[str, Any]) -> list[str]:
     if "evidence" in item:
         if not isinstance(item["evidence"], list): errors.append("evidence must be a list")
         else: errors.extend(validate_evidence(item["evidence"]))
+    capabilities = set(item.get("capabilities", []))
+    if capabilities.intersection({"assisted_load", "weighted_bodyweight"}) and "bodyweight" not in capabilities:
+        errors.append("bodyweight load capability requires bodyweight")
     return errors
 
 
@@ -129,18 +132,19 @@ def build_release_draft(base: dict[str, Any], candidates: list[dict[str, Any]], 
         if not decision or decision.get("decision") == "REJECT": continue
         kind = decision.get("decision")
         target = decision.get("canonicalExerciseId")
+        edited_exercise = decision.get("exercise", candidate.get("exercise", {}))
         if kind == "NEW_EXERCISE":
-            item = dict(candidate["exercise"]); errors = validate_rich_exercise(item)
+            item = dict(edited_exercise); errors = validate_rich_exercise(item)
             if errors: raise ValueError("; ".join(errors))
             if item["id"] in exercises: raise ValueError(f"canonical ID already exists: {item['id']}")
             exercises[item["id"]] = item
         elif kind == "ALIAS":
             if target not in exercises: raise ValueError(f"unknown target: {target}")
-            alias = str(candidate["exercise"]["name"])
+            alias = str(edited_exercise["name"])
             exercises[target]["aliases"] = sorted(set(exercises[target].get("aliases", []) + [alias]), key=normalize)
         elif kind == "ENRICHMENT":
             if target not in exercises: raise ValueError(f"unknown target: {target}")
-            enrichment = candidate.get("enrichment", {})
+            enrichment = decision.get("enrichment", candidate.get("enrichment", {}))
             errors = validate_evidence(enrichment.get("evidence", []))
             if errors: raise ValueError("; ".join(errors))
             exercises[target].update(enrichment)

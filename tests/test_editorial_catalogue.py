@@ -40,5 +40,13 @@ class EditorialCatalogueTest(unittest.TestCase):
         self.assertEqual(first, second); self.assertEqual([e["id"] for e in first["exercises"]], ["bench_press", "split_squat"])
         self.assertEqual(first["exercises"][0]["aliases"], ["Barbell Bench"])
 
+    def test_reviewed_edit_is_the_only_version_admitted_after_approval(self):
+        candidate = {"candidateId": "new", "exercise": {"id": "draft_name", "name": "Draft Name", "category": "Other"}}
+        reviewed = {"candidateId": "new", "lifecycle": "APPROVED", "decision": "NEW_EXERCISE",
+                    "exercise": {"id": "reviewed_name", "name": "Reviewed Name", "category": "Other", "evidence": []}}
+        result = build_release_draft(self.base, [candidate], [reviewed])
+        self.assertIn("reviewed_name", [item["id"] for item in result["exercises"]])
+        self.assertNotIn("draft_name", [item["id"] for item in result["exercises"]])
+
 
 if __name__ == "__main__": unittest.main()

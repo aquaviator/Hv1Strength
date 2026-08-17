@@ -1,18 +1,12 @@
 [
-  {
-    "candidateId": "synthetic-001",
-    "lifecycle": "INGESTED",
-    "exercise": {
-      "id": "incline_push_up",
-      "name": "Incline Push-up",
-      "aliases": ["Elevated Push-up"],
-      "category": "Chest",
-      "equipment": ["bench"]
-    },
-    "enrichment": {
-      "purpose": "A scalable horizontal-pushing variation.",
-      "jointActions": ["elbow extension", "shoulder horizontal adduction"],
-      "evidence": []
-    }
-  }
+  {"candidateId":"exact","lifecycle":"INGESTED","exercise":{"id":"bench_press","name":"Bench Press","category":"Chest","equipment":["barbell"]}},
+  {"candidateId":"alias","lifecycle":"INGESTED","exercise":{"id":"barbell_bench_candidate","name":"Barbell Bench","category":"Chest","equipment":["barbell"]}},
+  {"candidateId":"punctuation","lifecycle":"INGESTED","exercise":{"id":"bench_press_accent","name":"Bénch—Press","category":"Chest","equipment":["barbell"]}},
+  {"candidateId":"near","lifecycle":"INGESTED","exercise":{"id":"bench_step_up_candidate","name":"Bench Step Up","category":"Legs","equipment":["bench"]}},
+  {"candidateId":"distinct","lifecycle":"INGESTED","exercise":{"id":"bear_crawl_drag","name":"Bear Crawl Plate Drag","category":"Full Body","equipment":["weight plate"],"purpose":"Loaded locomotion and trunk-control practice.","jointActions":["shoulder flexion","hip flexion"],"programmingGuidance":["Use controlled short distances."],"evidence":[]}},
+  {"candidateId":"malformed","lifecycle":"INGESTED","exercise":{"id":"BAD ID","name":"","category":""}},
+  {"candidateId":"valid-science","lifecycle":"INGESTED","exercise":{"id":"tempo_calf_raise","name":"Tempo Calf Raise","category":"Legs","equipment":["step"],"purpose":"Controlled plantar-flexor training.","jointActions":["ankle plantar flexion"],"movementPlane":"sagittal","evidence":[{"claim":"Loading can improve plantar-flexor strength.","citation":"Reviewed synthetic acceptance citation","sourceUrl":"https://doi.org/10.1000/acceptance","reviewedAt":"2026-08-17","reviewer":"acceptance-editor"}]}},
+  {"candidateId":"no-evidence","lifecycle":"INGESTED","exercise":{"id":"wall_sit_reach","name":"Wall Sit Reach","category":"Legs","equipment":["wall"],"evidence":[]}},
+  {"candidateId":"invalid-citation","lifecycle":"INGESTED","exercise":{"id":"invalid_citation_lift","name":"Invalid Citation Lift","category":"Other","evidence":[{"claim":"Unsupported claim","citation":"Invalid fixture","sourceUrl":"http://invalid.test","reviewedAt":"2026-08-17","reviewer":"acceptance-editor"}]}},
+  {"candidateId":"contradictory-capability","lifecycle":"INGESTED","exercise":{"id":"assisted_press_candidate","name":"Assisted Press Candidate","category":"Chest","capabilities":["assisted_load"]}}
 ]
