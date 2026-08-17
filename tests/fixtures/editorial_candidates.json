@@ -1,0 +1,18 @@
+[
+  {
+    "candidateId": "synthetic-001",
+    "lifecycle": "INGESTED",
+    "exercise": {
+      "id": "incline_push_up",
+      "name": "Incline Push-up",
+      "aliases": ["Elevated Push-up"],
+      "category": "Chest",
+      "equipment": ["bench"]
+    },
+    "enrichment": {
+      "purpose": "A scalable horizontal-pushing variation.",
+      "jointActions": ["elbow extension", "shoulder horizontal adduction"],
+      "evidence": []
+    }
+  }
+]
