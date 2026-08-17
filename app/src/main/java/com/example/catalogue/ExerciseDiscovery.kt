@@ -99,7 +99,8 @@ data class ExerciseDetails(
     val mistakes: List<String>,
     val safety: String?,
     val regressionId: String?,
-    val progressionId: String?
+    val progressionId: String?,
+    val intelligence: ExerciseIntelligence
 )
 
 fun exerciseDetails(exercise: Exercise, governed: CatalogueExercise?): ExerciseDetails = ExerciseDetails(
@@ -119,7 +120,8 @@ fun exerciseDetails(exercise: Exercise, governed: CatalogueExercise?): ExerciseD
     mistakes = governed?.mistakes ?: emptyList(),
     safety = governed?.safety?.ifBlank { null },
     regressionId = governed?.regressionId,
-    progressionId = governed?.progressionId
+    progressionId = governed?.progressionId,
+    intelligence = governed?.intelligence ?: ExerciseIntelligence()
 )
 
 fun relatedExercises(current: CatalogueExercise, all: List<CatalogueExercise>, limit: Int = 4): List<CatalogueExercise> {

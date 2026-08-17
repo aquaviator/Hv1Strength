@@ -9,7 +9,28 @@ import java.text.Normalizer
 enum class MeasurementCapability(val wireName: String) {
     REPETITIONS("repetitions"), LOAD("load"), DURATION("duration"), DISTANCE("distance"),
     BODYWEIGHT("bodyweight"), ASSISTED_LOAD("assisted_load"), WEIGHTED_BODYWEIGHT("weighted_bodyweight"),
-    RPE("rpe"), TEMPO("tempo")
+    RPE("rpe"), TEMPO("tempo"), PACE("pace"), CALORIES("calories"), REPS_IN_RESERVE("rir"),
+    INTERVALS("intervals"), SIDE("side")
+}
+
+data class EvidenceClaim(val claim: String, val citation: String, val sourceUrl: String,
+    val reviewedAt: String = "", val reviewer: String = "")
+
+data class ExerciseIntelligence(
+    val purpose: String = "", val secondaryCategories: List<String> = emptyList(),
+    val modalities: List<String> = emptyList(), val stabilizers: List<String> = emptyList(),
+    val jointActions: List<String> = emptyList(), val movementPlane: String = "",
+    val kineticChain: String = "", val contractionEmphasis: String = "", val rangeOfMotionNotes: String = "",
+    val forceVector: String = "", val biomechanicalRationale: String = "",
+    val optionalEquipment: List<String> = emptyList(), val substitutableEquipment: List<String> = emptyList(),
+    val environmentSuitability: List<String> = emptyList(), val skillLevel: String = "",
+    val compoundClassification: String = "", val programmingGuidance: List<String> = emptyList(),
+    val typicalUseCases: List<String> = emptyList(), val contraindications: List<String> = emptyList(),
+    val cautions: List<String> = emptyList(), val stopConditions: List<String> = emptyList(),
+    val clinicalSupervision: List<String> = emptyList(), val evidence: List<EvidenceClaim> = emptyList()
+) {
+    val hasAdvancedContent get() = jointActions.isNotEmpty() || movementPlane.isNotBlank() ||
+        biomechanicalRationale.isNotBlank() || evidence.isNotEmpty()
 }
 
 data class CatalogueMetadata(val contractVersion: Int, val catalogueVersion: String, val releaseChannel: String,
@@ -22,7 +43,7 @@ data class CatalogueExercise(val id: String, val name: String, val aliases: List
     val movementPattern: String = "", val setup: String = "", val steps: List<String> = emptyList(),
     val breathing: String = "", val cues: List<String> = emptyList(), val mistakes: List<String> = emptyList(),
     val safety: String = "", val regressionId: String? = null, val progressionId: String? = null,
-    val relatedIds: List<String> = emptyList()) {
+    val relatedIds: List<String> = emptyList(), val intelligence: ExerciseIntelligence = ExerciseIntelligence()) {
     val searchableText = normalize(listOf(name, category, movementPattern) + aliases + primaryMuscles + secondaryMuscles + equipment)
     fun toRoom(now: Long) = Exercise(id, name, category, false, id, "global", now, now, null, 1, "SYNCED")
 }
@@ -63,7 +84,8 @@ class PackagedExerciseLibrarySource private constructor(override val snapshot: C
                     o.getString("laterality"), o.getBoolean("bodyweight"), o.getBoolean("active"), o.optString("replacementId").ifBlank { null },
                     o.optString("movementPattern"), o.optString("setup"), o.optStrings("steps"), o.optString("breathing"),
                     o.optStrings("cues"), o.optStrings("mistakes"), o.optString("safety"),
-                    o.optString("regressionId").ifBlank { null }, o.optString("progressionId").ifBlank { null }, o.optStrings("relatedIds"))
+                    o.optString("regressionId").ifBlank { null }, o.optString("progressionId").ifBlank { null }, o.optStrings("relatedIds"),
+                    o.intelligence())
             }
             val errors = validate(metadata, exercises, sha256(canonicalPayload(json)))
             return PackagedExerciseLibrarySource(CatalogueSnapshot(metadata, exercises, CatalogueValidation(errors.isEmpty(), errors)))
@@ -120,6 +142,19 @@ class PackagedExerciseLibrarySource private constructor(override val snapshot: C
 
 private fun JSONObject.strings(name: String) = getJSONArray(name).let { array -> (0 until array.length()).map(array::getString) }
 private fun JSONObject.optStrings(name: String) = optJSONArray(name)?.let { array -> (0 until array.length()).map(array::getString) } ?: emptyList()
+private fun JSONObject.intelligence(): ExerciseIntelligence = ExerciseIntelligence(
+    purpose = optString("purpose"), secondaryCategories = optStrings("secondaryCategories"), modalities = optStrings("modalities"),
+    stabilizers = optStrings("stabilizers"), jointActions = optStrings("jointActions"), movementPlane = optString("movementPlane"),
+    kineticChain = optString("kineticChain"), contractionEmphasis = optString("contractionEmphasis"),
+    rangeOfMotionNotes = optString("rangeOfMotionNotes"), forceVector = optString("forceVector"),
+    biomechanicalRationale = optString("biomechanicalRationale"), optionalEquipment = optStrings("optionalEquipment"),
+    substitutableEquipment = optStrings("substitutableEquipment"), environmentSuitability = optStrings("environmentSuitability"),
+    skillLevel = optString("skillLevel"), compoundClassification = optString("compoundClassification"),
+    programmingGuidance = optStrings("programmingGuidance"), typicalUseCases = optStrings("typicalUseCases"),
+    contraindications = optStrings("contraindications"), cautions = optStrings("cautions"), stopConditions = optStrings("stopConditions"),
+    clinicalSupervision = optStrings("clinicalSupervision"), evidence = optJSONArray("evidence")?.let { a -> (0 until a.length()).map { i ->
+        a.getJSONObject(i).let { EvidenceClaim(it.optString("claim"), it.optString("citation"), it.optString("sourceUrl"), it.optString("reviewedAt"), it.optString("reviewer")) }
+    }} ?: emptyList())
 fun normalize(parts: List<String>): String = Normalizer.normalize(parts.joinToString(" "), Normalizer.Form.NFD)
     .replace(Regex("\\p{M}+"), "").lowercase()
     .replace(Regex("[^a-z0-9]+"), " ").trim().replace(Regex("\\s+"), " ")

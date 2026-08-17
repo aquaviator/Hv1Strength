@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -502,6 +503,8 @@ fun ExerciseScreen(
         val logs by remember(exercise.id) { viewModel.getCompletedSetsForExercise(exercise.id) }.collectAsState(initial = emptyList())
         val governed = catalogueById[exercise.id]
         val details = exerciseDetails(exercise, governed)
+        var showAdvanced by rememberSaveable(exercise.id) { mutableStateOf(false) }
+        val uriHandler = LocalUriHandler.current
         val related = remember(governed, catalogue) { governed?.let { relatedExercises(it, catalogue.exercises) } ?: emptyList() }
         Dialog(onDismissRequest = { selectedExerciseForHistory = null }) {
             Surface(Modifier.fillMaxSize().testTag("exercise_detail_screen"), color = MaterialTheme.colorScheme.background) {
@@ -509,12 +512,34 @@ fun ExerciseScreen(
                     item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) { Column(Modifier.weight(1f)) { Text(exercise.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black); Text(details.source, color = MaterialTheme.colorScheme.primary) }; IconButton(onClick = { selectedExerciseForHistory = null }) { Icon(Icons.Default.Close, "Close exercise details") } } }
                     item { OutlinedButton(onClick = { viewModel.toggleFavoriteExercise(exercise.id) }, Modifier.fillMaxWidth()) { Icon(if (exercise.id in favoriteExercises) Icons.Default.Star else Icons.Default.StarBorder, null); Spacer(Modifier.width(8.dp)); Text(if (exercise.id in favoriteExercises) "Remove favourite" else "Add favourite") } }
                     item { DetailSection("Overview", listOf("Category" to details.category, "Movement pattern" to details.movementPattern, "Equipment" to details.equipment.joinToString().ifBlank { "Not provided" }, "Primary muscles" to details.primaryMuscles.joinToString().ifBlank { "Not provided" }, "Secondary muscles" to details.secondaryMuscles.joinToString().ifBlank { "None specified" }, "Tracking" to details.measurements.joinToString(), "Laterality" to details.laterality)) }
+                    item { DetailTextSection("Purpose", details.intelligence.purpose.ifBlank { "A reviewed purpose statement is not yet available for this exercise." }) }
                     item { DetailTextSection("Setup", details.setup ?: "Setup instructions are not available for this custom exercise.") }
                     item { DetailListSection("Execution", details.steps, true) }
                     item { DetailTextSection("Breathing", details.breathing ?: "Breathing guidance is not available for this custom exercise.") }
                     item { DetailListSection("Technique cues", details.cues) }
                     item { DetailListSection("Common mistakes", details.mistakes) }
                     item { DetailTextSection("Safety", details.safety ?: "No governed safety notes are available. Use a comfortable range and seek qualified guidance when needed.") }
+                    if (details.intelligence.programmingGuidance.isNotEmpty()) item { DetailListSection("Programming guidance", details.intelligence.programmingGuidance) }
+                    if (details.intelligence.typicalUseCases.isNotEmpty()) item { DetailListSection("Common uses", details.intelligence.typicalUseCases) }
+                    item { OutlinedButton(onClick = { showAdvanced = !showAdvanced }, Modifier.fillMaxWidth().testTag("exercise_advanced_details_toggle")) { Text(if (showAdvanced) "Hide advanced details" else "Show advanced details") } }
+                    if (showAdvanced) {
+                        item { DetailSection("Biomechanics", listOf(
+                            "Joint actions" to details.intelligence.jointActions.joinToString().ifBlank { "Not yet reviewed" },
+                            "Movement plane" to details.intelligence.movementPlane.ifBlank { "Not yet reviewed" },
+                            "Kinetic chain" to details.intelligence.kineticChain.ifBlank { "Not yet reviewed" },
+                            "Force vector" to details.intelligence.forceVector.ifBlank { "Not yet reviewed" },
+                            "Skill level" to details.intelligence.skillLevel.ifBlank { "Not yet reviewed" }
+                        )) }
+                        item { DetailTextSection("Biomechanical rationale", details.intelligence.biomechanicalRationale.ifBlank { "Governed biomechanical evidence has not yet been reviewed for this exercise." }) }
+                        item { Text("Evidence and citations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+                        if (details.intelligence.evidence.isEmpty()) item { Text("No governed evidence claims have been reviewed for this exercise.") }
+                        items(details.intelligence.evidence, key = { "evidence_${it.sourceUrl}_${it.claim}" }) { evidence ->
+                            Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(evidence.claim); Text(evidence.citation, fontWeight = FontWeight.Bold)
+                                if (evidence.sourceUrl.startsWith("https://")) TextButton(onClick = { uriHandler.openUri(evidence.sourceUrl) }) { Text("Open citation") }
+                            } }
+                        }
+                    }
                     item { Text("Previous performance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
                     if (logs.isEmpty()) item { Text("No logged history for this exercise.") }
                     items(logs.groupBy { it.sessionId }.toList(), key = { it.first }) { (sessionId, sets) ->

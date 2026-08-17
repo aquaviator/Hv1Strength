@@ -158,7 +158,19 @@ class FirebaseGovernedCatalogueGateway(private val firestore: FirebaseFirestore 
         steps = data.strings("executionInstructions"), breathing = data.string("breathingGuidance"),
         cues = data.strings("techniqueCues"), mistakes = data.strings("commonMistakes"), safety = data.string("safetyGuidance"),
         regressionId = data.strings("regressionIds").firstOrNull(), progressionId = data.strings("progressionIds").firstOrNull(),
-        relatedIds = data.strings("relatedExerciseIds")
+        relatedIds = data.strings("relatedExerciseIds"), intelligence = ExerciseIntelligence(
+            purpose = data.optionalString("purpose"), secondaryCategories = data.strings("secondaryCategories"),
+            modalities = data.strings("modalities"), stabilizers = data.strings("stabilizers"), jointActions = data.strings("jointActions"),
+            movementPlane = data.optionalString("movementPlane"), kineticChain = data.optionalString("kineticChain"),
+            contractionEmphasis = data.optionalString("contractionEmphasis"), rangeOfMotionNotes = data.optionalString("rangeOfMotionNotes"),
+            forceVector = data.optionalString("forceVector"), biomechanicalRationale = data.optionalString("biomechanicalRationale"),
+            optionalEquipment = data.strings("optionalEquipment"), substitutableEquipment = data.strings("substitutableEquipment"),
+            environmentSuitability = data.strings("environmentSuitability"), skillLevel = data.optionalString("skillLevel"),
+            compoundClassification = data.optionalString("compoundClassification"), programmingGuidance = data.strings("programmingGuidance"),
+            typicalUseCases = data.strings("typicalUseCases"), contraindications = data.strings("contraindications"),
+            cautions = data.strings("cautions"), stopConditions = data.strings("stopConditions"), clinicalSupervision = data.strings("clinicalSupervision"),
+            evidence = data.maps("evidence").map { EvidenceClaim(it.optionalString("claim"), it.optionalString("citation"), it.optionalString("sourceUrl"), it.optionalString("reviewedAt"), it.optionalString("reviewer")) }
+        )
     )
 }
 
@@ -245,3 +257,5 @@ private suspend fun <T> Task<T>.awaitTask(): T = suspendCancellableCoroutine { c
 private fun Map<String, Any?>.string(key: String) = this[key] as? String ?: error("$key missing")
 private fun Map<String, Any?>.int(key: String) = (this[key] as? Number)?.toInt() ?: error("$key missing")
 private fun Map<String, Any?>.strings(key: String) = (this[key] as? List<*>)?.mapNotNull { it as? String }.orEmpty()
+private fun Map<String, Any?>.optionalString(key: String) = this[key] as? String ?: ""
+private fun Map<String, Any?>.maps(key: String) = (this[key] as? List<*>)?.mapNotNull { it as? Map<String, Any?> }.orEmpty()
