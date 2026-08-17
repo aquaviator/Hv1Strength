@@ -16,6 +16,18 @@ class ExerciseDiscoveryTest {
     private val context get() = ApplicationProvider.getApplicationContext<Context>()
     private val snapshot get() = PackagedExerciseLibrarySource.load(context).snapshot
 
+    @Test fun richIntelligenceIsOptionalAndCustomFallbackRemainsTruthful() {
+        val rich = snapshot.exercises.first().copy(intelligence = ExerciseIntelligence(
+            purpose = "A reviewed training purpose.", jointActions = listOf("elbow extension"),
+            evidence = listOf(EvidenceClaim("Reviewed claim", "Example citation", "https://example.test"))))
+        val governedDetails = exerciseDetails(rich.toRoom(0), rich)
+        assertTrue(governedDetails.intelligence.hasAdvancedContent)
+        assertEquals("A reviewed training purpose.", governedDetails.intelligence.purpose)
+        val custom = exerciseDetails(Exercise("custom", "Custom", "Other", true), null)
+        assertFalse(custom.intelligence.hasAdvancedContent)
+        assertTrue(custom.intelligence.evidence.isEmpty())
+    }
+
     @Test fun expandedPackageIsVerifiedDeterministicAndOriginalIdsRemain() {
         val first = PackagedExerciseLibrarySource.load(context).snapshot
         val second = PackagedExerciseLibrarySource.load(context).snapshot
