@@ -26,5 +26,14 @@
                 <action android:name="com.example.debug.V31_RESET_SYNTHETIC_SESSION" />
             </intent-filter>
         </receiver>
+        <receiver
+            android:name="com.example.catalogue.V36CatalogueAcceptanceController"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="com.example.debug.V36_APPLY_CATALOGUE_FIXTURE" />
+                <action android:name="com.example.debug.V36_REPORT_CATALOGUE_FIXTURE" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
