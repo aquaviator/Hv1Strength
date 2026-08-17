@@ -33,6 +33,7 @@
             <intent-filter>
                 <action android:name="com.example.debug.V36_APPLY_CATALOGUE_FIXTURE" />
                 <action android:name="com.example.debug.V36_REPORT_CATALOGUE_FIXTURE" />
+                <action android:name="com.example.debug.V36_DISARM_CATALOGUE_FIXTURE" />
             </intent-filter>
         </receiver>
     </application>
