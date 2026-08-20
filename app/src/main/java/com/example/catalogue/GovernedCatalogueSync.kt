@@ -121,6 +121,8 @@ object GovernedCatalogueValidator {
         .digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
 }
 
+internal const val GOVERNED_CATALOGUE_FETCH_TIMEOUT_MS = 60_000L
+
 interface GovernedCatalogueGateway { suspend fun fetch(): GovernedCataloguePayload }
 
 class FirebaseGovernedCatalogueGateway(private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()) : GovernedCatalogueGateway {
@@ -181,7 +183,7 @@ class GovernedCatalogueCoordinator(
 ) {
     suspend fun synchronize(bundled: CatalogueSnapshot): CatalogueSyncDecision {
         val checkedAt = now()
-        val payload = try { withTimeout(10_000) { gateway.fetch() } }
+        val payload = try { withTimeout(GOVERNED_CATALOGUE_FETCH_TIMEOUT_MS) { gateway.fetch() } }
         catch (error: Throwable) {
             val status = classify(error)
             recordFailure(bundled, checkedAt, status)

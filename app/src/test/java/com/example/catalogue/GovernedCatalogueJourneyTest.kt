@@ -31,6 +31,10 @@ class GovernedCatalogueJourneyTest {
     private val human = "human_cataloguejourney0000000000000000"
     private val user = "catalogue-user"
 
+    @Test fun governedCatalogueFetchWindowSupportsReleaseScaleWithoutBecomingUnbounded() {
+        assertEquals(60_000L, GOVERNED_CATALOGUE_FETCH_TIMEOUT_MS)
+    }
+
     @Before fun setup() {
         runBlocking {
             context = ApplicationProvider.getApplicationContext()
