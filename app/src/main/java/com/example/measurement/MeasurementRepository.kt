@@ -1,0 +1,49 @@
+package com.example.measurement
+
+import androidx.room.withTransaction
+import com.example.data.*
+
+data class SegmentInput(val startOffsetMillis: Long, val endOffsetMillis: Long, val numericValue: Double?, val canonicalUnit: String?, val label: String? = null)
+data class SampleInput(val offsetMillis: Long, val numericValue: Double, val canonicalUnit: String)
+data class ObservationInput(
+    val value: MetricInput,
+    val source: MetricSource = MetricSource.USER,
+    val originalValue: Double? = null,
+    val originalUnit: String? = null,
+    val manufacturer: String? = null,
+    val deviceModel: String? = null,
+    val deviceIdentifier: String? = null,
+    val protocol: String? = null,
+    val segments: List<SegmentInput> = emptyList(),
+    val samples: List<SampleInput> = emptyList()
+)
+
+class MeasurementRepository(private val database: StrengthDatabase) {
+    suspend fun savePrescription(templateSetGlobalId: String, profile: ExerciseMetricProfile, values: List<MetricInput>, now: Long) {
+        values.flatMap { MetricValidation.validate(profile, it, forPrescription = true) }.also { require(it.isEmpty()) { it.joinToString() } }
+        database.strengthDao().upsertMetricPrescriptions(values.mapIndexed { index, value ->
+            MetricPrescriptionEntity("$templateSetGlobalId:${value.metricKey}", templateSetGlobalId, value.metricKey,
+                targetValue=value.numericValue, textValue=value.textValue, canonicalUnit=value.unitKey, position=index, createdAt=now, updatedAt=now)
+        })
+    }
+
+    suspend fun saveObservations(loggedSetGlobalId: String, profile: ExerciseMetricProfile, values: List<ObservationInput>, now: Long) {
+        values.flatMap { MetricValidation.validate(profile, it.value) }.also { require(it.isEmpty()) { it.joinToString() } }
+        database.withTransaction {
+            val dao=database.strengthDao()
+            values.forEach { input ->
+                val id="$loggedSetGlobalId:${input.value.metricKey}"
+                dao.upsertMetricObservations(listOf(MetricObservationEntity(id,loggedSetGlobalId,input.value.metricKey,
+                    input.value.numericValue,input.value.textValue,input.value.unitKey,input.originalValue,input.originalUnit,
+                    input.source.name,input.manufacturer,input.deviceModel,input.deviceIdentifier,input.protocol,now,now,now)))
+                dao.upsertMetricSegments(input.segments.mapIndexed { index, segment ->
+                    require(segment.endOffsetMillis >= segment.startOffsetMillis)
+                    MetricSegmentEntity("$id:segment:$index",id,index,segment.startOffsetMillis,segment.endOffsetMillis,segment.numericValue,segment.canonicalUnit,segment.label)
+                })
+                dao.upsertMetricSamples(input.samples.sortedBy { it.offsetMillis }.map { sample ->
+                    MetricSampleEntity("$id:sample:${sample.offsetMillis}",id,sample.offsetMillis,sample.numericValue,sample.canonicalUnit)
+                })
+            }
+        }
+    }
+}

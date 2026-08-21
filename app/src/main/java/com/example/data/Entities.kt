@@ -283,6 +283,67 @@ data class LoggedSet(
     val sessionGlobalId: String = ""
 ) : VersionedEntity
 
+/** A target is intentionally separate from an observation: planned values never masquerade as performance. */
+@Entity(tableName = "metric_prescription", indices = [Index("templateSetGlobalId"), Index("metricKey")])
+data class MetricPrescriptionEntity(
+    @PrimaryKey val globalId: String,
+    val templateSetGlobalId: String,
+    val metricKey: String,
+    val minimumValue: Double? = null,
+    val targetValue: Double? = null,
+    val maximumValue: Double? = null,
+    val textValue: String? = null,
+    val canonicalUnit: String? = null,
+    val position: Int = 0,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+/** Queryable scalar result with lossless source-unit and device provenance. */
+@Entity(
+    tableName = "metric_observation",
+    indices = [Index("loggedSetGlobalId"), Index("metricKey"), Index(value = ["loggedSetGlobalId", "metricKey"], unique = true)]
+)
+data class MetricObservationEntity(
+    @PrimaryKey val globalId: String,
+    val loggedSetGlobalId: String,
+    val metricKey: String,
+    val numericValue: Double? = null,
+    val textValue: String? = null,
+    val canonicalUnit: String? = null,
+    val originalValue: Double? = null,
+    val originalUnit: String? = null,
+    val source: String = "USER",
+    val manufacturer: String? = null,
+    val deviceModel: String? = null,
+    val deviceIdentifier: String? = null,
+    val protocol: String? = null,
+    val capturedAt: Long = System.currentTimeMillis(),
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "metric_segment", indices = [Index(value = ["observationGlobalId", "position"], unique = true)])
+data class MetricSegmentEntity(
+    @PrimaryKey val globalId: String,
+    val observationGlobalId: String,
+    val position: Int,
+    val startOffsetMillis: Long,
+    val endOffsetMillis: Long,
+    val numericValue: Double? = null,
+    val canonicalUnit: String? = null,
+    val label: String? = null
+)
+
+@Entity(tableName = "metric_sample", indices = [Index(value = ["observationGlobalId", "offsetMillis"], unique = true)])
+data class MetricSampleEntity(
+    @PrimaryKey val globalId: String,
+    val observationGlobalId: String,
+    val offsetMillis: Long,
+    val numericValue: Double,
+    val canonicalUnit: String
+)
+
 @Entity(tableName = "command_queue")
 data class CommandQueueEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,

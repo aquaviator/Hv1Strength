@@ -28,9 +28,13 @@ import kotlinx.coroutines.launch
         TrainingPlan::class,
         PlannedWorkout::class,
         LegacyOwnershipMigrationState::class,
-        CatalogueReleaseState::class
+        CatalogueReleaseState::class,
+        MetricPrescriptionEntity::class,
+        MetricObservationEntity::class,
+        MetricSegmentEntity::class,
+        MetricSampleEntity::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = false
 )
 abstract class StrengthDatabase : RoomDatabase() {
@@ -40,6 +44,22 @@ abstract class StrengthDatabase : RoomDatabase() {
     companion object {
         @Volatile
         private var INSTANCE: StrengthDatabase? = null
+
+        val MIGRATION_13_14 = object : androidx.room.migration.Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `metric_prescription` (`globalId` TEXT NOT NULL, `templateSetGlobalId` TEXT NOT NULL, `metricKey` TEXT NOT NULL, `minimumValue` REAL, `targetValue` REAL, `maximumValue` REAL, `textValue` TEXT, `canonicalUnit` TEXT, `position` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`globalId`))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_metric_prescription_templateSetGlobalId` ON `metric_prescription` (`templateSetGlobalId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_metric_prescription_metricKey` ON `metric_prescription` (`metricKey`)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `metric_observation` (`globalId` TEXT NOT NULL, `loggedSetGlobalId` TEXT NOT NULL, `metricKey` TEXT NOT NULL, `numericValue` REAL, `textValue` TEXT, `canonicalUnit` TEXT, `originalValue` REAL, `originalUnit` TEXT, `source` TEXT NOT NULL, `manufacturer` TEXT, `deviceModel` TEXT, `deviceIdentifier` TEXT, `protocol` TEXT, `capturedAt` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`globalId`))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_metric_observation_loggedSetGlobalId` ON `metric_observation` (`loggedSetGlobalId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_metric_observation_metricKey` ON `metric_observation` (`metricKey`)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_metric_observation_loggedSetGlobalId_metricKey` ON `metric_observation` (`loggedSetGlobalId`, `metricKey`)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `metric_segment` (`globalId` TEXT NOT NULL, `observationGlobalId` TEXT NOT NULL, `position` INTEGER NOT NULL, `startOffsetMillis` INTEGER NOT NULL, `endOffsetMillis` INTEGER NOT NULL, `numericValue` REAL, `canonicalUnit` TEXT, `label` TEXT, PRIMARY KEY(`globalId`))")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_metric_segment_observationGlobalId_position` ON `metric_segment` (`observationGlobalId`, `position`)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `metric_sample` (`globalId` TEXT NOT NULL, `observationGlobalId` TEXT NOT NULL, `offsetMillis` INTEGER NOT NULL, `numericValue` REAL NOT NULL, `canonicalUnit` TEXT NOT NULL, PRIMARY KEY(`globalId`))")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_metric_sample_observationGlobalId_offsetMillis` ON `metric_sample` (`observationGlobalId`, `offsetMillis`)")
+            }
+        }
 
         val MIGRATION_12_13 = object : androidx.room.migration.Migration(12, 13) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -742,7 +762,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         StrengthDatabase::class.java,
                         "strength_database"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                         .addCallback(StrengthDatabaseCallback(appCtx))
                         .build()
                     INSTANCE = instance

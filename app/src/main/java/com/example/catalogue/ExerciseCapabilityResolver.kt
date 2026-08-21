@@ -2,6 +2,8 @@ package com.example.catalogue
 
 import android.content.Context
 import com.example.data.Exercise
+import com.example.measurement.ExerciseMetricProfile
+import com.example.measurement.ExerciseMetricProfileResolver
 
 enum class CustomTrackingProfile(val label: String, val capabilities: Set<MeasurementCapability>) {
     REPS("Reps", setOf(MeasurementCapability.REPETITIONS)),
@@ -19,13 +21,15 @@ data class LegacyMeasurements(
     val distance: Float? = null, val rpe: Int? = null, val tempo: String? = null
 )
 
-data class ResolvedExerciseCapabilities(val values: Set<MeasurementCapability>, val inferred: Boolean = false) {
-    val repetitions get() = MeasurementCapability.REPETITIONS in values
-    val load get() = MeasurementCapability.LOAD in values || weightedBodyweight || assistedBodyweight
-    val duration get() = MeasurementCapability.DURATION in values
-    val distance get() = MeasurementCapability.DISTANCE in values
-    val rpe get() = MeasurementCapability.RPE in values
-    val tempo get() = MeasurementCapability.TEMPO in values
+data class ResolvedExerciseCapabilities(val values: Set<MeasurementCapability>, val inferred: Boolean = false,
+    val metricProfile: ExerciseMetricProfile? = null) {
+    private val recording get() = metricProfile?.recording.orEmpty()
+    val repetitions get() = "repetitions" in recording || metricProfile == null && MeasurementCapability.REPETITIONS in values
+    val load get() = "external_load" in recording || "assistance" in recording || metricProfile == null && (MeasurementCapability.LOAD in values || weightedBodyweight || assistedBodyweight)
+    val duration get() = "duration" in recording || metricProfile == null && MeasurementCapability.DURATION in values
+    val distance get() = "distance" in recording || metricProfile == null && MeasurementCapability.DISTANCE in values
+    val rpe get() = "rpe" in recording || metricProfile == null && MeasurementCapability.RPE in values
+    val tempo get() = "tempo" in recording || metricProfile == null && MeasurementCapability.TEMPO in values
     val bodyweight get() = MeasurementCapability.BODYWEIGHT in values
     val weightedBodyweight get() = MeasurementCapability.WEIGHTED_BODYWEIGHT in values
     val assistedBodyweight get() = MeasurementCapability.ASSISTED_LOAD in values
@@ -45,7 +49,7 @@ object ExerciseCapabilityResolver {
         // packaged governed catalogue here so seeded legacy set values never define the exercise UI.
         val catalogue = (context?.let(ExerciseCatalogueRuntime::current) ?: ExerciseCatalogueRuntime.snapshot)
             ?.exercises?.firstOrNull { it.id == exercise.id || it.id == exercise.globalId }
-        if (catalogue != null) return ResolvedExerciseCapabilities(catalogue.capabilities)
+        if (catalogue != null) return ResolvedExerciseCapabilities(catalogue.capabilities, metricProfile = ExerciseMetricProfileResolver.resolve(catalogue))
         if (exercise.isCustom && context != null) {
             val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(exercise.id, null)
             CustomTrackingProfile.entries.firstOrNull { it.name == stored }?.let { return ResolvedExerciseCapabilities(it.capabilities) }

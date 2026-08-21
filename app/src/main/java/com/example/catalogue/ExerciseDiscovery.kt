@@ -1,6 +1,8 @@
 package com.example.catalogue
 
 import com.example.data.Exercise
+import com.example.measurement.CanonicalMetricDictionary
+import com.example.measurement.ExerciseMetricProfileResolver
 import com.example.data.LoggedSet
 import com.example.data.WorkoutSession
 
@@ -89,6 +91,7 @@ data class ExerciseDetails(
     val secondaryMuscles: List<String>,
     val equipment: List<String>,
     val measurements: List<String>,
+    val measurementLabels: List<String>,
     val laterality: String,
     val replacementId: String?,
     val movementPattern: String,
@@ -110,6 +113,11 @@ fun exerciseDetails(exercise: Exercise, governed: CatalogueExercise?): ExerciseD
     secondaryMuscles = governed?.secondaryMuscles ?: emptyList(),
     equipment = governed?.equipment ?: emptyList(),
     measurements = (governed?.capabilities ?: setOf(MeasurementCapability.REPETITIONS, MeasurementCapability.LOAD, MeasurementCapability.RPE)).map { it.wireName }.sorted(),
+    measurementLabels = governed?.let { item ->
+        ExerciseMetricProfileResolver.resolve(item).let { profile ->
+            (profile.recording + profile.derived).map { CanonicalMetricDictionary.require(it).label }.sorted()
+        }
+    } ?: listOf("Load", "Repetitions", "RPE"),
     laterality = governed?.laterality ?: "user defined",
     replacementId = governed?.replacementId,
     movementPattern = governed?.movementPattern?.ifBlank { "Not specified" } ?: "User defined",

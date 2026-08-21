@@ -513,7 +513,7 @@ fun ExerciseScreen(
                 LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) { Column(Modifier.weight(1f)) { Text(exercise.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black); Text(details.source, color = MaterialTheme.colorScheme.primary) }; IconButton(onClick = { selectedExerciseForHistory = null }) { Icon(Icons.Default.Close, "Close exercise details") } } }
                     item { OutlinedButton(onClick = { viewModel.toggleFavoriteExercise(exercise.id) }, Modifier.fillMaxWidth()) { Icon(if (exercise.id in favoriteExercises) Icons.Default.Star else Icons.Default.StarBorder, null); Spacer(Modifier.width(8.dp)); Text(if (exercise.id in favoriteExercises) "Remove favourite" else "Add favourite") } }
-                    item { DetailSection("Overview", listOf("Category" to details.category, "Movement pattern" to details.movementPattern, "Equipment" to details.equipment.joinToString().ifBlank { "Not provided" }, "Primary muscles" to details.primaryMuscles.joinToString().ifBlank { "Not provided" }, "Secondary muscles" to details.secondaryMuscles.joinToString().ifBlank { "None specified" }, "Tracking" to details.measurements.joinToString(), "Laterality" to details.laterality)) }
+                    item { DetailSection("Overview", listOf("Category" to details.category, "Movement pattern" to details.movementPattern, "Equipment" to details.equipment.joinToString().ifBlank { "Not provided" }, "Primary muscles" to details.primaryMuscles.joinToString().ifBlank { "Not provided" }, "Secondary muscles" to details.secondaryMuscles.joinToString().ifBlank { "None specified" }, "Tracking" to details.measurementLabels.joinToString(), "Laterality" to details.laterality)) }
                     item { DetailTextSection("Purpose", details.intelligence.purpose.ifBlank { "A reviewed purpose statement is not yet available for this exercise." }) }
                     item { DetailTextSection("Setup", details.setup ?: "Setup instructions are not available for this custom exercise.") }
                     item { DetailListSection("Execution", details.steps, true) }
@@ -611,7 +611,7 @@ fun ExerciseScreen(
                         Text("Primary: ${details.primaryMuscles.joinToString().ifBlank { "Not specified" }}", style = MaterialTheme.typography.bodySmall)
                         if (details.secondaryMuscles.isNotEmpty()) Text("Secondary: ${details.secondaryMuscles.joinToString()}", style = MaterialTheme.typography.bodySmall)
                         Text("Equipment: ${details.equipment.joinToString().ifBlank { "No equipment specified" }}", style = MaterialTheme.typography.bodySmall)
-                        Text("Tracks: ${details.measurements.joinToString()}", style = MaterialTheme.typography.bodySmall)
+                        Text("Tracks: ${details.measurementLabels.joinToString()}", style = MaterialTheme.typography.bodySmall)
                         Text("Movement: ${details.laterality.replaceFirstChar { it.uppercase() }}", style = MaterialTheme.typography.bodySmall)
                         details.replacementId?.let { Text("Replacement available: ${catalogueById[it]?.name ?: it}", style = MaterialTheme.typography.bodySmall) }
                     }

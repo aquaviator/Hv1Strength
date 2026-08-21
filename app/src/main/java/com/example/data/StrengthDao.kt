@@ -6,6 +6,30 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface StrengthDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertMetricPrescriptions(values: List<MetricPrescriptionEntity>)
+
+    @Query("SELECT * FROM metric_prescription WHERE templateSetGlobalId = :templateSetGlobalId ORDER BY position")
+    suspend fun getMetricPrescriptions(templateSetGlobalId: String): List<MetricPrescriptionEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertMetricObservations(values: List<MetricObservationEntity>)
+
+    @Query("SELECT * FROM metric_observation WHERE loggedSetGlobalId = :loggedSetGlobalId ORDER BY metricKey")
+    suspend fun getMetricObservations(loggedSetGlobalId: String): List<MetricObservationEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertMetricSegments(values: List<MetricSegmentEntity>)
+
+    @Query("SELECT * FROM metric_segment WHERE observationGlobalId = :observationGlobalId ORDER BY position")
+    suspend fun getMetricSegments(observationGlobalId: String): List<MetricSegmentEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertMetricSamples(values: List<MetricSampleEntity>)
+
+    @Query("SELECT * FROM metric_sample WHERE observationGlobalId = :observationGlobalId ORDER BY offsetMillis")
+    suspend fun getMetricSamples(observationGlobalId: String): List<MetricSampleEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCatalogueReleaseState(state: CatalogueReleaseState)
 
     @Query("SELECT * FROM catalogue_release_state WHERE id = 1")
