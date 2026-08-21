@@ -51,4 +51,22 @@ class ExerciseCapabilityResolverTest {
         val fallback = ExerciseCatalogueRuntime.fallback("test").exercises.single { it.id == "plank" }
         assertTrue(fallback.capabilities.contains(MeasurementCapability.DURATION))
     }
+
+    @Test fun treadmillLoadsGovernedMetricsBeforeStartupReconciliation() {
+        ExerciseCatalogueRuntime.clearForTest()
+        val treadmill = Exercise("treadmill_run", "Treadmill Run", "Cardio")
+
+        val resolved = ExerciseCapabilityResolver.resolve(
+            context,
+            treadmill,
+            LegacyMeasurements(reps = 10, load = 0f)
+        )
+
+        assertFalse(resolved.inferred)
+        assertTrue(resolved.duration)
+        assertTrue(resolved.distance)
+        assertTrue(resolved.rpe)
+        assertFalse(resolved.repetitions)
+        assertFalse(resolved.load)
+    }
 }

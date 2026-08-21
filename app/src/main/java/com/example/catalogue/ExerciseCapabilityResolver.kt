@@ -41,7 +41,10 @@ object ExerciseCapabilityResolver {
     }
 
     fun resolve(context: Context?, exercise: Exercise, legacy: LegacyMeasurements = LegacyMeasurements()): ResolvedExerciseCapabilities {
-        val catalogue = ExerciseCatalogueRuntime.snapshot?.exercises?.firstOrNull { it.id == exercise.id }
+        // Active workouts can render before asynchronous catalogue reconciliation starts. Load the
+        // packaged governed catalogue here so seeded legacy set values never define the exercise UI.
+        val catalogue = (context?.let(ExerciseCatalogueRuntime::current) ?: ExerciseCatalogueRuntime.snapshot)
+            ?.exercises?.firstOrNull { it.id == exercise.id || it.id == exercise.globalId }
         if (catalogue != null) return ResolvedExerciseCapabilities(catalogue.capabilities)
         if (exercise.isCustom && context != null) {
             val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(exercise.id, null)

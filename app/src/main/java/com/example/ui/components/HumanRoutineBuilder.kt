@@ -1418,13 +1418,15 @@ fun SetPrescriptionEditor(
                     val current = templateExercise.sets.firstOrNull()?.targetDurationSeconds ?: 60
                     CapabilityTargetStepper("DURATION", "$current sec", Modifier.weight(1f),
                         onMinus = { onUpdate(templateExercise.copy(sets = templateExercise.sets.map { it.copy(targetDurationSeconds = (current - 5).coerceAtLeast(5)) })) },
-                        onPlus = { onUpdate(templateExercise.copy(sets = templateExercise.sets.map { it.copy(targetDurationSeconds = current + 5) })) })
+                        onPlus = { onUpdate(templateExercise.copy(sets = templateExercise.sets.map { it.copy(targetDurationSeconds = current + 5) })) },
+                        onValueClick = { activeCardPicker = "DURATION" })
                 }
                 if (capabilities.distance) {
                     val current = templateExercise.sets.firstOrNull()?.targetDistance ?: 1f
                     CapabilityTargetStepper("DISTANCE", "$current ${if (isMetric) "km" else "mi"}", Modifier.weight(1f),
                         onMinus = { onUpdate(templateExercise.copy(sets = templateExercise.sets.map { it.copy(targetDistance = (current - 0.1f).coerceAtLeast(0f)) })) },
-                        onPlus = { onUpdate(templateExercise.copy(sets = templateExercise.sets.map { it.copy(targetDistance = current + 0.1f) })) })
+                        onPlus = { onUpdate(templateExercise.copy(sets = templateExercise.sets.map { it.copy(targetDistance = current + 0.1f) })) },
+                        onValueClick = { activeCardPicker = "DISTANCE" })
                 }
             }
         }
@@ -1488,6 +1490,51 @@ fun SetPrescriptionEditor(
                         val updated = intention.copy(startingWeight = canonicalKg)
                         val setsList = templateExercise.sets.map { it.copy(targetWeight = canonicalKg) }
                         onUpdate(templateExercise.copy(notes = updated.toSerializedString(), sets = setsList))
+                    },
+                    onDismiss = { activeCardPicker = null }
+                )
+            }
+            "DURATION" -> {
+                val current = (templateExercise.sets.firstOrNull()?.targetDurationSeconds ?: 60).toDouble()
+                val config = NumericPickerConfiguration(
+                    title = "Duration",
+                    unitLabel = "sec",
+                    minimum = 5.0,
+                    maximum = 21_600.0,
+                    step = 5.0,
+                    quickValues = listOf(30.0, 60.0, 120.0, 300.0, 600.0),
+                    decimalPlaces = 0,
+                    allowCustomValue = true
+                )
+                HumanNumericPickerSheet(
+                    config = config,
+                    initialValue = current,
+                    onConfirm = { selected ->
+                        val seconds = selected.toInt().coerceAtLeast(5)
+                        onUpdate(templateExercise.copy(sets = templateExercise.sets.map { it.copy(targetDurationSeconds = seconds) }))
+                    },
+                    onDismiss = { activeCardPicker = null }
+                )
+            }
+            "DISTANCE" -> {
+                val current = (templateExercise.sets.firstOrNull()?.targetDistance ?: 1f).toDouble()
+                val unit = if (isMetric) "km" else "mi"
+                val config = NumericPickerConfiguration(
+                    title = "Distance",
+                    unitLabel = unit,
+                    minimum = 0.1,
+                    maximum = 100.0,
+                    step = 0.1,
+                    quickValues = listOf(0.5, 1.0, 2.0, 5.0, 10.0),
+                    decimalPlaces = 1,
+                    allowCustomValue = true
+                )
+                HumanNumericPickerSheet(
+                    config = config,
+                    initialValue = current,
+                    onConfirm = { selected ->
+                        val distance = selected.toFloat().coerceAtLeast(0.1f)
+                        onUpdate(templateExercise.copy(sets = templateExercise.sets.map { it.copy(targetDistance = distance) }))
                     },
                     onDismiss = { activeCardPicker = null }
                 )
@@ -1577,13 +1624,28 @@ fun SetPrescriptionEditor(
 }
 
 @Composable
-private fun CapabilityTargetStepper(label: String, value: String, modifier: Modifier, onMinus: () -> Unit, onPlus: () -> Unit) {
+private fun CapabilityTargetStepper(
+    label: String,
+    value: String,
+    modifier: Modifier,
+    onMinus: () -> Unit,
+    onPlus: () -> Unit,
+    onValueClick: () -> Unit
+) {
     Row(modifier.background(SlateBackground, RoundedCornerShape(12.dp)).padding(8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         IconButton(onClick = onMinus) { Icon(Icons.Default.Remove, "Decrease $label") }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClickLabel = "Edit ${label.lowercase()}", onClick = onValueClick)
+                .padding(vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = SlateMutedText)
-            Text(value, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(value, fontWeight = FontWeight.Bold, color = KineticAccent)
+            Text("Tap to edit", style = MaterialTheme.typography.labelSmall, color = SlateMutedText)
         }
         IconButton(onClick = onPlus) { Icon(Icons.Default.Add, "Increase $label") }
     }

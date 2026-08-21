@@ -697,6 +697,60 @@ class NavigationAndIndicatorRegressionTest {
     }
 
     @Test
+    fun testRoutineBuilder_treadmillTargetsOpenAccessiblePickers() {
+        val appContext = ApplicationProvider.getApplicationContext<Context>()
+        com.example.catalogue.ExerciseCatalogueRuntime.load(appContext)
+        val selectedExercises = androidx.compose.runtime.mutableStateListOf(
+            StrengthViewModel.TemplateExerciseState(
+                id = 1,
+                exerciseId = "treadmill_run",
+                sets = listOf(
+                    StrengthViewModel.TemplateSetState(
+                        id = 10,
+                        targetRepsMin = null,
+                        targetRepsMax = null,
+                        targetDurationSeconds = 60,
+                        targetDistance = 1f
+                    )
+                )
+            )
+        )
+
+        composeTestRule.setContent {
+            MyApplicationTheme {
+                com.example.ui.components.HumanRoutineBuilderScreen(
+                    routineName = "Cardio Day",
+                    onRoutineNameChange = {},
+                    routineNameError = null,
+                    selectedExercises = selectedExercises,
+                    exercises = listOf(Exercise("treadmill_run", "Treadmill Run", "Cardio")),
+                    isMetric = true,
+                    totalSets = 1,
+                    estDurationMin = 5,
+                    totalVolume = 0f,
+                    musclesCount = mapOf("Cardio" to 1),
+                    trainingFocus = "Cardio",
+                    difficulty = "Moderate",
+                    onBackClick = {},
+                    onCancelClick = {},
+                    onAddExerciseClick = {},
+                    onSaveClick = {},
+                    pairingDialogIndex = null,
+                    onPairingDialogIndexChange = {},
+                    showRestConfigGroupIndex = null,
+                    onShowRestConfigGroupIndexChange = {},
+                    isEditing = false
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Treadmill Run").performClick()
+        composeTestRule.onNodeWithText("60 sec").assertHasClickAction().performClick()
+        composeTestRule.onNodeWithTag("numeric_picker_sheet").assertExists()
+        composeTestRule.onNodeWithText("Duration").assertExists()
+    }
+
+    @Test
     fun testNavigation_workoutToProfile() {
         val vm = getLazyViewModel()
         authenticateFixture(vm)

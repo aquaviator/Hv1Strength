@@ -756,8 +756,6 @@ fun TemplateEditorDialog(
     Surface(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
             .imePadding(),
         color = MaterialTheme.colorScheme.background
     ) {
@@ -1044,13 +1042,22 @@ fun TemplateEditorDialog(
                                                     .fillMaxWidth()
                                                     .clickable {
                                                         haptic.performIfEnabled(isVibrationEnabled, HapticFeedbackType.LongPress)
-                                                        // Tapping adds a new template exercise with default set
+                                                        // Seed only measurements supported by the governed exercise.
+                                                        // Hidden strength defaults must never leak into cardio/timed work.
+                                                        val governedCapabilities = pickerCatalogueById[exercise.id]?.capabilities
+                                                        val usesGovernedCapabilities = !governedCapabilities.isNullOrEmpty()
+                                                        val repetitions = !usesGovernedCapabilities || com.example.catalogue.MeasurementCapability.REPETITIONS in governedCapabilities
+                                                        val load = !usesGovernedCapabilities || com.example.catalogue.MeasurementCapability.LOAD in governedCapabilities
+                                                        val duration = com.example.catalogue.MeasurementCapability.DURATION in governedCapabilities.orEmpty()
+                                                        val distance = com.example.catalogue.MeasurementCapability.DISTANCE in governedCapabilities.orEmpty()
                                                         val defaultSet = TemplateSetState(
                                                             id = 0,
                                                             setType = "WORKING",
-                                                            targetRepsMin = lastSet?.targetRepsMin ?: 8,
-                                                            targetRepsMax = lastSet?.targetRepsMax ?: 10,
-                                                            targetWeight = lastSet?.targetWeight ?: 0f
+                                                            targetRepsMin = if (repetitions) lastSet?.targetRepsMin ?: 8 else null,
+                                                            targetRepsMax = if (repetitions) lastSet?.targetRepsMax ?: 10 else null,
+                                                            targetWeight = if (load) lastSet?.targetWeight ?: 0f else null,
+                                                            targetDurationSeconds = if (duration) lastSet?.targetDuration ?: 60 else null,
+                                                            targetDistance = if (distance) lastSet?.targetDistance ?: 1f else null
                                                         )
                                                         val newEx = TemplateExerciseState(
                                                             exerciseId = exercise.id,

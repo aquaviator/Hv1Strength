@@ -168,7 +168,11 @@ object ExerciseCatalogueRuntime {
     } catch (error: Throwable) {
         fallback(error.message ?: "Package could not be read").also { snapshot = it }
     }
+    fun current(context: Context): CatalogueSnapshot = snapshot ?: synchronized(this) {
+        snapshot ?: load(context)
+    }
     fun accept(accepted: CatalogueSnapshot) { snapshot = accepted }
+    internal fun clearForTest() { snapshot = null }
     fun fallback(reason: String) = CatalogueSnapshot(CatalogueMetadata(1, "fallback-1", "embedded", "", "safe-fallback", 3, ""),
         listOf(
             CatalogueExercise("bench_press", "Bench Press", emptyList(), "Chest", listOf("chest"), emptyList(), listOf("barbell"), "strength", setOf(MeasurementCapability.REPETITIONS, MeasurementCapability.LOAD), "bilateral", false, true),
