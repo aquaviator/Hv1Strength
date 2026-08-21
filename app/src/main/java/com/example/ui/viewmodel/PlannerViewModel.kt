@@ -19,6 +19,12 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.util.UUID
 
+internal object PlannedWorkoutStartPolicy {
+    fun resolveTemplate(item: PlannedWorkout, templates: List<WorkoutTemplate>): WorkoutTemplate? =
+        templates.firstOrNull { it.globalId == item.templateGlobalId }
+            ?: templates.firstOrNull { it.id == item.templateId }
+}
+
 class PlannerViewModel(
     private val repository: StrengthRepository,
     private val auth: AuthViewModel,

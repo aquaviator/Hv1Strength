@@ -61,6 +61,9 @@ fun PlannerScreen(viewModel: StrengthViewModel, notificationOccurrenceId: String
             onNotificationHandled()
         }
     }
+    LaunchedEffect(Unit) {
+        viewModel.navigateToActiveWorkoutEvent.collect { onWorkoutStarted() }
+    }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Training plan") }, navigationIcon = {
@@ -121,7 +124,7 @@ fun PlannerScreen(viewModel: StrengthViewModel, notificationOccurrenceId: String
             } else {
                 items(visible, key = { it.id }) { item ->
                     PlannedWorkoutCard(item, LocalDate.now(), onStart = {
-                        viewModel.startPlannedWorkout(item); onWorkoutStarted()
+                        viewModel.startPlannedWorkout(item)
                     }, onSkip = { viewModel.plannerViewModel.skip(item) },
                         onReschedule = { editTarget = item },
                         onDelete = { deleteTarget = item },
@@ -166,7 +169,7 @@ fun PlannerScreen(viewModel: StrengthViewModel, notificationOccurrenceId: String
                 ?: "No preferred time")
             Text(status)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (item.status == "PLANNED") Button(onClick = onStart) { Icon(Icons.Default.PlayArrow, null); Text(if (date < today) "Start late" else "Start") }
+                if (item.status == "PLANNED") Button(onClick = onStart, enabled = routineAvailable) { Icon(Icons.Default.PlayArrow, null); Text(if (date < today) "Start late" else "Start") }
                 TextButton(onClick = onView, enabled = routineAvailable) { Text(if (routineAvailable) "View routine" else "Routine unavailable") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

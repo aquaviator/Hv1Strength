@@ -92,12 +92,22 @@ fun ActiveWorkoutScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                Text(
-                    text = "Saving your epic session...",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
+                if (isCompletingWorkout) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        text = "Saving your epic session...",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                } else {
+                    Text(
+                        text = "No active workout",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text("The workout did not start. Return to your plan and try again.")
+                    Button(onClick = onNavigateBack) { Text("Back to training plan") }
+                }
             }
         }
         return

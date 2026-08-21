@@ -158,7 +158,10 @@ class StrengthViewModel(
     fun scheduleRoutine(template: WorkoutTemplate, date: java.time.LocalDate, minuteOfDay: Int? = null,
                         weekdays: Set<java.time.DayOfWeek> = emptySet(), end: java.time.LocalDate? = null, reminder: Boolean = false) =
         plannerViewModel.schedule(template, date, minuteOfDay, weekdays, end, reminder)
-    fun startPlannedWorkout(item: PlannedWorkout) = plannerViewModel.start(item, templates.value.firstOrNull { it.id == item.templateId })
+    fun startPlannedWorkout(item: PlannedWorkout) = plannerViewModel.start(
+        item,
+        PlannedWorkoutStartPolicy.resolveTemplate(item, templates.value)
+    )
 
     // Backing undo system properties (held in the orchestrating ViewModel)
     private var lastDeletedSet: Pair<String, Pair<Int, ActiveSet>>? = null
