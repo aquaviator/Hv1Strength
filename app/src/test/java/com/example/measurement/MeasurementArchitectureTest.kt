@@ -60,4 +60,13 @@ class MeasurementArchitectureTest {
         val countAndTime=ExerciseMetricProfileResolver.resolve(exercise("jump_rope",setOf(MeasurementCapability.REPETITIONS,MeasurementCapability.DURATION,MeasurementCapability.RPE)))
         assertTrue(setOf("repetitions","duration").all(countAndTime.recording::contains))
     }
+
+    @Test fun legacyRowingCardioUsesConservativeRowerProfile() {
+        val profile = ExerciseMetricProfileResolver.resolve(exercise("rowing_machine_cardio", setOf(
+            MeasurementCapability.LOAD, MeasurementCapability.REPETITIONS, MeasurementCapability.RPE)))
+        assertEquals(setOf("duration", "distance"), profile.primary)
+        assertTrue("power" in profile.optional)
+        assertFalse("external_load" in profile.recording)
+        assertFalse("repetitions" in profile.recording)
+    }
 }

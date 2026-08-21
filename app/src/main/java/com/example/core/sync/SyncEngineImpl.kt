@@ -550,6 +550,53 @@ class SyncEngineImpl internal constructor(
                     }
                 }
             }
+            "MEASUREMENT_RECORD" -> {
+                val observation = repository.getMetricObservation(entityGlobalId)
+                if (observation != null) {
+                    require(observation.humanUserId == humanUserId) { "Measurement owner mismatch" }
+                    val parent = repository.dao.getLoggedSetByGlobalId(observation.loggedSetGlobalId)
+                        ?: throw IllegalStateException("Measurement parent logged set is unavailable")
+                    require(parent.humanUserId == humanUserId) { "Measurement parent owner mismatch" }
+                    val segments = repository.dao.getMetricSegments(observation.globalId)
+                    val samples = repository.dao.getMetricSamples(observation.globalId)
+                    docData.putAll(mapOf(
+                        "schemaVersion" to 14L,
+                        "globalId" to observation.globalId,
+                        "humanUserId" to observation.humanUserId,
+                        "loggedSetGlobalId" to observation.loggedSetGlobalId,
+                        "parentCompleted" to parent.isCompleted,
+                        "metricKey" to observation.metricKey,
+                        "numericValue" to observation.numericValue,
+                        "textValue" to observation.textValue,
+                        "canonicalUnit" to observation.canonicalUnit,
+                        "originalValue" to observation.originalValue,
+                        "originalUnit" to observation.originalUnit,
+                        "source" to observation.source,
+                        "manufacturer" to observation.manufacturer,
+                        "deviceModel" to observation.deviceModel,
+                        "deviceIdentifier" to observation.deviceIdentifier,
+                        "protocol" to observation.protocol,
+                        "capturedAt" to observation.capturedAt,
+                        "createdAt" to observation.createdAt,
+                        "updatedAt" to observation.updatedAt,
+                        "revision" to observation.revision,
+                        "deletedAt" to observation.deletedAt,
+                        "originDeviceId" to observation.originDeviceId,
+                        "segments" to segments.map { mapOf(
+                            "globalId" to it.globalId, "position" to it.position,
+                            "startOffsetMillis" to it.startOffsetMillis, "endOffsetMillis" to it.endOffsetMillis,
+                            "numericValue" to it.numericValue, "canonicalUnit" to it.canonicalUnit, "label" to it.label
+                        ) },
+                        "samples" to samples.map { mapOf(
+                            "globalId" to it.globalId, "offsetMillis" to it.offsetMillis,
+                            "numericValue" to it.numericValue, "canonicalUnit" to it.canonicalUnit
+                        ) }
+                    ))
+                    docRef = fs.collection("users").document(humanUserId)
+                        .collection("measurementRecords").document(observation.globalId)
+                    afterCommit = { repository.markMetricObservationSynced(observation.globalId, now) }
+                }
+            }
             "TRAINING_PLAN" -> repository.getTrainingPlanByGlobalId(entityGlobalId)?.let { plan ->
                 require(plan.humanUserId == humanUserId) { "Planner owner mismatch" }
                 docData.putAll(mapOf(
@@ -582,6 +629,28 @@ class SyncEngineImpl internal constructor(
         }
 
         if (docRef != null && afterCommit != null) {
+            if (entityType == "LOGGED_SET" && docData["isCompleted"] != true) {
+                val remote = docRef.get().await()
+                if (remote.exists() && remote.getBoolean("isCompleted") == true) {
+                    docData["isCompleted"] = true
+                    docData["deletedAt"] = null
+                    docData["revision"] = maxOf((docData["revision"] as? Long) ?: 1L,
+                        remote.getLong("revision") ?: 1L) + 1L
+                    docData["updatedAt"] = now
+                }
+            }
+            if (entityType == "MEASUREMENT_RECORD") {
+                val remote = docRef.get().await()
+                val localRevision = (docData["revision"] as? Long) ?: 1L
+                val localUpdatedAt = (docData["updatedAt"] as? Long) ?: 0L
+                val remoteRevision = remote.getLong("revision") ?: 0L
+                val remoteUpdatedAt = remote.getLong("updatedAt") ?: 0L
+                if (remote.exists() && (remoteRevision > localRevision ||
+                        (remoteRevision == localRevision && remoteUpdatedAt > localUpdatedAt))) {
+                    persistRemoteMeasurement(remote, repository.dao, repository.getMetricObservation(entityGlobalId))
+                    return
+                }
+            }
             if (entityType == "CUSTOM_EXERCISE" || entityType == "WORKOUT_TEMPLATE") {
                 val remote = docRef.get().await()
                 val localRevision = (docData["revision"] as? Long) ?: 1L
@@ -700,6 +769,7 @@ class SyncEngineImpl internal constructor(
             "templateSets" to "WORKOUT_TEMPLATE_SET",
             "sessions" to "WORKOUT_SESSION",
             "loggedSets" to "LOGGED_SET"
+            ,"measurementRecords" to "MEASUREMENT_RECORD"
             ,"trainingPlans" to "TRAINING_PLAN"
             ,"plannedWorkouts" to "PLANNED_WORKOUT"
         )
@@ -733,6 +803,7 @@ class SyncEngineImpl internal constructor(
                         "WORKOUT_TEMPLATE_SET" -> dao.getTemplateSetByGlobalId(remoteGlobalId) as VersionedEntity?
                         "WORKOUT_SESSION" -> dao.getSessionByGlobalId(remoteGlobalId) as VersionedEntity?
                         "LOGGED_SET" -> dao.getLoggedSetByGlobalId(remoteGlobalId) as VersionedEntity?
+                        "MEASUREMENT_RECORD" -> dao.getMetricObservation(remoteGlobalId) as VersionedEntity?
                         "TRAINING_PLAN" -> dao.getTrainingPlanByGlobalId(remoteGlobalId) as VersionedEntity?
                         "PLANNED_WORKOUT" -> dao.getPlannedWorkoutByGlobalId(remoteGlobalId) as VersionedEntity?
                         else -> null
@@ -843,6 +914,10 @@ class SyncEngineImpl internal constructor(
             "LOGGED_SET" -> {
                 val local = localEntity as LoggedSet
                 dao.insertLoggedSet(local.copy(syncStatus = "CONFLICT", conflictState = diagnostic))
+            }
+            "MEASUREMENT_RECORD" -> {
+                val local = localEntity as MetricObservationEntity
+                dao.upsertMetricObservations(listOf(local.copy(syncStatus = "CONFLICT", conflictState = diagnostic)))
             }
             "TRAINING_PLAN" -> {
                 val local = localEntity as TrainingPlan
@@ -1114,6 +1189,7 @@ class SyncEngineImpl internal constructor(
                 dao.insertLoggedSet(set)
                 resolvePendingDependencies(set.globalId, dao)
             }
+            "MEASUREMENT_RECORD" -> persistRemoteMeasurement(doc, dao, null)
             "TRAINING_PLAN" -> {
                 val owner = doc.getString("humanUserId") ?: return
                 val profile = dao.getUserProfileByHumanUserId(owner) ?: return
@@ -1341,7 +1417,7 @@ class SyncEngineImpl internal constructor(
                     setNumber = doc.getLong("setNumber")?.toInt() ?: local.setNumber,
                     reps = doc.getLong("reps")?.toInt() ?: local.reps,
                     weight = doc.getDouble("weight")?.toFloat() ?: local.weight,
-                    isCompleted = doc.getBoolean("isCompleted") ?: local.isCompleted,
+                    isCompleted = local.isCompleted || (doc.getBoolean("isCompleted") ?: false),
                     rpe = doc.getLong("rpe")?.toInt() ?: local.rpe,
                     actualDuration = doc.getLong("actualDuration")?.toInt() ?: local.actualDuration,
                     actualDistance = doc.getDouble("actualDistance")?.toFloat() ?: local.actualDistance,
@@ -1354,7 +1430,7 @@ class SyncEngineImpl internal constructor(
                     targetDistance = doc.getDouble("targetDistance")?.toFloat() ?: local.targetDistance,
                     notes = doc.getString("notes") ?: local.notes,
                     updatedAt = doc.getLong("updatedAt") ?: now,
-                    deletedAt = doc.getLong("deletedAt"),
+                    deletedAt = if (local.isCompleted) null else doc.getLong("deletedAt"),
                     revision = doc.getLong("revision") ?: local.revision,
                     syncStatus = "SYNCED",
                     lastSyncedAt = now
@@ -1362,6 +1438,7 @@ class SyncEngineImpl internal constructor(
                 dao.insertLoggedSet(updated)
                 resolvePendingDependencies(updated.globalId, dao)
             }
+            "MEASUREMENT_RECORD" -> persistRemoteMeasurement(doc, dao, localEntity as MetricObservationEntity)
             "TRAINING_PLAN" -> {
                 val local = localEntity as TrainingPlan
                 dao.upsertTrainingPlan(local.copy(
@@ -1398,6 +1475,62 @@ class SyncEngineImpl internal constructor(
                 ))
             }
         }
+    }
+
+    private suspend fun persistRemoteMeasurement(
+        doc: DocumentSnapshot,
+        dao: StrengthDao,
+        existing: MetricObservationEntity?
+    ) {
+        require(doc.getLong("schemaVersion") == 14L) { "Unsupported measurement sync schema" }
+        val globalId = doc.getString("globalId") ?: throw IllegalArgumentException("Measurement globalId missing")
+        require(globalId == doc.id) { "Measurement stable ID mismatch" }
+        val owner = doc.getString("humanUserId") ?: throw IllegalArgumentException("Measurement owner missing")
+        val loggedSetGlobalId = doc.getString("loggedSetGlobalId")
+            ?: throw IllegalArgumentException("Measurement parent missing")
+        val parent = dao.getLoggedSetByGlobalId(loggedSetGlobalId)
+        if (parent == null) {
+            storePendingDependency(loggedSetGlobalId, "MEASUREMENT_RECORD", doc, existing)
+            return
+        }
+        require(parent.humanUserId == owner) { "Measurement ownership isolation failed" }
+        val now = System.currentTimeMillis()
+        val observation = MetricObservationEntity(
+            globalId = globalId,
+            loggedSetGlobalId = loggedSetGlobalId,
+            metricKey = doc.getString("metricKey") ?: throw IllegalArgumentException("Measurement key missing"),
+            numericValue = doc.getDouble("numericValue"), textValue = doc.getString("textValue"),
+            canonicalUnit = doc.getString("canonicalUnit"), originalValue = doc.getDouble("originalValue"),
+            originalUnit = doc.getString("originalUnit"), source = doc.getString("source") ?: "USER",
+            manufacturer = doc.getString("manufacturer"), deviceModel = doc.getString("deviceModel"),
+            deviceIdentifier = doc.getString("deviceIdentifier"), protocol = doc.getString("protocol"),
+            capturedAt = doc.getLong("capturedAt") ?: now, humanUserId = owner,
+            createdAt = doc.getLong("createdAt") ?: existing?.createdAt ?: now,
+            updatedAt = doc.getLong("updatedAt") ?: now, revision = doc.getLong("revision") ?: 1L,
+            deletedAt = doc.getLong("deletedAt"), syncStatus = "SYNCED", lastSyncedAt = now,
+            originDeviceId = doc.getString("originDeviceId") ?: ""
+        )
+        @Suppress("UNCHECKED_CAST")
+        val segmentMaps = (doc.get("segments") as? List<Map<String, Any?>>).orEmpty()
+        @Suppress("UNCHECKED_CAST")
+        val sampleMaps = (doc.get("samples") as? List<Map<String, Any?>>).orEmpty()
+        val segments = if (observation.deletedAt != null) emptyList() else segmentMaps.map { value ->
+            val id = value["globalId"] as? String ?: throw IllegalArgumentException("Segment ID missing")
+            require(id.startsWith("$globalId:segment:")) { "Segment stable ID mismatch" }
+            MetricSegmentEntity(id, globalId, (value["position"] as Number).toInt(),
+                (value["startOffsetMillis"] as Number).toLong(), (value["endOffsetMillis"] as Number).toLong(),
+                (value["numericValue"] as? Number)?.toDouble(), value["canonicalUnit"] as? String, value["label"] as? String)
+        }
+        val samples = if (observation.deletedAt != null) emptyList() else sampleMaps.map { value ->
+            val id = value["globalId"] as? String ?: throw IllegalArgumentException("Sample ID missing")
+            require(id.startsWith("$globalId:sample:")) { "Sample stable ID mismatch" }
+            MetricSampleEntity(id, globalId, (value["offsetMillis"] as Number).toLong(),
+                (value["numericValue"] as Number).toDouble(), value["canonicalUnit"] as String)
+        }
+        require(segments.map { it.globalId }.distinct().size == segments.size) { "Duplicate measurement segments" }
+        require(samples.map { it.globalId }.distinct().size == samples.size) { "Duplicate measurement samples" }
+        dao.replaceMetricObservationGraph(observation, segments, samples)
+        resolvePendingDependencies(globalId, dao)
     }
 
     override suspend fun enqueueEntity(entity: VersionedEntity): Result<Unit> {

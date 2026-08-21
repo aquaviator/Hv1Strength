@@ -20,7 +20,7 @@ The attached *Universal Exercise Measurement Taxonomy* informed the dimensions a
 - Canonical storage uses kilograms, metres and seconds. Unit conversion happens only at input/presentation boundaries, and original values/units remain available for device provenance.
 - Derived pace and speed require both duration and distance. Unsupported fields are rejected rather than hidden after persistence.
 
-## Room v14
+## Room v14/v15
 
 The additive `13 → 14` migration creates:
 
@@ -29,7 +29,22 @@ The additive `13 → 14` migration creates:
 - `metric_segment`: ordered interval or split results.
 - `metric_sample`: timestamp-offset time-series samples.
 
-No existing table or column is removed or rewritten. Legacy set columns remain readable and are the compatibility projection for current Firestore synchronization. New metric rows are additive and cannot change ownership, planner links, custom exercises or historical identifiers. A future backend contract may serialize these tables only after separate rules/service authorization; V37 does not deploy or write that contract.
+The additive `14 → 15` migration adds ownership, revision, tombstone, acknowledgement and replay metadata to observations. No existing table or column is removed or rewritten. Legacy set columns remain readable and are the compatibility projection for older clients.
+
+## Additive cloud synchronization contract
+
+V37 serializes each observation graph as one atomic schema-14 document at
+`users/{humanUserId}/measurementRecords/{observationGlobalId}`. It retains the
+stable observation and parent logged-set IDs, revision, tombstone, source unit,
+device provenance, and deterministically ordered segment and sample records.
+Room remains normalized; downloaded graph replacement is transactional.
+
+Clients predating measurement schema 14 ignore this new collection and retain
+their existing `loggedSets` contract. They cannot erase advanced measurements,
+and logged-set completion is monotonic during mixed-client convergence. Rules
+bind records to the trusted Human owner, freeze parent and stable IDs on update,
+and reject revision regression. Deploying those rules remains a separately
+authorized production operation.
 
 ## Deterministic catalogue audit
 

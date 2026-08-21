@@ -113,6 +113,28 @@ describe("Strength Firestore trusted identity rules", function() {
       await assertFails(setDoc(ref, { humanUserId: H2 }));
     }
   });
+  it("allows only immutable-owner schema-14 measurement records with monotonic revisions", async () => {
+    const db = env.authenticatedContext("uid-a").firestore();
+    const ref = doc(db, `users/${H1}/measurementRecords/measurement-1`);
+    const valid = { schemaVersion: 14, globalId: "measurement-1", humanUserId: H1,
+      loggedSetGlobalId: "set-1", metricKey: "power", revision: 1 };
+    await assertSucceeds(setDoc(ref, valid));
+    await assertSucceeds(setDoc(ref, { ...valid, revision: 2 }));
+    await assertFails(setDoc(ref, { ...valid, revision: 1 }));
+    await assertFails(setDoc(ref, { ...valid, revision: 3, humanUserId: H2 }));
+    await assertFails(setDoc(ref, { ...valid, revision: 3, loggedSetGlobalId: "set-2" }));
+    await assertFails(setDoc(doc(db, `users/${H1}/measurementRecords/wrong-id`), valid));
+    await assertFails(deleteDoc(ref));
+  });
+  it("denies foreign and malformed measurement records", async () => {
+    const ownerDb = env.authenticatedContext("uid-a").firestore();
+    const foreignDb = env.authenticatedContext("uid-b").firestore();
+    const path = `users/${H1}/measurementRecords/measurement-1`;
+    await assertFails(setDoc(doc(ownerDb, path), { schemaVersion: 13, globalId: "measurement-1", humanUserId: H1,
+      loggedSetGlobalId: "set-1", metricKey: "power", revision: 1 }));
+    await assertFails(setDoc(doc(foreignDb, path), { schemaVersion: 14, globalId: "measurement-1", humanUserId: H1,
+      loggedSetGlobalId: "set-1", metricKey: "power", revision: 1 }));
+  });
   it("denies non-owners for every Strength synchronized collection", async () => {
     const db = env.authenticatedContext("uid-b").firestore();
     for (const collection of COLLECTIONS) {

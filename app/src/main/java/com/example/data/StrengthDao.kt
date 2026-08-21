@@ -17,6 +17,18 @@ interface StrengthDao {
     @Query("SELECT * FROM metric_observation WHERE loggedSetGlobalId = :loggedSetGlobalId ORDER BY metricKey")
     suspend fun getMetricObservations(loggedSetGlobalId: String): List<MetricObservationEntity>
 
+    @Query("SELECT * FROM metric_observation WHERE globalId = :globalId LIMIT 1")
+    suspend fun getMetricObservation(globalId: String): MetricObservationEntity?
+
+    @Query("SELECT * FROM metric_observation WHERE humanUserId = :owner ORDER BY globalId")
+    suspend fun getMetricObservationsForOwner(owner: String): List<MetricObservationEntity>
+
+    @Query("SELECT * FROM metric_observation WHERE syncStatus != 'SYNCED' ORDER BY updatedAt")
+    suspend fun getPendingMetricObservations(): List<MetricObservationEntity>
+
+    @Query("UPDATE metric_observation SET syncStatus = 'SYNCED', lastSyncedAt = :timestamp, conflictState = NULL WHERE globalId = :globalId")
+    suspend fun markMetricObservationSynced(globalId: String, timestamp: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertMetricSegments(values: List<MetricSegmentEntity>)
 
@@ -26,11 +38,19 @@ interface StrengthDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertMetricSamples(values: List<MetricSampleEntity>)
 
+    @Query("DELETE FROM metric_segment WHERE observationGlobalId = :observationGlobalId")
+    suspend fun deleteMetricSegments(observationGlobalId: String)
+
+    @Query("DELETE FROM metric_sample WHERE observationGlobalId = :observationGlobalId")
+    suspend fun deleteMetricSamples(observationGlobalId: String)
+
     @Query("SELECT * FROM metric_sample WHERE observationGlobalId = :observationGlobalId ORDER BY offsetMillis")
     suspend fun getMetricSamples(observationGlobalId: String): List<MetricSampleEntity>
 
     @Transaction
     suspend fun replaceMetricObservationGraph(observation: MetricObservationEntity, segments: List<MetricSegmentEntity>, samples: List<MetricSampleEntity>) {
+        deleteMetricSegments(observation.globalId)
+        deleteMetricSamples(observation.globalId)
         upsertMetricObservations(listOf(observation))
         upsertMetricSegments(segments)
         upsertMetricSamples(samples)

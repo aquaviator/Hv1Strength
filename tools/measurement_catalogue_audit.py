@@ -22,6 +22,11 @@ CARDIO = {
     "air_bike": ({"power", "cadence", "heart_rate", "energy"}, {"speed"}),
     "assault_bike_sprint": ({"power", "cadence", "heart_rate", "energy", "intervals"}, set()),
     "rowing_machine": ({"manufacturer_resistance", "power", "stroke_rate", "heart_rate", "energy"}, {"pace"}),
+    # The governed record has legacy strength-style tracking flags, but its
+    # stable name and aliases unambiguously identify an indoor rower. Use only
+    # universally available rower outputs as primary values; telemetry remains
+    # optional because individual machines may not emit it.
+    "rowing_machine_cardio": ({"manufacturer_resistance", "power", "stroke_rate", "heart_rate", "energy"}, {"pace"}),
     "ski_erg": ({"manufacturer_resistance", "power", "stroke_rate", "heart_rate", "energy"}, {"pace"}),
     "elliptical": ({"manufacturer_resistance", "cadence", "heart_rate", "energy"}, {"speed"}),
 }
@@ -33,6 +38,9 @@ def profile(item):
     mapped = {CAPABILITY[x] for x in item.get("trackingCapabilities", []) if x in CAPABILITY}
     if "weighted_bodyweight" in item.get("trackingCapabilities", []): mapped.add("external_load")
     primary = [x for x in ("repetitions", "duration", "distance", "external_load", "assistance") if x in mapped]
+    if item["exerciseId"] == "rowing_machine_cardio":
+        primary = ["duration", "distance"]
+        mapped = {"duration", "distance", "rpe"}
     if not primary: primary = ["duration"]
     secondary = [x for x in ("rpe", "rir", "tempo", "intervals", "side") if x in mapped]
     optional, derived = CARDIO.get(item["exerciseId"], (set(), set()))

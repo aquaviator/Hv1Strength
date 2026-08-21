@@ -302,10 +302,11 @@ data class MetricPrescriptionEntity(
 /** Queryable scalar result with lossless source-unit and device provenance. */
 @Entity(
     tableName = "metric_observation",
-    indices = [Index("loggedSetGlobalId"), Index("metricKey"), Index(value = ["loggedSetGlobalId", "metricKey"], unique = true)]
+    indices = [Index("loggedSetGlobalId"), Index("metricKey"), Index("humanUserId"), Index("syncStatus"),
+        Index(value = ["loggedSetGlobalId", "metricKey"], unique = true)]
 )
 data class MetricObservationEntity(
-    @PrimaryKey val globalId: String,
+    @PrimaryKey override val globalId: String,
     val loggedSetGlobalId: String,
     val metricKey: String,
     val numericValue: Double? = null,
@@ -319,9 +320,16 @@ data class MetricObservationEntity(
     val deviceIdentifier: String? = null,
     val protocol: String? = null,
     val capturedAt: Long = System.currentTimeMillis(),
-    val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
-)
+    override val humanUserId: String = "",
+    override val createdAt: Long = System.currentTimeMillis(),
+    override val updatedAt: Long = System.currentTimeMillis(),
+    override val revision: Long = 1,
+    override val deletedAt: Long? = null,
+    override val syncStatus: String = "PENDING_UPLOAD",
+    override val lastSyncedAt: Long? = null,
+    override val conflictState: String? = null,
+    override val originDeviceId: String = ""
+) : VersionedEntity
 
 @Entity(tableName = "metric_segment", indices = [Index(value = ["observationGlobalId", "position"], unique = true)])
 data class MetricSegmentEntity(

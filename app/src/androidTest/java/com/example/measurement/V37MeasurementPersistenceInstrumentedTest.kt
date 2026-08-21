@@ -27,7 +27,8 @@ class V37MeasurementPersistenceInstrumentedTest {
             raw.execSQL("DROP TABLE metric_prescription")
             raw.version = 13
         }
-        val migrated = Room.databaseBuilder(context, StrengthDatabase::class.java, name).addMigrations(StrengthDatabase.MIGRATION_13_14)
+        val migrated = Room.databaseBuilder(context, StrengthDatabase::class.java, name)
+            .addMigrations(StrengthDatabase.MIGRATION_13_14, StrengthDatabase.MIGRATION_14_15)
             .allowMainThreadQueries().build()
         try {
             assertTrue(migrated.strengthDao().getExerciseById("custom_migration")!!.isCustom)

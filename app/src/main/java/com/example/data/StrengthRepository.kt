@@ -650,13 +650,19 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
 
     suspend fun saveAdditionalMetrics(set: LoggedSet, profile: com.example.measurement.ExerciseMetricProfile, values: Map<String, Double>) {
         if (values.isEmpty()) return
-        com.example.measurement.MeasurementRepository(dao).saveObservations(
+        val observations = com.example.measurement.MeasurementRepository(dao).saveObservations(
             set.globalId, profile, values.toSortedMap().map { (key, value) ->
                 val unit=com.example.measurement.CanonicalMetricDictionary.require(key).canonicalUnit
                 com.example.measurement.ObservationInput(com.example.measurement.MetricInput(key, numericValue=value, unitKey=unit))
-            }, System.currentTimeMillis()
+            }, System.currentTimeMillis(), set.humanUserId, deviceId()
         )
+        observations.forEach {
+            enqueueCommand("MeasurementRecorded", "MEASUREMENT_RECORD", it.globalId, it.humanUserId, "{}")
+        }
     }
+
+    suspend fun getMetricObservation(globalId: String) = dao.getMetricObservation(globalId)
+    suspend fun markMetricObservationSynced(globalId: String, timestamp: Long) = dao.markMetricObservationSynced(globalId, timestamp)
 
     suspend fun deleteSetsForSession(sessionId: Int) {
         dao.softDeleteSetsForSession(sessionId, System.currentTimeMillis())

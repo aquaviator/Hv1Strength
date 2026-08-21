@@ -26,13 +26,28 @@ class MeasurementRepository(private val dao: StrengthDao) {
         })
     }
 
-    suspend fun saveObservations(loggedSetGlobalId: String, profile: ExerciseMetricProfile, values: List<ObservationInput>, now: Long) {
+    suspend fun saveObservations(
+        loggedSetGlobalId: String,
+        profile: ExerciseMetricProfile,
+        values: List<ObservationInput>,
+        now: Long,
+        humanUserId: String = "",
+        originDeviceId: String = ""
+    ): List<MetricObservationEntity> {
         values.flatMap { MetricValidation.validate(profile, it.value) }.also { require(it.isEmpty()) { it.joinToString() } }
-        values.forEach { input ->
+        return values.map { input ->
                 val id="$loggedSetGlobalId:${input.value.metricKey}"
-                val observation=MetricObservationEntity(id,loggedSetGlobalId,input.value.metricKey,
-                    input.value.numericValue,input.value.textValue,input.value.unitKey,input.originalValue,input.originalUnit,
-                    input.source.name,input.manufacturer,input.deviceModel,input.deviceIdentifier,input.protocol,now,now,now)
+                val previous = dao.getMetricObservation(id)
+                val observation=MetricObservationEntity(
+                    globalId=id, loggedSetGlobalId=loggedSetGlobalId, metricKey=input.value.metricKey,
+                    numericValue=input.value.numericValue, textValue=input.value.textValue, canonicalUnit=input.value.unitKey,
+                    originalValue=input.originalValue, originalUnit=input.originalUnit, source=input.source.name,
+                    manufacturer=input.manufacturer, deviceModel=input.deviceModel,
+                    deviceIdentifier=input.deviceIdentifier, protocol=input.protocol, capturedAt=now,
+                    humanUserId=humanUserId, createdAt=previous?.createdAt ?: now, updatedAt=now,
+                    revision=(previous?.revision ?: 0L) + 1L, syncStatus="PENDING_UPLOAD",
+                    originDeviceId=originDeviceId
+                )
                 val segments=input.segments.mapIndexed { index, segment ->
                     require(segment.endOffsetMillis >= segment.startOffsetMillis)
                     MetricSegmentEntity("$id:segment:$index",id,index,segment.startOffsetMillis,segment.endOffsetMillis,segment.numericValue,segment.canonicalUnit,segment.label)
@@ -41,6 +56,7 @@ class MeasurementRepository(private val dao: StrengthDao) {
                     MetricSampleEntity("$id:sample:${sample.offsetMillis}",id,sample.offsetMillis,sample.numericValue,sample.canonicalUnit)
                 }
                 dao.replaceMetricObservationGraph(observation,segments,samples)
+                observation
         }
     }
 }

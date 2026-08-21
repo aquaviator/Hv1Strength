@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
         MetricSegmentEntity::class,
         MetricSampleEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 abstract class StrengthDatabase : RoomDatabase() {
@@ -42,6 +42,19 @@ abstract class StrengthDatabase : RoomDatabase() {
     abstract fun strengthDao(): StrengthDao
 
     companion object {
+        val MIGRATION_14_15 = object : androidx.room.migration.Migration(14, 15) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE metric_observation ADD COLUMN humanUserId TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE metric_observation ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE metric_observation ADD COLUMN deletedAt INTEGER")
+                db.execSQL("ALTER TABLE metric_observation ADD COLUMN syncStatus TEXT NOT NULL DEFAULT 'SYNCED'")
+                db.execSQL("ALTER TABLE metric_observation ADD COLUMN lastSyncedAt INTEGER")
+                db.execSQL("ALTER TABLE metric_observation ADD COLUMN conflictState TEXT")
+                db.execSQL("ALTER TABLE metric_observation ADD COLUMN originDeviceId TEXT NOT NULL DEFAULT ''")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_metric_observation_humanUserId ON metric_observation(humanUserId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_metric_observation_syncStatus ON metric_observation(syncStatus)")
+            }
+        }
         @Volatile
         private var INSTANCE: StrengthDatabase? = null
 
@@ -762,7 +775,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         StrengthDatabase::class.java,
                         "strength_database"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
                         .addCallback(StrengthDatabaseCallback(appCtx))
                         .build()
                     INSTANCE = instance

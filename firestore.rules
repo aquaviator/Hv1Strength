@@ -22,6 +22,22 @@ service cloud.firestore {
       return resource.data.humanUserId == humanUserId
         && request.resource.data.humanUserId == humanUserId;
     }
+    function createsOwnedMeasurementRecord(humanUserId, documentId) {
+      return request.resource.data.humanUserId == humanUserId
+        && request.resource.data.schemaVersion == 14
+        && request.resource.data.globalId == documentId
+        && request.resource.data.loggedSetGlobalId is string
+        && request.resource.data.metricKey is string
+        && request.resource.data.revision is int
+        && request.resource.data.revision >= 1;
+    }
+    function updatesOwnedMeasurementRecord(humanUserId, documentId) {
+      return resource.data.humanUserId == humanUserId
+        && resource.data.globalId == request.resource.data.globalId
+        && resource.data.loggedSetGlobalId == request.resource.data.loggedSetGlobalId
+        && createsOwnedMeasurementRecord(humanUserId, documentId)
+        && request.resource.data.revision >= resource.data.revision;
+    }
 
     match /accounts/{uid} {
       allow get: if isAuthenticated() && request.auth.uid == uid;
@@ -43,6 +59,14 @@ service cloud.firestore {
       match /templateSets/{document} { allow read, write: if ownsHumanRoot(humanUserId); }
       match /sessions/{document} { allow read, write: if ownsHumanRoot(humanUserId); }
       match /loggedSets/{document} { allow read, write: if ownsHumanRoot(humanUserId); }
+      // V37 records are additive. Older clients ignore this collection and
+      // continue syncing legacy loggedSets without losing completion state.
+      match /measurementRecords/{document} {
+        allow read: if ownsHumanRoot(humanUserId);
+        allow delete: if false;
+        allow create: if ownsHumanRoot(humanUserId) && createsOwnedMeasurementRecord(humanUserId, document);
+        allow update: if ownsHumanRoot(humanUserId) && updatesOwnedMeasurementRecord(humanUserId, document);
+      }
       match /processedCommands/{document} { allow read, write: if ownsHumanRoot(humanUserId); }
       match /trainingPlans/{document} {
         allow read, delete: if ownsHumanRoot(humanUserId);

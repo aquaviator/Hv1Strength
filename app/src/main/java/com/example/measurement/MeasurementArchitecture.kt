@@ -127,6 +127,10 @@ object ExerciseMetricProfileResolver {
         if (MeasurementCapability.DISTANCE in c) primary += "distance"
         if (MeasurementCapability.LOAD in c || MeasurementCapability.WEIGHTED_BODYWEIGHT in c) primary += "external_load"
         if (MeasurementCapability.ASSISTED_LOAD in c) primary += "assistance"
+        if (exercise.id == "rowing_machine_cardio") {
+            primary.clear()
+            primary += setOf("duration", "distance")
+        }
         if (primary.isEmpty()) primary += "duration"
         val secondary = linkedSetOf<String>()
         if (MeasurementCapability.RPE in c) secondary += "rpe"
@@ -141,7 +145,7 @@ object ExerciseMetricProfileResolver {
             "stair_climber" -> EquipmentCapabilityRegistry.profiles["stair_climber"]
             "stationary_bike" -> EquipmentCapabilityRegistry.profiles["stationary_bike"]
             "air_bike", "assault_bike_sprint" -> EquipmentCapabilityRegistry.profiles["air_bike"]
-            "rowing_machine" -> EquipmentCapabilityRegistry.profiles["rowing_machine"]
+            "rowing_machine", "rowing_machine_cardio" -> EquipmentCapabilityRegistry.profiles["rowing_machine"]
             "ski_erg" -> EquipmentCapabilityRegistry.profiles["ski_erg"]
             "elliptical" -> EquipmentCapabilityRegistry.profiles["elliptical"]
             else -> null
