@@ -430,8 +430,11 @@ fun CasualWorkoutJournalScreen(
                                         sets = sets,
                                         isMetric = isMetric,
                                         onAddSet = { viewModel.addSetToExercise(activeEx.id) },
-                                        onUpdateSet = { setIndex, weight, reps, rpe, completed ->
-                                            viewModel.updateSet(activeEx.id, setIndex, reps, weight, completed, rpe)
+                                        onUpdateSet = { setIndex, set ->
+                                            viewModel.updateSet(activeEx.id, setIndex, set.reps, set.weight, set.isCompleted, set.rpe,
+                                                set.actualDuration, set.actualDistance, set.setType, set.targetRepsMin, set.targetRepsMax,
+                                                set.targetWeight, set.targetRpe, set.targetDuration, set.targetDistance, set.tempo, set.notes)
+                                            set.additionalMetrics.forEach { (key,value) -> viewModel.updateAdditionalMetric(activeEx.id,setIndex,key,value) }
                                         },
                                         onRemoveSet = { setIndex ->
                                             viewModel.removeSetFromExercise(activeEx.id, setIndex)
@@ -837,10 +840,12 @@ private fun CurrentExerciseFocusCard(
     sets: List<ActiveSet>,
     isMetric: Boolean,
     onAddSet: () -> Unit,
-    onUpdateSet: (setIndex: Int, weight: Float, reps: Int, rpe: Int?, isCompleted: Boolean) -> Unit,
+    onUpdateSet: (setIndex: Int, set: ActiveSet) -> Unit,
     onRemoveSet: (setIndex: Int) -> Unit,
     onRemoveExercise: () -> Unit
 ) {
+    val capabilities = com.example.catalogue.ExerciseCapabilityResolver.resolve(
+        androidx.compose.ui.platform.LocalContext.current, exercise)
     var activeSetIndex by remember(sets.size) {
         mutableIntStateOf(
             sets.indexOfFirst { !it.isCompleted }.let { if (it == -1) (sets.size - 1).coerceAtLeast(0) else it }
@@ -924,9 +929,8 @@ private fun CurrentExerciseFocusCard(
                                 setIndex = setIndex,
                                 activeSet = activeSet,
                                 isMetric = isMetric,
-                                onUpdateSet = { w, r, rpe, c ->
-                                    onUpdateSet(setIndex, w, r, rpe, c)
-                                },
+                                capabilities = capabilities,
+                                onUpdateSet = { onUpdateSet(setIndex, it) },
                                 onRemoveSet = {
                                     onRemoveSet(setIndex)
                                     if (activeSetIndex >= sets.size - 1) {
@@ -1156,7 +1160,8 @@ private fun CasualActiveSetCard(
     setIndex: Int,
     activeSet: ActiveSet,
     isMetric: Boolean,
-    onUpdateSet: (weight: Float, reps: Int, rpe: Int?, isCompleted: Boolean) -> Unit,
+    capabilities: com.example.catalogue.ResolvedExerciseCapabilities,
+    onUpdateSet: (ActiveSet) -> Unit,
     onRemoveSet: () -> Unit
 ) {
     var activePickerType by remember { mutableStateOf<CasualSetPickerType?>(null) }
@@ -1223,23 +1228,23 @@ private fun CasualActiveSetCard(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        WeightControlPanel(
+                        if (capabilities.load) WeightControlPanel(
                             displayWeight = displayWeight,
                             weightConfig = weightConfig,
                             isMetric = isMetric,
                             onValueChange = { newDisplayWeight ->
                                 val canonicalKg = if (isMetric) newDisplayWeight.toFloat() else UnitConverter.lbToKg(newDisplayWeight).toFloat()
-                                onUpdateSet(canonicalKg, activeSet.reps, activeSet.rpe, activeSet.isCompleted)
+                                onUpdateSet(activeSet.copy(weight = canonicalKg))
                             },
                             onOpenPicker = { activePickerType = CasualSetPickerType.WEIGHT },
                             modifier = Modifier.weight(1f)
                         )
 
-                        RepsControlPanel(
+                        if (capabilities.repetitions) RepsControlPanel(
                             reps = activeSet.reps,
                             repsConfig = repsConfig,
                             onValueChange = { newReps ->
-                                onUpdateSet(activeSet.weight, newReps.toInt(), activeSet.rpe, activeSet.isCompleted)
+                                onUpdateSet(activeSet.copy(reps = newReps.toInt()))
                             },
                             onOpenPicker = { activePickerType = CasualSetPickerType.REPS },
                             modifier = Modifier.weight(1f)
@@ -1250,23 +1255,23 @@ private fun CasualActiveSetCard(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        WeightControlPanel(
+                        if (capabilities.load) WeightControlPanel(
                             displayWeight = displayWeight,
                             weightConfig = weightConfig,
                             isMetric = isMetric,
                             onValueChange = { newDisplayWeight ->
                                 val canonicalKg = if (isMetric) newDisplayWeight.toFloat() else UnitConverter.lbToKg(newDisplayWeight).toFloat()
-                                onUpdateSet(canonicalKg, activeSet.reps, activeSet.rpe, activeSet.isCompleted)
+                                onUpdateSet(activeSet.copy(weight = canonicalKg))
                             },
                             onOpenPicker = { activePickerType = CasualSetPickerType.WEIGHT },
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        RepsControlPanel(
+                        if (capabilities.repetitions) RepsControlPanel(
                             reps = activeSet.reps,
                             repsConfig = repsConfig,
                             onValueChange = { newReps ->
-                                onUpdateSet(activeSet.weight, newReps.toInt(), activeSet.rpe, activeSet.isCompleted)
+                                onUpdateSet(activeSet.copy(reps = newReps.toInt()))
                             },
                             onOpenPicker = { activePickerType = CasualSetPickerType.REPS },
                             modifier = Modifier.fillMaxWidth()
@@ -1275,10 +1280,25 @@ private fun CasualActiveSetCard(
                 }
             }
 
+            if (capabilities.duration) CasualMetricField("Duration", (activeSet.actualDuration ?: 0).toDouble(), "sec") {
+                onUpdateSet(activeSet.copy(actualDuration = it.toInt().coerceAtLeast(1)))
+            }
+            if (capabilities.distance) CasualMetricField("Distance", (activeSet.actualDistance ?: 0f).toDouble(), if (isMetric) "km" else "mi") {
+                onUpdateSet(activeSet.copy(actualDistance = it.toFloat().coerceAtLeast(0f)))
+            }
+            val basicMetrics=setOf("repetitions","external_load","assistance","duration","distance","rpe","tempo","rir","side","intervals")
+            capabilities.metricProfile?.recording?.filterNot { it in basicMetrics }?.sorted()?.forEach { key ->
+                val definition=com.example.measurement.CanonicalMetricDictionary.require(key)
+                val unit=definition.canonicalUnit?.let { com.example.measurement.CanonicalUnitRegistry.require(it).symbol }.orEmpty()
+                CasualMetricField(definition.label,activeSet.additionalMetrics[key] ?: 0.0,unit) { value ->
+                    onUpdateSet(activeSet.copy(additionalMetrics=activeSet.additionalMetrics + (key to value)))
+                }
+            }
+
             // Completion Control Button
             Button(
                 onClick = {
-                    onUpdateSet(activeSet.weight, activeSet.reps, activeSet.rpe, !activeSet.isCompleted)
+                    onUpdateSet(activeSet.copy(isCompleted = !activeSet.isCompleted))
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1312,7 +1332,7 @@ private fun CasualActiveSetCard(
                 initialValue = displayWeight,
                 onConfirm = { selectedDisplay ->
                     val canonicalKg = if (isMetric) selectedDisplay.toFloat() else UnitConverter.lbToKg(selectedDisplay).toFloat()
-                    onUpdateSet(canonicalKg, activeSet.reps, activeSet.rpe, activeSet.isCompleted)
+                    onUpdateSet(activeSet.copy(weight = canonicalKg))
                 },
                 onDismiss = { activePickerType = null }
             )
@@ -1322,13 +1342,26 @@ private fun CasualActiveSetCard(
                 config = repsConfig,
                 initialValue = activeSet.reps.toDouble(),
                 onConfirm = { selectedReps ->
-                    onUpdateSet(activeSet.weight, selectedReps.toInt(), activeSet.rpe, activeSet.isCompleted)
+                    onUpdateSet(activeSet.copy(reps = selectedReps.toInt()))
                 },
                 onDismiss = { activePickerType = null }
             )
         }
         null -> {}
     }
+}
+
+@Composable
+private fun CasualMetricField(label: String, value: Double, unit: String, onValue: (Double) -> Unit) {
+    OutlinedTextField(
+        value=value.toString().removeSuffix(".0"),
+        onValueChange={ it.toDoubleOrNull()?.takeIf { number -> number >= 0.0 }?.let(onValue) },
+        label={ Text(label) },
+        suffix={ if(unit.isNotBlank()) Text(unit) },
+        keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),
+        singleLine=true,
+        modifier=Modifier.fillMaxWidth().testTag("casual_metric_${label.lowercase().replace(' ','_')}")
+    )
 }
 
 @Composable

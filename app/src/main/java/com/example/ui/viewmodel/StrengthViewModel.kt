@@ -82,7 +82,8 @@ data class ActiveSet(
     val targetDistance: Float? = null,
     val tempo: String? = null,
     val notes: String? = null,
-    val completedAt: Long? = null
+    val completedAt: Long? = null,
+    val additionalMetrics: Map<String, Double> = emptyMap()
 )
 
 sealed interface ActiveWorkoutEvent {
@@ -479,6 +480,13 @@ class StrengthViewModel(
         exerciseId, setIndex, reps, weight, isCompleted, rpe, actualDuration, actualDistance, setType,
         targetRepsMin, targetRepsMax, targetWeight, targetRpe, targetDuration, targetDistance, tempo, notes
     )
+
+    fun updateAdditionalMetric(
+        exerciseId: String,
+        setIndex: Int,
+        metricKey: String,
+        value: Double?
+    ) = activeWorkoutViewModel.updateAdditionalMetric(exerciseId, setIndex, metricKey, value)
 
     fun finishActiveWorkout() = activeWorkoutViewModel.finishActiveWorkout()
     fun cancelActiveWorkout() = activeWorkoutViewModel.cancelActiveWorkout()

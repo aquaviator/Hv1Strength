@@ -29,6 +29,13 @@ interface StrengthDao {
     @Query("SELECT * FROM metric_sample WHERE observationGlobalId = :observationGlobalId ORDER BY offsetMillis")
     suspend fun getMetricSamples(observationGlobalId: String): List<MetricSampleEntity>
 
+    @Transaction
+    suspend fun replaceMetricObservationGraph(observation: MetricObservationEntity, segments: List<MetricSegmentEntity>, samples: List<MetricSampleEntity>) {
+        upsertMetricObservations(listOf(observation))
+        upsertMetricSegments(segments)
+        upsertMetricSamples(samples)
+    }
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCatalogueReleaseState(state: CatalogueReleaseState)
 

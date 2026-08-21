@@ -782,6 +782,10 @@ fun ActiveWorkoutScreen(
                                         currentActiveFlatSet.set.tempo, currentActiveFlatSet.set.notes)
                                 },
                                 distance = currentActiveFlatSet.set.actualDistance,
+                                additionalMetrics = currentActiveFlatSet.set.additionalMetrics,
+                                onAdditionalMetricChange = { metricKey, value ->
+                                    viewModel.updateAdditionalMetric(activeEx.id, currentSetIndex, metricKey, value)
+                                },
                                 onDistanceChange = { newDistance ->
                                     viewModel.updateSet(activeEx.id, currentSetIndex, activeReps, activeWeight, currentActiveFlatSet.set.isCompleted,
                                         activeRpe, currentActiveFlatSet.set.actualDuration, newDistance, currentActiveFlatSet.set.setType,

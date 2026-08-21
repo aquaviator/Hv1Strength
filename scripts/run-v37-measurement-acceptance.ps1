@@ -23,7 +23,11 @@ try {
             $result = adb -s $Serial shell am instrument -w `
                 -e class com.example.measurement.V37MeasurementPersistenceInstrumentedTest `
                 com.aistudio.humanstrength.kfqjza.test/androidx.test.runner.AndroidJUnitRunner
-            if ($LASTEXITCODE -ne 0 -or $result -notmatch "OK \(2 tests\)") { throw "V37 instrumentation failed at font scale $scale`n$result" }
+            $instrumentExit = $LASTEXITCODE
+            $receipt = $result -join "`n"
+            if ($instrumentExit -ne 0 -or $receipt -notmatch "OK \(2 tests\)") {
+                throw "V37 instrumentation failed at font scale $scale`n$receipt"
+            }
         }
     } finally {
         adb -s $Serial shell settings put system font_scale $before

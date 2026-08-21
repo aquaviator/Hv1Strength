@@ -376,6 +376,7 @@ class ActiveWorkoutViewModel(
                         put("targetDistance", set.targetDistance ?: JSONObject.NULL)
                         put("tempo", set.tempo ?: JSONObject.NULL)
                         put("notes", set.notes ?: JSONObject.NULL)
+                        put("additionalMetrics", JSONObject(set.additionalMetrics))
                     })
                 }
                 put(exId, arr)
@@ -409,7 +410,10 @@ class ActiveWorkoutViewModel(
                     targetDuration = if (s.isNull("targetDuration")) null else s.getInt("targetDuration"),
                     targetDistance = if (s.isNull("targetDistance")) null else s.getDouble("targetDistance").toFloat(),
                     tempo = if (s.isNull("tempo")) null else s.getString("tempo"),
-                    notes = if (s.isNull("notes")) null else s.getString("notes")
+                    notes = if (s.isNull("notes")) null else s.getString("notes"),
+                    additionalMetrics = s.optJSONObject("additionalMetrics")?.let { metrics ->
+                        metrics.keys().asSequence().associateWith { metrics.getDouble(it) }
+                    } ?: emptyMap()
                 ))
             }
             map[exId] = list
@@ -1014,6 +1018,18 @@ class ActiveWorkoutViewModel(
         }
     }
 
+    fun updateAdditionalMetric(exerciseId: String, setIndex: Int, metricKey: String, value: Double?) {
+        require(metricKey in com.example.measurement.CanonicalMetricDictionary.definitions)
+        val state = _activeWorkoutState.value ?: return
+        val sets = state.sets[exerciseId]?.toMutableList() ?: return
+        if (setIndex !in sets.indices) return
+        val current = sets[setIndex]
+        val updated = current.additionalMetrics.toMutableMap()
+        if (value == null) updated.remove(metricKey) else updated[metricKey] = value
+        sets[setIndex] = current.copy(additionalMetrics = updated)
+        _activeWorkoutState.value = state.copy(sets = state.sets + (exerciseId to sets))
+    }
+
     fun confirmCasualSuperset(exIdA: String, exIdB: String) {
         val currentState = _activeWorkoutState.value ?: return
         val newSuperset = CasualSuperset(
@@ -1146,11 +1162,13 @@ class ActiveWorkoutViewModel(
                     val insertedId = repository.insertSession(session).toInt()
 
                     val loggedSets = mutableListOf<LoggedSet>()
+                    val additionalMetrics = mutableMapOf<Pair<String, Int>, Map<String, Double>>()
                     for (exercise in currentState.exercises) {
                         val setsList = currentState.sets[exercise.id] ?: emptyList()
                         for (set in setsList) {
                             val shouldSave = set.isCompleted || (setsList.none { it.isCompleted } && set.weight > 0)
                             if (shouldSave) {
+                                if (set.additionalMetrics.isNotEmpty()) additionalMetrics[exercise.id to set.setNumber] = set.additionalMetrics
                                 loggedSets.add(
                                     LoggedSet(
                                         sessionId = insertedId,
@@ -1177,7 +1195,14 @@ class ActiveWorkoutViewModel(
                     }
 
                     if (loggedSets.isNotEmpty()) {
-                        repository.insertLoggedSets(loggedSets)
+                        val storedSets=repository.insertLoggedSets(loggedSets)
+                        val catalogue=com.example.catalogue.ExerciseCatalogueRuntime.current(context)
+                        storedSets.forEach { stored ->
+                            val values=additionalMetrics[stored.exerciseId to stored.setNumber].orEmpty()
+                            val governed=catalogue.exercises.firstOrNull { it.id==stored.exerciseId }
+                            if (values.isNotEmpty() && governed!=null) repository.saveAdditionalMetrics(
+                                stored, com.example.measurement.ExerciseMetricProfileResolver.resolve(governed), values)
+                        }
                     } else {
                         currentState.exercises.firstOrNull()?.let { firstExercise ->
                             repository.insertLoggedSet(

@@ -598,7 +598,7 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
         }
     }
 
-    suspend fun insertLoggedSets(sets: List<LoggedSet>) {
+    suspend fun insertLoggedSets(sets: List<LoggedSet>): List<LoggedSet> {
         val now = System.currentTimeMillis()
         val deviceId = DeviceIdGenerator.getOrGenerateDeviceId()
         val updatedList = sets.map { set ->
@@ -645,6 +645,17 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
                 )
             }
         }
+        return updatedList
+    }
+
+    suspend fun saveAdditionalMetrics(set: LoggedSet, profile: com.example.measurement.ExerciseMetricProfile, values: Map<String, Double>) {
+        if (values.isEmpty()) return
+        com.example.measurement.MeasurementRepository(dao).saveObservations(
+            set.globalId, profile, values.toSortedMap().map { (key, value) ->
+                val unit=com.example.measurement.CanonicalMetricDictionary.require(key).canonicalUnit
+                com.example.measurement.ObservationInput(com.example.measurement.MetricInput(key, numericValue=value, unitKey=unit))
+            }, System.currentTimeMillis()
+        )
     }
 
     suspend fun deleteSetsForSession(sessionId: Int) {

@@ -484,6 +484,8 @@ fun ActiveExerciseCard(
     onDurationChange: (Int) -> Unit,
     distance: Float?,
     onDistanceChange: (Float) -> Unit,
+    additionalMetrics: Map<String, Double> = emptyMap(),
+    onAdditionalMetricChange: (String, Double?) -> Unit = { _, _ -> },
     // Previous Session
     prevSummary: String,
     daysAgoText: String?,
@@ -703,6 +705,25 @@ fun ActiveExerciseCard(
                         isEditing = false, onEditToggle = {}, onDecrement = { onDistanceChange(((distance ?: 0f) - 0.1f).coerceAtLeast(0f)) },
                         onIncrement = { onDistanceChange((distance ?: 0f) + 0.1f) }, keyboardType = KeyboardType.Decimal, subtext = "Distance", modifier = Modifier.weight(1f))
                 }
+            }
+
+            val basicMetrics = setOf("repetitions", "external_load", "assistance", "duration", "distance", "rpe", "tempo", "rir", "side", "intervals")
+            capabilities.metricProfile?.recording?.filterNot { it in basicMetrics }?.sorted()?.forEach { metricKey ->
+                val definition = com.example.measurement.CanonicalMetricDictionary.require(metricKey)
+                val unit = definition.canonicalUnit?.let { com.example.measurement.CanonicalUnitRegistry.require(it).symbol }.orEmpty()
+                val current = additionalMetrics[metricKey] ?: 0.0
+                TrainingStepper(
+                    label = definition.label,
+                    value = "${current.toString().removeSuffix(".0")} $unit".trim(),
+                    onValueChange = { raw -> raw.substringBefore(' ').toDoubleOrNull()?.takeIf { it >= 0.0 }?.let { onAdditionalMetricChange(metricKey, it) } },
+                    isEditing = false,
+                    onEditToggle = {},
+                    onDecrement = { onAdditionalMetricChange(metricKey, (current - 1.0).coerceAtLeast(0.0)) },
+                    onIncrement = { onAdditionalMetricChange(metricKey, current + 1.0) },
+                    keyboardType = KeyboardType.Decimal,
+                    subtext = "Optional ${definition.label.lowercase()}",
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             HorizontalDivider(color = SlateBorderColor.copy(alpha = 0.4f), thickness = 1.dp)
