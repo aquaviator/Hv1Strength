@@ -46,6 +46,14 @@ const H1 = "human_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const H2 = "human_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const COLLECTIONS = ["profile", "weight", "tape", "customExercises", "templates",
     "templateExercises", "templateSets", "sessions", "loggedSets", "processedCommands", "trainingPlans", "plannedWorkouts"];
+const publishedVersion = (humanUserId, globalId, contentType) => ({
+    schemaVersion: `humanv1.${contentType}/1`, globalId, humanUserId, revision: 1,
+    publicationState: "PUBLISHED", tombstoneState: "ACTIVE", sourceDraftId: globalId,
+    payload: contentType === "plan" ? { weeks: [{ placements: [{ workoutVersionId: "workout-1_r1_aaaaaaaaaaaa" }] }] } : {},
+    createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
+    publishedAt: "2026-01-01T00:00:00.000Z", contentChecksum: "a".repeat(64),
+    versionId: `${globalId}_r1_aaaaaaaaaaaa`, contentType, compatibleTags: []
+});
 describe("Strength Firestore trusted identity rules", function () {
     this.timeout(30_000);
     let env;
@@ -168,6 +176,38 @@ describe("Strength Firestore trusted identity rules", function () {
             loggedSetGlobalId: "set-1", metricKey: "power", revision: 1 }));
         await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(foreignDb, path), { schemaVersion: 14, globalId: "measurement-1", humanUserId: H1,
             loggedSetGlobalId: "set-1", metricKey: "power", revision: 1 }));
+    });
+    it("allows owner publication creates and reads while keeping versions immutable", async () => {
+        const db = env.authenticatedContext("uid-a").firestore();
+        for (const [collectionName, contentType] of [
+            ["publishedWorkouts", "workout"], ["publishedPlans", "plan"], ["publishedProtocols", "protocol"]
+        ]) {
+            const value = publishedVersion(H1, `${contentType}-1`, contentType);
+            const ref = (0, firestore_1.doc)(db, `users/${H1}/${collectionName}/${value.versionId}`);
+            await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.setDoc)(ref, value));
+            await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.getDoc)(ref));
+            await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)(ref, { ...value, revision: 2 }));
+            await (0, rules_unit_testing_1.assertFails)((0, firestore_1.deleteDoc)(ref));
+        }
+    });
+    it("denies cross-owner publication access and owner reassignment", async () => {
+        const owner = env.authenticatedContext("uid-a").firestore();
+        const foreign = env.authenticatedContext("uid-b").firestore();
+        const value = publishedVersion(H1, "workout-1", "workout");
+        const path = `users/${H1}/publishedWorkouts/${value.versionId}`;
+        await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.setDoc)((0, firestore_1.doc)(owner, path), value));
+        await (0, rules_unit_testing_1.assertFails)((0, firestore_1.getDoc)((0, firestore_1.doc)(foreign, path)));
+        await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(foreign, `users/${H1}/publishedWorkouts/foreign_r1_aaaaaaaaaaaa`), publishedVersion(H1, "foreign", "workout")));
+        await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(owner, `users/${H1}/publishedWorkouts/forged_r1_aaaaaaaaaaaa`), publishedVersion(H2, "forged", "workout")));
+    });
+    it("rejects malformed publication schemas, state pairs, IDs and checksums", async () => {
+        const db = env.authenticatedContext("uid-a").firestore();
+        const base = `users/${H1}/publishedWorkouts`;
+        const valid = publishedVersion(H1, "workout-1", "workout");
+        await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(db, `${base}/wrong-version`), valid));
+        await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(db, `${base}/bad-checksum`), { ...valid, versionId: "bad-checksum", contentChecksum: "z".repeat(64) }));
+        await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(db, `${base}/bad-state`), { ...valid, versionId: "bad-state", publicationState: "PUBLISHED", tombstoneState: "SOFT_DELETED" }));
+        await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(db, `${base}/bad-revision`), { ...valid, versionId: "bad-revision", revision: 0 }));
     });
     it("denies non-owners for every Strength synchronized collection", async () => {
         const db = env.authenticatedContext("uid-b").firestore();

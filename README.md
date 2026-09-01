@@ -19,3 +19,10 @@ View your app in AI Studio: https://ai.studio/apps/46311460-5f16-4df8-b526-a642a
 4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
 5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
 6. Run the app on an emulator or physical device
+# Shared Firestore rules ownership
+
+`firestore.rules` in this repository is the temporarily governed, deployable
+rules contract for the `hv1-platform` default Firestore database. A rules
+deployment always replaces the complete contract; the Workout Studio copy is
+for compatibility testing and must match this file byte-for-byte. Rules and
+indexes require separate production deployment authorization.

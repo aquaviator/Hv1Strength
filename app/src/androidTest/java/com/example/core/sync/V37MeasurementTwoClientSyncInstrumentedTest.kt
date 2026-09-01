@@ -22,7 +22,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class V37MeasurementTwoClientSyncInstrumentedTest {
     private val projectId = "demo-hv1-planner-sync"
-    private val host = "10.0.2.2"
+    private val host = "127.0.0.1"
     private val owner = "human_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     private val uid = "planner-client-owner"
     private lateinit var context: Context
