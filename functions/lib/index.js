@@ -37,6 +37,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteUserAccount = exports.rtdnHandler = exports.initializeAccountTrial = exports.verifyPurchase = exports.FIRESTORE_USER_SUBCOLLECTIONS = exports.MILLIS_PER_DAY = exports.ACCOUNT_TRIAL_DOCUMENT_ID = exports.TRIAL_POLICY_PATH = exports.FUNCTION_REGION = exports.EXPECTED_PRODUCT_ID = exports.EXPECTED_PACKAGE_NAME = exports.ensureHumanIdentity = void 0;
+exports.isAllowedWorkoutStudioOrigin = isAllowedWorkoutStudioOrigin;
 exports.parseTrialPolicy = parseTrialPolicy;
 exports.getPurchaseDocId = getPurchaseDocId;
 exports.purgeUserCloudData = purgeUserCloudData;
@@ -76,6 +77,13 @@ exports.FUNCTION_REGION = "europe-west1";
 exports.TRIAL_POLICY_PATH = "platform_config/trial_policy";
 exports.ACCOUNT_TRIAL_DOCUMENT_ID = "human_v1";
 exports.MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
+function isAllowedWorkoutStudioOrigin(origin) {
+    if (!origin)
+        return true; // Native Android and trusted server callers do not send Origin.
+    return origin === "https://studio.humanv1.com" ||
+        origin === "https://hv1-workout-studio.web.app" ||
+        /^https:\/\/hv1-workout-studio--[a-z0-9-]+\.web\.app$/.test(origin);
+}
 function parseTrialPolicy(data) {
     if (!data ||
         typeof data.trialEnabled !== "boolean" ||
@@ -428,6 +436,21 @@ exports.verifyPurchase = (0, https_1.onRequest)({ region: exports.FUNCTION_REGIO
  * created by this trusted backend.
  */
 exports.initializeAccountTrial = (0, https_1.onRequest)({ region: exports.FUNCTION_REGION }, async (req, res) => {
+    const origin = req.headers.origin;
+    if (!isAllowedWorkoutStudioOrigin(origin)) {
+        res.status(403).json({ code: "ORIGIN_NOT_ALLOWED", message: "Origin is not allowed" });
+        return;
+    }
+    if (origin) {
+        res.set("Access-Control-Allow-Origin", origin);
+        res.set("Vary", "Origin");
+        res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+        res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    }
+    if (req.method === "OPTIONS") {
+        res.status(204).send("");
+        return;
+    }
     if (req.method !== "POST") {
         res.status(405).json({ code: "MALFORMED_REQUEST", message: "Method Not Allowed. Only POST is supported." });
         return;

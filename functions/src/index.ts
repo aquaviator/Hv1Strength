@@ -34,6 +34,13 @@ export const TRIAL_POLICY_PATH = "platform_config/trial_policy";
 export const ACCOUNT_TRIAL_DOCUMENT_ID = "human_v1";
 export const MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
 
+export function isAllowedWorkoutStudioOrigin(origin: string | undefined): boolean {
+  if (!origin) return true; // Native Android and trusted server callers do not send Origin.
+  return origin === "https://studio.humanv1.com" ||
+    origin === "https://hv1-workout-studio.web.app" ||
+    /^https:\/\/hv1-workout-studio--[a-z0-9-]+\.web\.app$/.test(origin);
+}
+
 export interface TrialPolicy {
   trialEnabled: boolean;
   trialDurationDays: number;
@@ -476,6 +483,21 @@ export const verifyPurchase = onRequest(
 export const initializeAccountTrial = onRequest(
   { region: FUNCTION_REGION },
   async (req, res) => {
+    const origin = req.headers.origin;
+    if (!isAllowedWorkoutStudioOrigin(origin)) {
+      res.status(403).json({ code: "ORIGIN_NOT_ALLOWED", message: "Origin is not allowed" });
+      return;
+    }
+    if (origin) {
+      res.set("Access-Control-Allow-Origin", origin);
+      res.set("Vary", "Origin");
+      res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+      res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    }
+    if (req.method === "OPTIONS") {
+      res.status(204).send("");
+      return;
+    }
     if (req.method !== "POST") {
       res.status(405).json({ code: "MALFORMED_REQUEST", message: "Method Not Allowed. Only POST is supported." });
       return;
