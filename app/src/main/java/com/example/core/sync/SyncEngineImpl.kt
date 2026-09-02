@@ -387,18 +387,7 @@ class SyncEngineImpl internal constructor(
             "CUSTOM_EXERCISE", "EXERCISE" -> {
                 val exercise = repository.getExerciseByGlobalId(entityGlobalId)
                 if (exercise != null) {
-                    docData["globalId"] = exercise.globalId
-                    docData["id"] = exercise.id
-                    docData["name"] = exercise.name
-                    docData["category"] = exercise.category
-                    docData["isCustom"] = exercise.isCustom
-                    docData["humanUserId"] = exercise.humanUserId
-                    docData["createdAt"] = exercise.createdAt
-                    docData["updatedAt"] = exercise.updatedAt
-                    docData["revision"] = exercise.revision
-                    docData["deletedAt"] = exercise.deletedAt
-                    docData["originDeviceId"] = exercise.originDeviceId
-                    docData["lastSyncedAt"] = now
+                    docData.putAll(customExerciseDocument(exercise, now))
 
                     docRef = fs.collection("users").document(humanUserId)
                         .collection("customExercises").document(exercise.globalId)
@@ -1556,6 +1545,21 @@ class SyncEngineImpl internal constructor(
 
     companion object {
         private val synchronizationMutex = Mutex()
+
+        internal fun customExerciseDocument(exercise: Exercise, syncedAt: Long): Map<String, Any?> = mapOf(
+            "globalId" to exercise.globalId,
+            "id" to exercise.id,
+            "name" to exercise.name,
+            "category" to exercise.category,
+            "isCustom" to exercise.isCustom,
+            "humanUserId" to exercise.humanUserId,
+            "createdAt" to exercise.createdAt,
+            "updatedAt" to exercise.updatedAt,
+            "revision" to exercise.revision,
+            "deletedAt" to exercise.deletedAt,
+            "originDeviceId" to exercise.originDeviceId,
+            "lastSyncedAt" to syncedAt
+        )
 
         internal fun isProvenConcurrentEdit(
             localRevision: Long,

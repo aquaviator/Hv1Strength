@@ -144,20 +144,37 @@ describe("Strength Firestore trusted identity rules", function () {
     it("allows the owner for every Strength synchronized collection", async () => {
         const db = env.authenticatedContext("uid-a").firestore();
         for (const collection of COLLECTIONS) {
-            const data = collection === "trainingPlans" || collection === "plannedWorkouts"
-                ? { value: collection, humanUserId: H1 } : { value: collection };
-            await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.setDoc)((0, firestore_1.doc)(db, `users/${H1}/${collection}/test`), data));
-            await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.getDoc)((0, firestore_1.doc)(db, `users/${H1}/${collection}/test`)));
+            const documentId = collection === "customExercises" ? "exercise_android12" : `synthetic-${collection}`;
+            const versioned = { globalId: documentId, humanUserId: H1, createdAt: 1, updatedAt: 1,
+                deletedAt: null, revision: 1, originDeviceId: "synthetic-device" };
+            const data = collection === "customExercises"
+                ? { globalId: documentId, id: "custom_12345678-1234-1234-1234-123456789abc",
+                    humanUserId: H1, name: "Android private", category: "Chest", isCustom: true,
+                    createdAt: 1, updatedAt: 1, deletedAt: null, revision: 1,
+                    originDeviceId: "device_android_1", lastSyncedAt: 2 }
+                : collection === "templates"
+                    ? { ...versioned, name: "Synthetic routine", exerciseIdsJson: "[]" }
+                    : collection === "templateExercises"
+                        ? { ...versioned, templateGlobalId: "synthetic-template", exerciseId: "bench_press", position: 0 }
+                        : collection === "templateSets"
+                            ? { ...versioned, templateExerciseGlobalId: "synthetic-template-exercise", position: 0, setType: "WORKING" }
+                            : collection === "trainingPlans" || collection === "plannedWorkouts"
+                                ? { ...versioned, value: collection } : { value: collection };
+            await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.setDoc)((0, firestore_1.doc)(db, `users/${H1}/${collection}/${documentId}`), data));
+            await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.getDoc)((0, firestore_1.doc)(db, `users/${H1}/${collection}/${documentId}`)));
         }
         assert_1.default.strictEqual(COLLECTIONS.length, 12);
     });
     it("denies planner ownership forgery on create and update", async () => {
         const db = env.authenticatedContext("uid-a").firestore();
         for (const collection of ["trainingPlans", "plannedWorkouts"]) {
-            const ref = (0, firestore_1.doc)(db, `users/${H1}/${collection}/test`);
-            await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)(ref, { humanUserId: H2 }));
-            await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.setDoc)(ref, { humanUserId: H1 }));
-            await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)(ref, { humanUserId: H2 }));
+            const globalId = `synthetic-${collection}-ownership`;
+            const ref = (0, firestore_1.doc)(db, `users/${H1}/${collection}/${globalId}`);
+            const valid = { globalId, humanUserId: H1, createdAt: 1, updatedAt: 1,
+                deletedAt: null, revision: 1, originDeviceId: "synthetic-device" };
+            await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)(ref, { ...valid, humanUserId: H2 }));
+            await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.setDoc)(ref, valid));
+            await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)(ref, { ...valid, humanUserId: H2, revision: 2, updatedAt: 2 }));
         }
     });
     it("allows only immutable-owner schema-14 measurement records with monotonic revisions", async () => {
