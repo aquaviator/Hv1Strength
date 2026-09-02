@@ -70,6 +70,11 @@ describe("Strength Firestore trusted identity rules", function () {
             await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, `users/${H1}`), { ownerFirebaseUid: "uid-a", status: "ACTIVE", schemaVersion: 1 });
             await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, "accounts/uid-b"), { humanUserId: H2, status: "ACTIVE", schemaVersion: 1 });
             await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, `users/${H2}`), { ownerFirebaseUid: "uid-b", status: "ACTIVE", schemaVersion: 1 });
+            await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, "accounts/uid-a/entitlements/current"), {
+                schemaVersion: 1, firebaseUid: "uid-a", humanUserId: H1,
+                normalizedState: "ACTIVE_UNTIL_EXPIRY", productScope: "WORKOUT_STUDIO",
+                expiryAt: new Date("2099-01-01T00:00:00.000Z")
+            });
             await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, `users/${H1}/profile/main`), { value: "a" });
             await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, `users/${H2}/profile/main`), { value: "b" });
             await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, "exercise_catalogue/current"), { releaseId: "published-1", status: "published", channel: "production" });

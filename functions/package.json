@@ -11,7 +11,8 @@
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
     "test": "npm run build && mocha --reporter spec lib/test/index.test.js lib/test/identity.test.js lib/test/entitlement.contract.test.js",
-    "test:rules": "npm run build && firebase emulators:exec --project demo-hv1-strength-local --only firestore \"mocha --reporter spec lib/test/firestore.rules.test.js\""
+    "test:rules": "npm run build && firebase emulators:exec --project demo-hv1-strength-local --only firestore \"mocha --reporter spec lib/test/firestore.rules.test.js\"",
+    "grant:studio-support": "node scripts/grant-workout-studio-support.mjs"
   },
   "engines": {
     "node": "22"

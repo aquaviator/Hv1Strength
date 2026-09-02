@@ -67,7 +67,8 @@ create("debugConfig") {
   testOptions {
     unitTests.isIncludeAndroidResources = true
     unitTests.all {
-      val robolectricCache = File(rootProject.projectDir, ".robolectric-cache").absolutePath
+      val robolectricCache = System.getenv("HV1_ROBOLECTRIC_CACHE")
+        ?: File(System.getProperty("java.io.tmpdir"), "hv1-robolectric-m2").absolutePath
       it.systemProperty("maven.repo.local", robolectricCache)
     }
   }
