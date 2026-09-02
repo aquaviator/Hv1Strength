@@ -23,6 +23,32 @@ data class CatalogueReleaseState(
     val lastFailure: String? = null
 )
 
+@Entity(
+    tableName = "studio_workout_link",
+    indices = [Index("humanUserId"), Index("workoutGlobalId"), Index("localRoutineId")]
+)
+data class StudioWorkoutLink(
+    @PrimaryKey val versionId: String,
+    val humanUserId: String,
+    val workoutGlobalId: String,
+    val sourceRevision: Long,
+    val contentChecksum: String,
+    val catalogueReleaseId: String,
+    val title: String,
+    val description: String,
+    val discipline: String,
+    val sourcePayloadJson: String,
+    val localRoutineId: Int,
+    val localRoutineRevisionAtApply: Long,
+    val appliedAt: Long,
+    val applicationId: String = "HUMAN_STRENGTH",
+    val acknowledgementId: String,
+    val acknowledgementState: String = "PENDING",
+    val conflictState: String? = null,
+    val tombstoneState: String = "ACTIVE",
+    val isLatest: Boolean = true
+)
+
 @Entity(tableName = "user_profile")
 data class UserProfile(
     @PrimaryKey val id: String, // "offline" or Google User ID

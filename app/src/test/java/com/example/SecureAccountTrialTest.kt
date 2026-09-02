@@ -71,6 +71,23 @@ class SecureAccountTrialTest {
     }
 
     @Test
+    fun strengthSupportGrantsAccessWithoutRewritingHistoricalExpiredTrialAndRestoresOffline() = runBlocking {
+        val now = System.currentTimeMillis()
+        val historicalEnd = now - DAY
+        val support = AccountTrialResult.SupportActive("uid-support", now, now + 14L * DAY, historicalEnd, now)
+        val online = createRepository("uid-support", FakeAccountTrialClient(support))
+        waitUntil { online.appAccessState.value is AppAccessState.SupportAccessActive }
+        val state = online.appAccessState.value as AppAccessState.SupportAccessActive
+        assertEquals(historicalEnd, state.historicalTrialEndMillis)
+        assertEquals(now + 14L * DAY, state.expiryDateMillis)
+        assertTrue(state.hasAppAccess)
+
+        val offline = createRepository("uid-support", FakeAccountTrialClient(AccountTrialResult.Unavailable))
+        waitUntil { offline.appAccessState.value is AppAccessState.SupportAccessActive }
+        assertEquals(historicalEnd, (offline.appAccessState.value as AppAccessState.SupportAccessActive).historicalTrialEndMillis)
+    }
+
+    @Test
     fun backendFailureDoesNotGrantOrMarkTrialExpired() = runBlocking {
         val client = FakeAccountTrialClient(AccountTrialResult.Unavailable)
         val entitlementRepository = createRepository("uid-c", client)

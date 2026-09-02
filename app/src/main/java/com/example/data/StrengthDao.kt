@@ -5,6 +5,33 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface StrengthDao {
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertStudioWorkoutLink(link: StudioWorkoutLink)
+
+    @Update
+    suspend fun updateStudioWorkoutLink(link: StudioWorkoutLink)
+
+    @Query("SELECT * FROM studio_workout_link WHERE versionId = :versionId LIMIT 1")
+    suspend fun getStudioWorkoutLink(versionId: String): StudioWorkoutLink?
+
+    @Query("SELECT * FROM studio_workout_link WHERE humanUserId = :owner AND workoutGlobalId = :workoutGlobalId AND isLatest = 1 ORDER BY sourceRevision DESC LIMIT 1")
+    suspend fun getLatestStudioWorkoutLink(owner: String, workoutGlobalId: String): StudioWorkoutLink?
+
+    @Query("SELECT * FROM studio_workout_link WHERE humanUserId = :owner ORDER BY workoutGlobalId, sourceRevision")
+    suspend fun getStudioWorkoutLinks(owner: String): List<StudioWorkoutLink>
+
+    @Query("UPDATE studio_workout_link SET isLatest = 0 WHERE humanUserId = :owner AND workoutGlobalId = :workoutGlobalId AND isLatest = 1")
+    suspend fun clearLatestStudioWorkoutLink(owner: String, workoutGlobalId: String)
+
+    @Query("UPDATE studio_workout_link SET acknowledgementState = :state WHERE versionId = :versionId")
+    suspend fun markStudioAcknowledgement(versionId: String, state: String)
+
+    @Query("DELETE FROM metric_prescription WHERE templateSetGlobalId IN (SELECT globalId FROM workout_template_set WHERE templateExerciseId IN (SELECT id FROM workout_template_exercise WHERE templateId = :templateId))")
+    suspend fun deleteMetricPrescriptionsForTemplate(templateId: Int)
+
+    @Transaction
+    suspend fun applyStudioWorkoutTransaction(value: StudioWorkoutImport): StudioWorkoutApplyResult =
+        applyStudioWorkoutGraph(value)
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertMetricPrescriptions(values: List<MetricPrescriptionEntity>)
 

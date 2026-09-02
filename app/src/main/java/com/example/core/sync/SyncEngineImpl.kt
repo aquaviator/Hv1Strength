@@ -250,6 +250,8 @@ class SyncEngineImpl internal constructor(
             // 3. Download Remote Changes
             SyncManager.updateStatus("Synchronizing")
             downloadRemoteChanges(humanUserId, deviceId, dao)
+            StudioWorkoutIngestionRepository(requireNotNull(firestore), dao)
+                .synchronize(humanUserId, trustedIdentity.firebaseUid)
 
             // 4. Mark successful synchronization
             SyncManager.updateLastSync(System.currentTimeMillis())

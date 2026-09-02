@@ -2,7 +2,7 @@ import assert from "assert";
 import * as fs from "fs";
 import * as path from "path";
 import { assertFails, assertSucceeds, initializeTestEnvironment, RulesTestEnvironment } from "@firebase/rules-unit-testing";
-import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 
 const PROJECT_ID = "demo-hv1-strength-local";
 const H1 = "human_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -172,6 +172,28 @@ describe("Strength Firestore trusted identity rules", function() {
       publishedVersion(H1, "foreign", "workout")));
     await assertFails(setDoc(doc(owner, `users/${H1}/publishedWorkouts/forged_r1_aaaaaaaaaaaa`),
       publishedVersion(H2, "forged", "workout")));
+  });
+  it("allows only deterministic owner-bound immutable Human Strength delivery acknowledgements", async () => {
+    const owner = env.authenticatedContext("uid-a").firestore();
+    const foreign = env.authenticatedContext("uid-b").firestore();
+    const publication = publishedVersion(H1, "workout-1", "workout");
+    await assertSucceeds(setDoc(doc(owner, `users/${H1}/publishedWorkouts/${publication.versionId}`), publication));
+    const ackId = "strength_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const path = `users/${H1}/workoutDeliveryAcks/${ackId}`;
+    const value = { schemaVersion: 1, acknowledgementId: ackId, humanUserId: H1,
+      workoutGlobalId: "workout-1", versionId: "workout-1_r1_aaaaaaaaaaaa",
+      applicationId: "HUMAN_STRENGTH", appliedChecksum: "a".repeat(64), sourceRevision: 1,
+      state: "APPLIED", reasonCode: null, clientAppliedAtMillis: 1, createdAt: serverTimestamp() };
+    await assertSucceeds(setDoc(doc(owner, path), value));
+    await assertSucceeds(getDoc(doc(owner, path)));
+    await assertFails(getDoc(doc(foreign, path)));
+    await assertFails(setDoc(doc(owner, path), { ...value, state: "CONFLICT" }));
+    await assertFails(deleteDoc(doc(owner, path)));
+    await assertFails(setDoc(doc(owner, `users/${H1}/workoutDeliveryAcks/wrong`), value));
+    await assertFails(setDoc(doc(owner, `users/${H1}/workoutDeliveryAcks/forged`), { ...value,
+      acknowledgementId: "forged", humanUserId: H2 }));
+    await assertFails(setDoc(doc(owner, `users/${H1}/workoutDeliveryAcks/wrong-checksum`), { ...value,
+      acknowledgementId: "wrong-checksum", appliedChecksum: "b".repeat(64) }));
   });
   it("rejects malformed publication schemas, state pairs, IDs and checksums", async () => {
     const db = env.authenticatedContext("uid-a").firestore();

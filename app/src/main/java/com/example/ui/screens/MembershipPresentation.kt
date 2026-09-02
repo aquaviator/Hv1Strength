@@ -56,6 +56,14 @@ internal fun membershipPresentation(
         showAnnualProduct = false,
         allowPurchase = false
     )
+    is AppAccessState.SupportAccessActive -> MembershipPresentation(
+        primaryTitle = "Human Strength internal testing",
+        primaryStatus = "Active until ${formatMembershipDate(state.expiryDateMillis)}",
+        description = "Temporary support access is active. Your introductory Human V1 access remains expired.",
+        trialEndsAtMillis = state.historicalTrialEndMillis,
+        showAnnualProduct = false,
+        allowPurchase = false
+    )
     AppAccessState.GracePeriod -> MembershipPresentation(
         primaryTitle = "Human Strength Annual",
         primaryStatus = "Payment grace period",

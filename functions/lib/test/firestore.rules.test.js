@@ -205,6 +205,28 @@ describe("Strength Firestore trusted identity rules", function () {
         await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(foreign, `users/${H1}/publishedWorkouts/foreign_r1_aaaaaaaaaaaa`), publishedVersion(H1, "foreign", "workout")));
         await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(owner, `users/${H1}/publishedWorkouts/forged_r1_aaaaaaaaaaaa`), publishedVersion(H2, "forged", "workout")));
     });
+    it("allows only deterministic owner-bound immutable Human Strength delivery acknowledgements", async () => {
+        const owner = env.authenticatedContext("uid-a").firestore();
+        const foreign = env.authenticatedContext("uid-b").firestore();
+        const publication = publishedVersion(H1, "workout-1", "workout");
+        await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.setDoc)((0, firestore_1.doc)(owner, `users/${H1}/publishedWorkouts/${publication.versionId}`), publication));
+        const ackId = "strength_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const path = `users/${H1}/workoutDeliveryAcks/${ackId}`;
+        const value = { schemaVersion: 1, acknowledgementId: ackId, humanUserId: H1,
+            workoutGlobalId: "workout-1", versionId: "workout-1_r1_aaaaaaaaaaaa",
+            applicationId: "HUMAN_STRENGTH", appliedChecksum: "a".repeat(64), sourceRevision: 1,
+            state: "APPLIED", reasonCode: null, clientAppliedAtMillis: 1, createdAt: (0, firestore_1.serverTimestamp)() };
+        await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.setDoc)((0, firestore_1.doc)(owner, path), value));
+        await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.getDoc)((0, firestore_1.doc)(owner, path)));
+        await (0, rules_unit_testing_1.assertFails)((0, firestore_1.getDoc)((0, firestore_1.doc)(foreign, path)));
+        await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(owner, path), { ...value, state: "CONFLICT" }));
+        await (0, rules_unit_testing_1.assertFails)((0, firestore_1.deleteDoc)((0, firestore_1.doc)(owner, path)));
+        await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(owner, `users/${H1}/workoutDeliveryAcks/wrong`), value));
+        await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(owner, `users/${H1}/workoutDeliveryAcks/forged`), { ...value,
+            acknowledgementId: "forged", humanUserId: H2 }));
+        await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(owner, `users/${H1}/workoutDeliveryAcks/wrong-checksum`), { ...value,
+            acknowledgementId: "wrong-checksum", appliedChecksum: "b".repeat(64) }));
+    });
     it("rejects malformed publication schemas, state pairs, IDs and checksums", async () => {
         const db = env.authenticatedContext("uid-a").firestore();
         const base = `users/${H1}/publishedWorkouts`;

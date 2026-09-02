@@ -32,9 +32,10 @@ import kotlinx.coroutines.launch
         MetricPrescriptionEntity::class,
         MetricObservationEntity::class,
         MetricSegmentEntity::class,
-        MetricSampleEntity::class
+        MetricSampleEntity::class,
+        StudioWorkoutLink::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = false
 )
 abstract class StrengthDatabase : RoomDatabase() {
@@ -42,6 +43,14 @@ abstract class StrengthDatabase : RoomDatabase() {
     abstract fun strengthDao(): StrengthDao
 
     companion object {
+        val MIGRATION_15_16 = object : androidx.room.migration.Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `studio_workout_link` (`versionId` TEXT NOT NULL, `humanUserId` TEXT NOT NULL, `workoutGlobalId` TEXT NOT NULL, `sourceRevision` INTEGER NOT NULL, `contentChecksum` TEXT NOT NULL, `catalogueReleaseId` TEXT NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `discipline` TEXT NOT NULL, `sourcePayloadJson` TEXT NOT NULL, `localRoutineId` INTEGER NOT NULL, `localRoutineRevisionAtApply` INTEGER NOT NULL, `appliedAt` INTEGER NOT NULL, `applicationId` TEXT NOT NULL, `acknowledgementId` TEXT NOT NULL, `acknowledgementState` TEXT NOT NULL, `conflictState` TEXT, `tombstoneState` TEXT NOT NULL, `isLatest` INTEGER NOT NULL, PRIMARY KEY(`versionId`))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_studio_workout_link_humanUserId` ON `studio_workout_link` (`humanUserId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_studio_workout_link_workoutGlobalId` ON `studio_workout_link` (`workoutGlobalId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_studio_workout_link_localRoutineId` ON `studio_workout_link` (`localRoutineId`)")
+            }
+        }
         val MIGRATION_14_15 = object : androidx.room.migration.Migration(14, 15) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE metric_observation ADD COLUMN humanUserId TEXT NOT NULL DEFAULT ''")
@@ -775,7 +784,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         StrengthDatabase::class.java,
                         "strength_database"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
                         .addCallback(StrengthDatabaseCallback(appCtx))
                         .build()
                     INSTANCE = instance

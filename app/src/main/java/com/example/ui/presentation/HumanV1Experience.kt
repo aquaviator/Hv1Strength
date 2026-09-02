@@ -33,6 +33,7 @@ fun membershipStatus(state: AppAccessState): ExperienceStatus = when (state) {
     is AppAccessState.TrialActive -> ExperienceStatus("Human V1 trial active", "${state.daysRemaining} days remaining.", ExperienceTone.POSITIVE)
     is AppAccessState.Subscribed -> ExperienceStatus("Human Strength Annual", "Subscription verified.", ExperienceTone.POSITIVE)
     is AppAccessState.SubscriptionActiveUntilExpiry -> ExperienceStatus("Human Strength Annual", "Active until the current subscription period ends.", ExperienceTone.POSITIVE)
+    is AppAccessState.SupportAccessActive -> ExperienceStatus("Human Strength internal testing", "Temporary support access is active; introductory access remains expired.", ExperienceTone.POSITIVE)
     AppAccessState.GracePeriod -> ExperienceStatus("Membership needs attention", "Access continues while Google Play resolves payment.", ExperienceTone.ATTENTION, "Manage subscription")
     AppAccessState.PaymentPending -> ExperienceStatus("Verification pending", "A purchase is processing; subscribed access is not yet confirmed.", ExperienceTone.ATTENTION, "Restore purchases")
     is AppAccessState.Expired -> ExperienceStatus("Access expired", "Choose a Human Strength membership to continue cloud-supported access.", ExperienceTone.BLOCKED, "View membership")

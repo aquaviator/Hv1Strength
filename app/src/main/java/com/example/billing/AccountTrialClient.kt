@@ -11,6 +11,13 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 sealed class AccountTrialResult {
+    data class SupportActive(
+        val uid: String,
+        val effectiveAtMillis: Long,
+        val expiryAtMillis: Long,
+        val historicalTrialEndMillis: Long,
+        val serverNowMillis: Long
+    ) : AccountTrialResult()
     data class Active(
         val uid: String,
         val trialStartedAtMillis: Long,
@@ -64,6 +71,15 @@ class FirebaseAccountTrialClient(
             val status = json.optString("status")
             if (status == "DISABLED") {
                 return@withContext AccountTrialResult.Disabled
+            }
+            if (status == "SUPPORT_ACTIVE") {
+                val effective = json.optLong("supportEffectiveAtMillis", Long.MIN_VALUE)
+                val expiry = json.optLong("supportExpiryAtMillis", Long.MIN_VALUE)
+                val historicalEnd = json.optLong("trialEndsAtMillis", Long.MIN_VALUE)
+                val serverNow = json.optLong("serverNowMillis", Long.MIN_VALUE)
+                if (effective <= 0L || expiry <= effective || historicalEnd <= 0L || serverNow <= 0L)
+                    return@withContext AccountTrialResult.Unavailable
+                return@withContext AccountTrialResult.SupportActive(user.uid, effective, expiry, historicalEnd, serverNow)
             }
 
             val startedAt = json.optLong("trialStartedAtMillis", Long.MIN_VALUE)

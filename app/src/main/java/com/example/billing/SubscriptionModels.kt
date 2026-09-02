@@ -55,6 +55,11 @@ sealed class AppAccessState {
     data class SubscriptionActiveUntilExpiry(
         val expiryDateMillis: Long
     ) : AppAccessState()
+
+    data class SupportAccessActive(
+        val expiryDateMillis: Long,
+        val historicalTrialEndMillis: Long
+    ) : AppAccessState()
     
     object GracePeriod : AppAccessState()
     object PaymentPending : AppAccessState()
@@ -73,7 +78,8 @@ sealed class AppAccessState {
      * Authoritative single entitlement check for application usage.
      */
     val hasAppAccess: Boolean
-        get() = this is TrialActive || this is Subscribed || this is SubscriptionActiveUntilExpiry || this is GracePeriod
+        get() = this is TrialActive || this is Subscribed || this is SubscriptionActiveUntilExpiry ||
+            this is SupportAccessActive || this is GracePeriod
 }
 
 /**

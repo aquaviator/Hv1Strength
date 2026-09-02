@@ -471,10 +471,14 @@ exports.initializeAccountTrial = (0, https_1.onRequest)({ region: exports.FUNCTI
     }
     const trialRef = db.collection("accounts").doc(uid)
         .collection("entitlements").doc(exports.ACCOUNT_TRIAL_DOCUMENT_ID);
+    const currentRef = db.collection("accounts").doc(uid)
+        .collection("entitlements").doc("current");
     const policyRef = db.doc(exports.TRIAL_POLICY_PATH);
     try {
         const result = await db.runTransaction(async (transaction) => {
-            const existing = await transaction.get(trialRef);
+            const [existing, current] = await Promise.all([
+                transaction.get(trialRef), transaction.get(currentRef)
+            ]);
             if (existing.exists) {
                 const data = existing.data();
                 const startedAt = data?.trialStartedAt;
@@ -482,6 +486,21 @@ exports.initializeAccountTrial = (0, https_1.onRequest)({ region: exports.FUNCTI
                 if (startedAt instanceof admin.firestore.Timestamp &&
                     endsAt instanceof admin.firestore.Timestamp) {
                     const serverNowMillis = Date.now();
+                    const strengthSupport = current.data()?.products?.HUMAN_STRENGTH;
+                    if (strengthSupport?.normalizedState === "ACTIVE_UNTIL_EXPIRY" &&
+                        strengthSupport?.source === "SUPPORT" &&
+                        strengthSupport?.effectiveAt instanceof admin.firestore.Timestamp &&
+                        strengthSupport?.expiryAt instanceof admin.firestore.Timestamp &&
+                        strengthSupport.expiryAt.toMillis() > serverNowMillis) {
+                        return {
+                            status: "SUPPORT_ACTIVE",
+                            supportEffectiveAtMillis: strengthSupport.effectiveAt.toMillis(),
+                            supportExpiryAtMillis: strengthSupport.expiryAt.toMillis(),
+                            trialStartedAtMillis: startedAt.toMillis(),
+                            trialEndsAtMillis: endsAt.toMillis(),
+                            serverNowMillis
+                        };
+                    }
                     return {
                         status: endsAt.toMillis() > serverNowMillis ? "ACTIVE" : "EXPIRED",
                         trialStartedAtMillis: startedAt.toMillis(),

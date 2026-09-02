@@ -24,7 +24,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class PlannerTwoClientSyncInstrumentedTest {
     private val projectId = "demo-hv1-planner-sync"
-    private val emulatorHost = "10.0.2.2"
+    private val emulatorHost = "127.0.0.1"
     private val humanA = "human_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     private val humanB = "human_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     private val uidA = "planner-client-owner"
@@ -37,7 +37,7 @@ class PlannerTwoClientSyncInstrumentedTest {
 
     @Before fun setUp() = runBlocking {
         check(projectId != "hv1-platform" && projectId.startsWith("demo-"))
-        check(emulatorHost == "10.0.2.2") { "Production endpoint guard failed" }
+        check(emulatorHost == "127.0.0.1") { "Production endpoint guard failed" }
         context = ApplicationProvider.getApplicationContext()
         appA = app("planner-client-a")
         appB = app("planner-client-b")
