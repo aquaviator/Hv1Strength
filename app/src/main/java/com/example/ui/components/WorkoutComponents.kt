@@ -28,6 +28,24 @@ import androidx.compose.ui.unit.sp
 import com.example.data.Exercise
 import com.example.data.WorkoutTemplate
 import com.example.ui.viewmodel.StrengthViewModel.TemplateExerciseState
+import com.example.ui.viewmodel.StrengthViewModel.TemplateSetState
+
+internal fun routineTargetSummary(set: TemplateSetState, isMetric: Boolean): String {
+    val details = mutableListOf<String>()
+    when {
+        set.targetRepsMin != null && set.targetRepsMax != null -> details += "${set.targetRepsMin}-${set.targetRepsMax}"
+        set.targetRepsMin != null -> details += "${set.targetRepsMin}+ reps"
+        set.targetRepsMax != null -> details += "${set.targetRepsMax} reps"
+    }
+    set.targetWeight?.let { details += "@ ${com.example.core.util.UnitConverter.formatWeight(it.toDouble(), isMetric)}" }
+    set.targetDurationSeconds?.let { details += "${it}s" }
+    set.targetDistance?.let {
+        val value = if (isMetric) it else it / 1.609344f
+        val formatted = if (value % 1f == 0f) value.toInt().toString() else "%.2f".format(value).trimEnd('0').trimEnd('.')
+        details += "$formatted ${if (isMetric) "km" else "mi"}"
+    }
+    return details.joinToString(" · ")
+}
 
 @Composable
 fun RoutineCard(
@@ -107,11 +125,7 @@ fun RoutineCard(
                     val templateEx = templateDetails.find { it.exerciseId == exercise.id }
                     val setsCount = templateEx?.sets?.size ?: 1
 
-                    val targetSummary = templateEx?.sets?.firstOrNull()?.let { s ->
-                        val rStr = if (s.targetRepsMin != null && s.targetRepsMax != null) "${s.targetRepsMin}-${s.targetRepsMax}" else s.targetRepsMin ?: s.targetRepsMax ?: "?"
-                        val wStr = if (s.targetWeight != null) " @ ${com.example.core.util.UnitConverter.formatWeight(s.targetWeight.toDouble(), isMetric)}" else ""
-                        "${rStr}${wStr}"
-                    } ?: ""
+                    val targetSummary = templateEx?.sets?.firstOrNull()?.let { routineTargetSummary(it, isMetric) } ?: ""
 
                     ExerciseRow(
                         exercise = exercise,

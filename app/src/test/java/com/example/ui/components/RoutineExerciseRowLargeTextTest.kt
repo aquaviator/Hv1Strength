@@ -12,6 +12,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.example.data.Exercise
+import com.example.ui.viewmodel.StrengthViewModel.TemplateSetState
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -25,6 +27,12 @@ class RoutineExerciseRowLargeTextTest {
     @Test fun targetSummaryKeepsReadableWidthAtOnePointFiveFontScale() = verifyAt(1.5f)
 
     @Test fun targetSummaryKeepsReadableWidthAtTwoFontScale() = verifyAt(2f)
+
+    @Test fun cardioTargetSummaryShowsDurationAndCanonicalDistance() {
+        assertEquals("60s · 0.1 km", routineTargetSummary(TemplateSetState(
+            targetRepsMin = null, targetRepsMax = null, targetDurationSeconds = 60, targetDistance = 0.1f
+        ), isMetric = true))
+    }
 
     private fun verifyAt(fontScale: Float) {
         compose.setContent {

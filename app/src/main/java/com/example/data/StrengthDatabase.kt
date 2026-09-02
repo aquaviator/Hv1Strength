@@ -35,7 +35,7 @@ import kotlinx.coroutines.launch
         MetricSampleEntity::class,
         StudioWorkoutLink::class
     ],
-    version = 16,
+    version = 17,
     exportSchema = false
 )
 abstract class StrengthDatabase : RoomDatabase() {
@@ -43,6 +43,27 @@ abstract class StrengthDatabase : RoomDatabase() {
     abstract fun strengthDao(): StrengthDao
 
     companion object {
+        val MIGRATION_16_17 = object : androidx.room.migration.Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // WorkoutTemplateSet stores distance in kilometres. Early Studio ingestion copied the
+                // app-neutral canonical metre value directly; repair only provenance-owned Studio sets.
+                db.execSQL("""
+                    UPDATE workout_template_set
+                    SET targetDistance = targetDistance / 1000.0
+                    WHERE targetDistance IS NOT NULL
+                      AND globalId IN (
+                        SELECT mp.templateSetGlobalId
+                        FROM metric_prescription mp
+                        WHERE mp.metricKey = 'distance'
+                          AND mp.canonicalUnit IN ('m', 'metre', 'metres')
+                      )
+                      AND EXISTS (
+                        SELECT 1 FROM studio_workout_link swl
+                        WHERE workout_template_set.globalId LIKE swl.versionId || ':%'
+                      )
+                """.trimIndent())
+            }
+        }
         val MIGRATION_15_16 = object : androidx.room.migration.Migration(15, 16) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `studio_workout_link` (`versionId` TEXT NOT NULL, `humanUserId` TEXT NOT NULL, `workoutGlobalId` TEXT NOT NULL, `sourceRevision` INTEGER NOT NULL, `contentChecksum` TEXT NOT NULL, `catalogueReleaseId` TEXT NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `discipline` TEXT NOT NULL, `sourcePayloadJson` TEXT NOT NULL, `localRoutineId` INTEGER NOT NULL, `localRoutineRevisionAtApply` INTEGER NOT NULL, `appliedAt` INTEGER NOT NULL, `applicationId` TEXT NOT NULL, `acknowledgementId` TEXT NOT NULL, `acknowledgementState` TEXT NOT NULL, `conflictState` TEXT, `tombstoneState` TEXT NOT NULL, `isLatest` INTEGER NOT NULL, PRIMARY KEY(`versionId`))")
@@ -784,7 +805,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         StrengthDatabase::class.java,
                         "strength_database"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
                         .addCallback(StrengthDatabaseCallback(appCtx))
                         .build()
                     INSTANCE = instance

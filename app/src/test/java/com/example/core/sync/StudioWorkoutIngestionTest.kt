@@ -76,6 +76,8 @@ class StudioWorkoutIngestionTest {
         assertEquals(listOf("duration", "distance"), parsed.exercises[1].efforts[0].prescriptions.map { it.metricKey })
         assertNull(parsed.exercises[1].efforts[0].set.targetWeight)
         assertNull(parsed.exercises[1].efforts[0].set.targetRepsMin)
+        assertEquals(60, parsed.exercises[1].efforts[0].set.targetDurationSeconds)
+        assertEquals(0.1f, parsed.exercises[1].efforts[0].set.targetDistance)
     }
 
     @Test fun `wrong owner checksum and unsupported metric fail closed`() {

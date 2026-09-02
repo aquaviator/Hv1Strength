@@ -103,12 +103,21 @@ object StudioWorkoutContract {
                         createdAt = appliedAt, updatedAt = appliedAt)
                 }
                 fun target(key: String) = parsed.firstOrNull { it.metricKey == key }?.targetValue
+                fun distanceInKilometres(): Float? = parsed.firstOrNull { it.metricKey == "distance" }?.let { metric ->
+                    val value = metric.targetValue ?: return@let null
+                    when (metric.canonicalUnit) {
+                        "m", "metre", "metres" -> (value / 1000.0).toFloat()
+                        "km", "kilometre", "kilometres", null -> value.toFloat()
+                        "mi", "mile", "miles" -> (value * 1.609344).toFloat()
+                        else -> throw StudioWorkoutContractException("UNSUPPORTED_DISTANCE_UNIT")
+                    }
+                }
                 StudioImportedEffort(WorkoutTemplateSet(templateExerciseId = 0, position = effortIndex + 1,
                     setType = requiredString(effort, "effortType"),
                     targetRepsMin = target("repetitions")?.toInt(), targetRepsMax = target("repetitions")?.toInt(),
                     targetWeight = target("external_load")?.toFloat() ?: target("assistance")?.toFloat(),
                     targetRpe = target("rpe")?.toInt(), targetDurationSeconds = target("duration")?.toInt(),
-                    targetDistance = target("distance")?.toFloat(), tempo = parsed.firstOrNull { it.metricKey == "tempo" }?.textValue,
+                    targetDistance = distanceInKilometres(), tempo = parsed.firstOrNull { it.metricKey == "tempo" }?.textValue,
                     notes = effort["notes"] as? String, globalId = setGlobalId, humanUserId = owner,
                     revision = revision, syncStatus = "SYNCED", lastSyncedAt = appliedAt,
                     originDeviceId = "studio:HUMAN_STRENGTH", templateExerciseGlobalId = childGlobalId), parsed)
