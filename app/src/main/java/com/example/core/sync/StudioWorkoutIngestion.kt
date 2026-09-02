@@ -5,7 +5,6 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
-import org.json.JSONObject
 import java.security.MessageDigest
 
 class StudioWorkoutContractException(val reasonCode: String) : IllegalArgumentException(reasonCode)
@@ -14,14 +13,29 @@ object StudioWorkoutContract {
     private val supportedMetrics = setOf("repetitions", "external_load", "assistance", "duration", "distance",
         "rpe", "tempo", "rir", "intervals", "side", "energy")
 
+    private fun javascriptQuote(value: String): String = buildString {
+        append('"')
+        value.forEach { character -> when (character) {
+            '"' -> append("\\\"")
+            '\\' -> append("\\\\")
+            '\b' -> append("\\b")
+            '\u000c' -> append("\\f")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            else -> if (character.code <= 0x1f) append("\\u%04x".format(character.code)) else append(character)
+        } }
+        append('"')
+    }
+
     fun canonicalJson(value: Any?): String = when (value) {
         null -> "null"
         is Boolean, is Number -> value.toString()
-        is String -> JSONObject.quote(value)
+        is String -> javascriptQuote(value)
         is List<*> -> value.joinToString(prefix = "[", postfix = "]", separator = ",") { canonicalJson(it) }
         is Map<*, *> -> value.entries.filter { it.key is String }.sortedBy { it.key as String }
             .joinToString(prefix = "{", postfix = "}", separator = ",") {
-                "${JSONObject.quote(it.key as String)}:${canonicalJson(it.value)}"
+                "${javascriptQuote(it.key as String)}:${canonicalJson(it.value)}"
             }
         else -> throw StudioWorkoutContractException("UNSUPPORTED_PAYLOAD_VALUE")
     }

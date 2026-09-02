@@ -11,11 +11,27 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.json.JSONArray
+import org.json.JSONObject
 
 @RunWith(RobolectricTestRunner::class)
 class StudioWorkoutIngestionTest {
     private lateinit var db: StrengthDatabase
     private val owner = "human_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+    private fun jsonValue(value: Any?): Any? = when (value) {
+        JSONObject.NULL -> null
+        is JSONObject -> value.keys().asSequence().associateWith { jsonValue(value.get(it)) }
+        is JSONArray -> (0 until value.length()).map { jsonValue(value.get(it)) }
+        else -> value
+    }
+
+    @Test fun `production acceptance payload matches Studio JavaScript checksum`() {
+        val json = """{"schemaVersion":"humanv1.workout/1","workoutId":"a9b619f7-4922-4463-890c-fb7778735d52","title":"Studio Production Acceptance","discipline":"STRENGTH","catalogueReleaseId":"fixture_catalogue_v1","tags":[],"blocks":[{"blockId":"c982ed80-2ee3-4846-8561-4ab5d45150b8","type":"EXERCISE","exerciseId":"squat","exerciseNameSnapshot":"Barbell Squat","efforts":[{"effortId":"a75796c5-a21f-4551-95f6-ae923f55c7ed","effortType":"WORKING","prescriptions":[{"prescriptionId":"2be6f006-70ef-4120-8581-e2d010092884","metricKey":"repetitions","targetValue":10,"canonicalUnit":"count","position":0},{"prescriptionId":"95c3a107-21ba-40b7-a9be-d912a7459b47","metricKey":"external_load","targetValue":20,"canonicalUnit":"kg","position":1}]}]},{"blockId":"147ccbe1-92c1-44cb-b799-851102fb627c","type":"EXERCISE","exerciseId":"treadmill_run","exerciseNameSnapshot":"Treadmill Run","efforts":[{"effortId":"e53c4c68-507c-49b4-83a2-1bfc3b3cb9c6","effortType":"WORKING","prescriptions":[{"prescriptionId":"11e4424f-ed40-429e-861c-e8efdfb8d143","metricKey":"duration","targetValue":60,"canonicalUnit":"s","position":0},{"prescriptionId":"9828e987-73df-4dfd-9d06-abe45674f2b9","metricKey":"distance","targetValue":100,"canonicalUnit":"m","position":1}]}]}]}"""
+        val payload = jsonValue(JSONObject(json))
+        assertEquals("ead95d373d8506515e7b7d52cffcb89f8471ccc2ddb2c1b6944e7ec7d278e0b2",
+            StudioWorkoutContract.sha256(StudioWorkoutContract.canonicalJson(payload)))
+    }
 
     @Before fun setUp() {
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), StrengthDatabase::class.java)
