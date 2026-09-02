@@ -169,6 +169,7 @@ class SyncEngineImpl internal constructor(
 
             // 2. Process Command Queue (Upload)
             val now = System.currentTimeMillis()
+            repository.retryPermissionDeniedCustomExerciseCommands(humanUserId)
             val pendingCommands = repository.getPendingCommands(now)
             SyncManager.updateQueueSize(pendingCommands.size)
             SyncManager.updatePendingUploads(pendingCommands.size)
@@ -195,7 +196,7 @@ class SyncEngineImpl internal constructor(
                         attempts = nextAttempts,
                         lastAttemptAt = System.currentTimeMillis(),
                         nextRetryAt = null,
-                        errorMessage = null
+                        errorMessage = if (command.attempts >= 5) command.errorMessage else null
                     )
                     successfulUploads++
                 } catch (e: RecordConflictException) {

@@ -892,6 +892,23 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
 
     suspend fun getAllCommands(): List<CommandQueueEntity> = dao.getAllCommands()
 
+    suspend fun retryPermissionDeniedCustomExerciseCommands(humanUserId: String): Int {
+        var recovered = 0
+        dao.getPoisonedCustomExerciseCommands().forEach { command ->
+            val exercise = dao.getExerciseByGlobalId(command.entityGlobalId)
+            val eligible = command.humanUserId == humanUserId &&
+                command.errorMessage?.contains("PERMISSION_DENIED") == true &&
+                exercise?.isCustom == true && exercise.humanUserId == humanUserId &&
+                exercise.syncStatus == "PENDING_UPLOAD"
+            if (eligible) {
+                recovered += dao.requeuePoisonedCustomExerciseCommand(
+                    command.commandId, humanUserId, command.entityGlobalId
+                )
+            }
+        }
+        return recovered
+    }
+
     suspend fun updateCommandStatus(id: Int, status: String, attempts: Int, lastAttemptAt: Long?, nextRetryAt: Long?, errorMessage: String?) {
         dao.updateCommandStatus(id, status, attempts, lastAttemptAt, nextRetryAt, errorMessage)
     }

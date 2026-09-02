@@ -617,6 +617,12 @@ interface StrengthDao {
     @Query("UPDATE command_queue SET status = 'POISONED', errorMessage = :error WHERE id = :id")
     suspend fun markCommandPoisoned(id: Int, error: String)
 
+    @Query("SELECT * FROM command_queue WHERE status = 'POISONED' AND entityType IN ('EXERCISE', 'CUSTOM_EXERCISE') ORDER BY createdAt ASC")
+    suspend fun getPoisonedCustomExerciseCommands(): List<CommandQueueEntity>
+
+    @Query("UPDATE command_queue SET status = 'PENDING', nextRetryAt = NULL WHERE commandId = :commandId AND humanUserId = :humanUserId AND entityGlobalId = :entityGlobalId AND status = 'POISONED' AND entityType IN ('EXERCISE', 'CUSTOM_EXERCISE')")
+    suspend fun requeuePoisonedCustomExerciseCommand(commandId: String, humanUserId: String, entityGlobalId: String): Int
+
     // ==========================================
     // USER PREFERENCES SUPPORT
     // ==========================================
