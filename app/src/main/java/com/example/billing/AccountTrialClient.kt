@@ -3,6 +3,9 @@ package com.example.billing
 import android.util.Log
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -16,7 +19,8 @@ sealed class AccountTrialResult {
         val effectiveAtMillis: Long,
         val expiryAtMillis: Long,
         val historicalTrialEndMillis: Long,
-        val serverNowMillis: Long
+        val serverNowMillis: Long,
+        val offlineReceiptValidUntilMillis: Long = expiryAtMillis
     ) : AccountTrialResult()
     data class Active(
         val uid: String,
@@ -42,13 +46,25 @@ interface AccountTrialClient {
 }
 
 class FirebaseAccountTrialClient(
-    private val endpointUrl: String = CommercialConfig.ACCOUNT_TRIAL_ENDPOINT_URL
+    private val endpointUrl: String = CommercialConfig.ACCOUNT_TRIAL_ENDPOINT_URL,
+    private val firestore: FirebaseFirestore? = runCatching { FirebaseFirestore.getInstance() }.getOrNull()
 ) : AccountTrialClient {
     override suspend fun initializeOrGetTrial(): AccountTrialResult = withContext(Dispatchers.IO) {
         val user = runCatching { FirebaseAuth.getInstance().currentUser }.getOrNull()
             ?: return@withContext AccountTrialResult.Unauthenticated
         val idToken = runCatching { Tasks.await(user.getIdToken(false)).token }.getOrNull()
             ?: return@withContext AccountTrialResult.Unavailable
+
+        // A fresh server projection is authoritative. Its offlineReceiptValidUntil
+        // limits cached/offline use only; it must not invalidate this live server read.
+        val projection = runCatching {
+            firestore?.let {
+                Tasks.await(it.collection("accounts").document(user.uid)
+                    .collection("entitlements").document("current").get(Source.SERVER))
+            }
+        }.getOrNull()
+        parseActiveStrengthSupportProjection(user.uid, projection?.data, System.currentTimeMillis())
+            ?.let { return@withContext it }
 
         try {
             val connection = (URL(endpointUrl).openConnection() as HttpURLConnection).apply {
@@ -77,9 +93,11 @@ class FirebaseAccountTrialClient(
                 val expiry = json.optLong("supportExpiryAtMillis", Long.MIN_VALUE)
                 val historicalEnd = json.optLong("trialEndsAtMillis", Long.MIN_VALUE)
                 val serverNow = json.optLong("serverNowMillis", Long.MIN_VALUE)
+                val offlineUntil = json.optLong("offlineReceiptValidUntilMillis", serverNow)
                 if (effective <= 0L || expiry <= effective || historicalEnd <= 0L || serverNow <= 0L)
                     return@withContext AccountTrialResult.Unavailable
-                return@withContext AccountTrialResult.SupportActive(user.uid, effective, expiry, historicalEnd, serverNow)
+                return@withContext AccountTrialResult.SupportActive(user.uid, effective, expiry, historicalEnd,
+                    serverNow, offlineUntil)
             }
 
             val startedAt = json.optLong("trialStartedAtMillis", Long.MIN_VALUE)
@@ -99,4 +117,21 @@ class FirebaseAccountTrialClient(
             AccountTrialResult.Unavailable
         }
     }
+}
+
+internal fun parseActiveStrengthSupportProjection(
+    uid: String,
+    data: Map<String, Any?>?,
+    serverObservedAtMillis: Long
+): AccountTrialResult.SupportActive? {
+    if (data?.get("schemaVersion") != 1L || data["firebaseUid"] != uid) return null
+    val products = data["products"] as? Map<*, *> ?: return null
+    val strength = products["HUMAN_STRENGTH"] as? Map<*, *> ?: return null
+    if (strength["normalizedState"] != "ACTIVE_UNTIL_EXPIRY" || strength["source"] != "SUPPORT") return null
+    val effective = (strength["effectiveAt"] as? Timestamp)?.toDate()?.time ?: return null
+    val expiry = (strength["expiryAt"] as? Timestamp)?.toDate()?.time ?: return null
+    val historicalEnd = (data["introductoryExpiredAt"] as? Timestamp)?.toDate()?.time ?: return null
+    val offlineUntil = (strength["offlineReceiptValidUntil"] as? Timestamp)?.toDate()?.time ?: return null
+    if (effective <= 0L || expiry <= effective || expiry <= serverObservedAtMillis || historicalEnd <= 0L) return null
+    return AccountTrialResult.SupportActive(uid, effective, expiry, historicalEnd, serverObservedAtMillis, offlineUntil)
 }

@@ -22,13 +22,11 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
             globalId = profile.globalId.ifEmpty { GlobalIdGenerator.generate("profile") },
             updatedAt = now,
             revision = maxOf(1, profile.revision),
-            syncStatus = "PENDING_UPLOAD",
+            syncStatus = "SYNCED",
             deletedAt = null,
             originDeviceId = deviceId()
         )
         dao.replaceEmptyOfflinePlaceholder(finalProfile, offlineHumanId)
-        enqueueCommand("SettingsUpdated", "USER_PROFILE", finalProfile.globalId, finalProfile.humanUserId,
-            "{\"globalId\":\"${finalProfile.globalId}\"}")
     }
 
     fun getPlannedWorkoutsForUser(userId: String): Flow<List<PlannedWorkout>> = dao.getPlannedWorkoutsForUser(userId)
@@ -162,7 +160,16 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
         val now = System.currentTimeMillis()
         val hUserId = resolveHumanUserId(profile.id, profile.humanUserId)
         val deviceId = DeviceIdGenerator.getOrGenerateDeviceId()
-        val finalProfile = if (profile.globalId.isEmpty()) {
+        val existing = dao.getUserProfile(profile.id)
+        require(existing == null || profile.humanUserId.isBlank() || existing.humanUserId.isBlank() ||
+            existing.humanUserId == profile.humanUserId) { "Profile ownership mismatch" }
+        if (existing != null && profilesSemanticallyEqual(existing, profile.copy(humanUserId = hUserId))) {
+            // Preserve local presentation metadata without manufacturing a cloud edit.
+            val localOnly = existing.copy(createdAt = profile.createdAt)
+            if (localOnly != existing) dao.insertUserProfile(localOnly)
+            return
+        }
+        val finalProfile = if (existing == null && profile.globalId.isEmpty()) {
             profile.copy(
                 globalId = GlobalIdGenerator.generate("profile"),
                 humanUserId = hUserId,
@@ -175,9 +182,11 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
             )
         } else {
             profile.copy(
-                humanUserId = hUserId,
+                globalId = existing?.globalId ?: profile.globalId,
+                humanUserId = existing?.humanUserId ?: hUserId,
+                createdAt = existing?.createdAt ?: profile.createdAt,
                 updatedAt = now,
-                revision = profile.revision + 1,
+                revision = (existing?.revision ?: profile.revision) + 1,
                 syncStatus = "PENDING_UPLOAD",
                 originDeviceId = deviceId
             )
@@ -190,6 +199,62 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
             humanUserId = finalProfile.humanUserId,
             payloadJson = "{\"globalId\":\"${finalProfile.globalId}\"}"
         )
+    }
+
+    private fun normalizedOptional(value: String?): String? = value?.trim()?.takeIf { it.isNotEmpty() }
+
+    private fun profilesSemanticallyEqual(a: UserProfile, b: UserProfile): Boolean =
+        a.id == b.id && normalizedOptional(a.email)?.lowercase() == normalizedOptional(b.email)?.lowercase() &&
+            normalizedOptional(a.displayName) == normalizedOptional(b.displayName) &&
+            normalizedOptional(a.photoUrl) == normalizedOptional(b.photoUrl) &&
+            a.preferredUnits.trim().lowercase() == b.preferredUnits.trim().lowercase() &&
+            a.heightCm == b.heightCm && normalizedOptional(a.dateOfBirth) == normalizedOptional(b.dateOfBirth) &&
+            normalizedOptional(a.sex)?.lowercase() == normalizedOptional(b.sex)?.lowercase() &&
+            normalizedOptional(a.trainingExperience)?.lowercase() == normalizedOptional(b.trainingExperience)?.lowercase() &&
+            (a.humanUserId.isBlank() || b.humanUserId.isBlank() || a.humanUserId == b.humanUserId) &&
+            a.deletedAt == b.deletedAt
+
+    /**
+     * Persists identity/profile hydration without turning observation into a user edit.
+     * Sign-in and cloud hydration must never echo an unchanged profile back through the
+     * command queue. Explicit profile editing continues to use [insertUserProfile].
+     */
+    suspend fun hydrateUserProfile(profile: UserProfile) {
+        val existing = dao.getUserProfile(profile.id)
+        require(existing == null || profile.humanUserId.isBlank() || existing.humanUserId.isBlank() ||
+            existing.humanUserId == profile.humanUserId) { "Profile ownership mismatch" }
+        require(existing == null || profile.firebaseUid.isNullOrBlank() || existing.firebaseUid.isNullOrBlank() ||
+            existing.firebaseUid == profile.firebaseUid) { "Profile Firebase identity mismatch" }
+        val stored = if (existing == null) {
+            profile.copy(
+                globalId = profile.globalId.ifBlank { GlobalIdGenerator.generate("profile") },
+                humanUserId = resolveHumanUserId(profile.id, profile.humanUserId),
+                revision = maxOf(1, profile.revision),
+                syncStatus = "SYNCED",
+                deletedAt = null,
+                originDeviceId = profile.originDeviceId.ifBlank { deviceId() }
+            )
+        } else if (existing.syncStatus == "PENDING_UPLOAD") {
+            // A downloaded/auth record may confirm identity, but cannot silently erase a
+            // newer governed local edit which is still waiting to synchronize.
+            existing.copy(
+                googleUserId = profile.googleUserId ?: existing.googleUserId,
+                authProvider = profile.authProvider ?: existing.authProvider,
+                firebaseUid = profile.firebaseUid ?: existing.firebaseUid,
+                humanUserId = existing.humanUserId.ifBlank { profile.humanUserId }
+            )
+        } else {
+            existing.copy(
+                googleUserId = profile.googleUserId ?: existing.googleUserId,
+                email = profile.email ?: existing.email,
+                displayName = profile.displayName ?: existing.displayName,
+                photoUrl = profile.photoUrl ?: existing.photoUrl,
+                authProvider = profile.authProvider,
+                firebaseUid = profile.firebaseUid ?: existing.firebaseUid,
+                humanUserId = existing.humanUserId.ifBlank { profile.humanUserId }
+            )
+        }
+        if (existing != stored) dao.insertUserProfile(stored)
     }
 
     suspend fun deleteUserProfile(id: String) {

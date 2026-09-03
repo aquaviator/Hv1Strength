@@ -45,6 +45,7 @@ class PlayEntitlementRepository(
     private val KEY_TRIAL_VERIFIED_SERVER_MILLIS = "account_trial_verified_server_millis"
     private val KEY_ACCESS_KIND = "account_access_kind"
     private val KEY_HISTORICAL_TRIAL_END = "account_historical_trial_end"
+    private val KEY_OFFLINE_RECEIPT_VALID_UNTIL = "account_offline_receipt_valid_until"
     private val KEY_LAST_OBSERVED_WALL_MILLIS = "entitlement_last_observed_wall_millis"
     private val MILLIS_PER_DAY = 24L * 60L * 60L * 1000L
 
@@ -96,7 +97,8 @@ class PlayEntitlementRepository(
         val endsAtMillis: Long,
         val verifiedServerNowMillis: Long,
         val accessKind: String = "TRIAL",
-        val historicalTrialEndMillis: Long = endsAtMillis
+        val historicalTrialEndMillis: Long = endsAtMillis,
+        val offlineReceiptValidUntilMillis: Long = endsAtMillis
     )
 
     private fun loadCachedAccountTrial(uid: String?): CachedAccountTrial? {
@@ -107,7 +109,8 @@ class PlayEntitlementRepository(
         if (startedAt <= 0L || endsAt <= startedAt || verifiedServerNow <= 0L) return null
         return CachedAccountTrial(uid, startedAt, endsAt, verifiedServerNow,
             prefs.getString(KEY_ACCESS_KIND, "TRIAL") ?: "TRIAL",
-            prefs.getLong(KEY_HISTORICAL_TRIAL_END, endsAt))
+            prefs.getLong(KEY_HISTORICAL_TRIAL_END, endsAt),
+            prefs.getLong(KEY_OFFLINE_RECEIPT_VALID_UNTIL, endsAt))
     }
 
     private fun saveCachedAccountTrial(
@@ -116,7 +119,8 @@ class PlayEntitlementRepository(
         endsAtMillis: Long,
         verifiedServerNowMillis: Long,
         accessKind: String = "TRIAL",
-        historicalTrialEndMillis: Long = endsAtMillis
+        historicalTrialEndMillis: Long = endsAtMillis,
+        offlineReceiptValidUntilMillis: Long = endsAtMillis
     ) {
         val observedWall = maxOf(
             prefs.getLong(KEY_LAST_OBSERVED_WALL_MILLIS, 0L),
@@ -130,6 +134,7 @@ class PlayEntitlementRepository(
             .putLong(KEY_TRIAL_VERIFIED_SERVER_MILLIS, verifiedServerNowMillis)
             .putString(KEY_ACCESS_KIND, accessKind)
             .putLong(KEY_HISTORICAL_TRIAL_END, historicalTrialEndMillis)
+            .putLong(KEY_OFFLINE_RECEIPT_VALID_UNTIL, offlineReceiptValidUntilMillis)
             .putLong(KEY_LAST_OBSERVED_WALL_MILLIS, observedWall)
             .apply()
     }
@@ -140,8 +145,10 @@ class PlayEntitlementRepository(
             return AppAccessState.Expired(trial.historicalTrialEndMillis,
                 if (trial.accessKind == "TRIAL") trial.startedAtMillis else null)
         }
-        if (trial.accessKind == "SUPPORT") return AppAccessState.SupportAccessActive(
-            trial.endsAtMillis, trial.historicalTrialEndMillis)
+        if (trial.accessKind == "SUPPORT") {
+            if (trial.offlineReceiptValidUntilMillis <= trustedNow) return AppAccessState.VerificationUnavailable
+            return AppAccessState.SupportAccessActive(trial.endsAtMillis, trial.historicalTrialEndMillis)
+        }
         val remainingMillis = trial.endsAtMillis - trustedNow
         val daysRemaining = ((remainingMillis + MILLIS_PER_DAY - 1L) / MILLIS_PER_DAY).toInt()
         return AppAccessState.TrialActive(daysRemaining, trial.endsAtMillis, trial.startedAtMillis)
@@ -215,7 +222,8 @@ class PlayEntitlementRepository(
                     is AccountTrialResult.SupportActive -> {
                         if (result.uid != currentUid) return@withLock AppAccessState.VerificationUnavailable
                         saveCachedAccountTrial(result.uid, result.effectiveAtMillis, result.expiryAtMillis,
-                            result.serverNowMillis, "SUPPORT", result.historicalTrialEndMillis)
+                            result.serverNowMillis, "SUPPORT", result.historicalTrialEndMillis,
+                            result.offlineReceiptValidUntilMillis)
                         AppAccessState.SupportAccessActive(result.expiryAtMillis, result.historicalTrialEndMillis)
                     }
                     is AccountTrialResult.Active -> {

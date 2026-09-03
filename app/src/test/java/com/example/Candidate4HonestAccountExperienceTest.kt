@@ -243,7 +243,7 @@ class Candidate4HonestAccountExperienceTest {
     @Test
     fun testFormat4ProductionExportImportIsPlannerIdempotent() {
         runBlocking {
-            val human = "human_ffffffffffffffffffffffffffffffff"
+            val human = requireNotNull(repository.getUserProfile("offline")).humanUserId
             repository.insertUserProfile(UserProfile("offline", humanUserId = human, globalId = "profile-backup"))
             repository.insertExercise(Exercise("backup-custom", "Backup Custom", "Strength", true))
             repository.insertTemplate(WorkoutTemplate(706, "Backup Routine", "[\"backup-custom\"]", "offline"))

@@ -195,7 +195,7 @@ class AuthRepository(
                         displayName = "Offline User",
                         updatedAt = System.currentTimeMillis()
                     )
-                    strengthRepository.insertUserProfile(updatedOfflineProfile)
+                    strengthRepository.hydrateUserProfile(updatedOfflineProfile)
                     Log.i(TAG, "Successfully repaired legacy offline user profile name from ${offlineProfile.displayName} to Offline User.")
                 }
             } catch (e: Exception) {
@@ -411,7 +411,7 @@ class AuthRepository(
                         strengthRepository.adoptEmptyOfflinePlaceholder(profile, offlineProfile.humanUserId)
                         Log.i(TAG, "stage=placeholder_adoption result=SUCCESS")
                     } else {
-                        strengthRepository.insertUserProfile(profile)
+                        strengthRepository.hydrateUserProfile(profile)
                     }
                     strengthRepository.linkExistingDataToUser(userId, identity.humanUserId)
                     persistGoogleAuthentication(profile, identity.schemaVersion)
@@ -507,7 +507,7 @@ class AuthRepository(
                 humanUserId = com.example.core.identity.HumanUserIdGenerator.getOrGenerateOfflineHumanId(context),
                 firebaseUid = null
             )
-            strengthRepository.insertUserProfile(offlineProfile)
+            strengthRepository.hydrateUserProfile(offlineProfile)
         }
 
         _authState.value = AuthState.Offline
@@ -599,7 +599,7 @@ class AuthRepository(
                 strengthRepository.adoptEmptyOfflinePlaceholder(profile, offlineProfile.humanUserId)
                 Log.i(TAG, "stage=placeholder_adoption result=SUCCESS")
             } else {
-                strengthRepository.insertUserProfile(profile)
+                strengthRepository.hydrateUserProfile(profile)
             }
             strengthRepository.linkExistingDataToUser(userId, identity.humanUserId)
 
@@ -744,7 +744,7 @@ class AuthRepository(
                     isOfflineUser = true,
                     updatedAt = System.currentTimeMillis()
                 )
-                strengthRepository.insertUserProfile(unlinkedProfile)
+                strengthRepository.hydrateUserProfile(unlinkedProfile)
             }
 
             // Step 5: Clear cloud session state in shared preferences
