@@ -169,6 +169,7 @@ class SyncEngineImpl internal constructor(
 
             // 2. Process Command Queue (Upload)
             val now = System.currentTimeMillis()
+            repository.reconcileMissingEditableCommands(trustedIdentity.firebaseUid, humanUserId)
             repository.retryPermissionDeniedCustomExerciseCommands(humanUserId)
             val pendingCommands = repository.getPendingCommands(now)
             SyncManager.updateQueueSize(pendingCommands.size)

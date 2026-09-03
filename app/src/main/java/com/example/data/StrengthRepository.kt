@@ -892,6 +892,25 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
 
     suspend fun getAllCommands(): List<CommandQueueEntity> = dao.getAllCommands()
 
+    suspend fun reconcileMissingEditableCommands(profileId: String, owner: String): ReconciliationPlan {
+        val exercises = dao.legacyCustomExercises(owner).map { ReconciliationCandidate("CUSTOM_EXERCISE", it.globalId, it.humanUserId, it.revision, it.syncStatus, it.deletedAt) }
+        val templates = dao.legacyTemplates(profileId, owner).filter { it.humanUserId == owner }
+        val templateCandidates = templates.map { ReconciliationCandidate("WORKOUT_TEMPLATE", it.globalId, it.humanUserId, it.revision, it.syncStatus, it.deletedAt) }
+        val exerciseChildren = dao.legacyTemplateExercises(owner).map { ReconciliationCandidate("WORKOUT_TEMPLATE_EXERCISE", it.globalId, it.humanUserId, it.revision, it.syncStatus, it.deletedAt, it.templateGlobalId) }
+        val childIds = exerciseChildren.map { it.globalId }.toSet()
+        val setChildren = dao.legacyTemplateSets(owner).map { ReconciliationCandidate("WORKOUT_TEMPLATE_SET", it.globalId, it.humanUserId, it.revision, it.syncStatus, it.deletedAt, it.templateExerciseGlobalId) }
+        val plans = dao.legacyTrainingPlans(profileId, owner).filter { it.humanUserId == owner }
+        val planCandidates = plans.map { ReconciliationCandidate("TRAINING_PLAN", it.globalId, it.humanUserId, it.revision, it.syncStatus, it.deletedAt, it.templateGlobalId) }
+        val planIds = plans.map { it.globalId }.toSet()
+        val occurrences = dao.legacyPlannedWorkouts(profileId, owner).filter { it.humanUserId == owner }
+            .map { ReconciliationCandidate("PLANNED_WORKOUT", it.globalId, it.humanUserId, it.revision, if (it.status == "COMPLETED") "COMPLETED" else it.syncStatus, it.deletedAt, it.seriesId) }
+        val candidates = exercises + templateCandidates + exerciseChildren + setChildren + planCandidates + occurrences
+        val parents = templates.map { it.globalId }.toSet() + childIds + planIds
+        val plan = AccountReconciliationPlanner.plan(owner, candidates, dao.legacyCommands(owner), parents, System.currentTimeMillis(), deviceId())
+        plan.commands.forEach { dao.enqueueReconciliationCommandIfMissing(it) }
+        return plan
+    }
+
     suspend fun retryPermissionDeniedCustomExerciseCommands(humanUserId: String): Int {
         var recovered = 0
         dao.getPoisonedCustomExerciseCommands().forEach { command ->

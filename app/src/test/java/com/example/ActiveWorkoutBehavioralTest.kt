@@ -33,14 +33,19 @@ class ActiveWorkoutBehavioralTest {
         shadowOf(Looper.getMainLooper()).idle()
     }
 
-    private fun waitUntil(timeoutMs: Long = 3000, condition: () -> Boolean) {
+    private fun waitUntil(
+        phase: String = "unspecified asynchronous phase",
+        timeoutMs: Long = 3000,
+        observed: () -> String = { "active=${activeWorkoutViewModel.activeWorkoutState.value != null}" },
+        condition: () -> Boolean
+    ) {
         val start = System.currentTimeMillis()
         while (System.currentTimeMillis() - start < timeoutMs) {
             idleLooper()
             if (condition()) return
             Thread.sleep(10)
         }
-        fail("Condition not met within $timeoutMs ms")
+        fail("$phase did not complete within $timeoutMs ms; observed: ${observed()}")
     }
 
     @Before
@@ -55,7 +60,7 @@ class ActiveWorkoutBehavioralTest {
         repository = StrengthRepository(database.strengthDao(), context)
 
         authViewModel = AuthViewModel(repository, context)
-        activeWorkoutViewModel = ActiveWorkoutViewModel(repository, context, authViewModel)
+        activeWorkoutViewModel = ActiveWorkoutViewModel(repository, context, authViewModel, kotlinx.coroutines.Dispatchers.Unconfined)
     }
 
     @After
@@ -70,12 +75,12 @@ class ActiveWorkoutBehavioralTest {
     fun testExecutionQueueTraversalAndSetCompletion() {
         // Start workout
         activeWorkoutViewModel.startWorkout(null)
-        waitUntil { activeWorkoutViewModel.activeWorkoutState.value != null }
+        waitUntil("execution setup: active workout publication") { activeWorkoutViewModel.activeWorkoutState.value != null }
 
         // Add an exercise with 3 sets
         val ex = Exercise("squats", "Squats", "Legs")
         activeWorkoutViewModel.addExerciseToActiveWorkout(ex)
-        waitUntil { activeWorkoutViewModel.activeWorkoutState.value?.exercises?.size == 1 }
+        waitUntil("execution setup: exercise addition") { activeWorkoutViewModel.activeWorkoutState.value?.exercises?.size == 1 }
 
         val activeExId = "squats"
         activeWorkoutViewModel.addSetToExercise(activeExId)
@@ -109,11 +114,11 @@ class ActiveWorkoutBehavioralTest {
     @Test
     fun testWeightAndRepSelection() {
         activeWorkoutViewModel.startWorkout(null)
-        waitUntil { activeWorkoutViewModel.activeWorkoutState.value != null }
+        waitUntil("weight selection setup: active workout publication") { activeWorkoutViewModel.activeWorkoutState.value != null }
 
         val ex = Exercise("deadlift", "Deadlift", "Legs")
         activeWorkoutViewModel.addExerciseToActiveWorkout(ex)
-        waitUntil { activeWorkoutViewModel.activeWorkoutState.value?.exercises?.size == 1 }
+        waitUntil("weight selection setup: exercise addition") { activeWorkoutViewModel.activeWorkoutState.value?.exercises?.size == 1 }
 
         // Set weight and reps for the first set
         activeWorkoutViewModel.updateSet(
@@ -261,18 +266,24 @@ class ActiveWorkoutBehavioralTest {
     @Test
     fun testFinishWorkoutFlow() {
         activeWorkoutViewModel.startWorkout(null)
-        waitUntil { activeWorkoutViewModel.activeWorkoutState.value != null }
+        waitUntil("finish setup: active workout publication") { activeWorkoutViewModel.activeWorkoutState.value != null }
 
         val ex = Exercise("curls", "Bicep Curls", "Arms")
         activeWorkoutViewModel.addExerciseToActiveWorkout(ex)
-        waitUntil { activeWorkoutViewModel.activeWorkoutState.value?.exercises?.size == 1 }
+        waitUntil("finish setup: exercise addition") { activeWorkoutViewModel.activeWorkoutState.value?.exercises?.size == 1 }
 
         // Save some backup
-        waitUntil { runBlocking { repository.getActiveWorkoutBackup() != null } }
+        waitUntil("finish setup: backup persistence", observed = { "backup=${runBlocking { repository.getActiveWorkoutBackup() != null }}" }) { runBlocking { repository.getActiveWorkoutBackup() != null } }
 
         // Finish the active workout
         activeWorkoutViewModel.finishActiveWorkout()
-        waitUntil { activeWorkoutViewModel.activeWorkoutState.value == null }
+        waitUntil(
+            "finish action: persistence then active-state clear",
+            observed = {
+                val sessionCount = runBlocking { database.strengthDao().getSessionsForUser("offline").first().size }
+                "active=${activeWorkoutViewModel.activeWorkoutState.value != null}, sessions=$sessionCount, backup=${runBlocking { repository.getActiveWorkoutBackup() != null }}"
+            }
+        ) { activeWorkoutViewModel.activeWorkoutState.value == null }
 
         // Backup must be destroyed on finish success
         val backup = runBlocking { repository.getActiveWorkoutBackup() }

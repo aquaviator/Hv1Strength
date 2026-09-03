@@ -596,6 +596,16 @@ interface StrengthDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun enqueueCommand(command: CommandQueueEntity)
 
+    @Query("SELECT COUNT(*) FROM command_queue WHERE commandId = :commandId")
+    suspend fun countCommandId(commandId: String): Int
+
+    @Transaction
+    suspend fun enqueueReconciliationCommandIfMissing(command: CommandQueueEntity): Boolean {
+        if (countCommandId(command.commandId) != 0) return false
+        enqueueCommand(command)
+        return true
+    }
+
     @Query("SELECT * FROM command_queue WHERE status = 'PENDING' OR (status = 'PROCESSING' AND attempts < 5) OR (status = 'FAILED' AND attempts < 5 AND (nextRetryAt IS NULL OR nextRetryAt <= :now)) ORDER BY createdAt ASC")
     suspend fun getPendingCommands(now: Long): List<CommandQueueEntity>
 

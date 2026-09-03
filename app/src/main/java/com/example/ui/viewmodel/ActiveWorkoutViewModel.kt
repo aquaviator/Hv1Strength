@@ -15,7 +15,8 @@ import org.json.JSONObject
 class ActiveWorkoutViewModel(
     private val repository: StrengthRepository,
     private val context: Context,
-    private val authViewModel: AuthViewModel
+    private val authViewModel: AuthViewModel,
+    private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO
 ) : ViewModel() {
 
     private val preferencesRepository = UserPreferencesRepository(repository.dao)
@@ -96,7 +97,7 @@ class ActiveWorkoutViewModel(
                     val recState = _workoutRecoveryState.value
                     if (recState !is WorkoutRecoveryState.Checking && recState !is WorkoutRecoveryState.Available) {
                         backupSaveJob?.cancel()
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        kotlinx.coroutines.withContext(ioDispatcher) {
                             try {
                                 repository.clearActiveWorkoutBackup()
                             } catch (e: Exception) {
@@ -135,11 +136,11 @@ class ActiveWorkoutViewModel(
         val isCritical = isCriticalChange(lastSavedState, state)
         backupSaveJob?.cancel()
         if (isCritical) {
-            backupSaveJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            backupSaveJob = viewModelScope.launch(ioDispatcher) {
                 performSaveBackup(state)
             }
         } else {
-            backupSaveJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            backupSaveJob = viewModelScope.launch(ioDispatcher) {
                 kotlinx.coroutines.delay(500)
                 performSaveBackup(state)
             }
@@ -169,7 +170,7 @@ class ActiveWorkoutViewModel(
 
     fun checkForActiveWorkoutBackup() {
         _workoutRecoveryState.value = WorkoutRecoveryState.Checking
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        viewModelScope.launch(ioDispatcher) {
             try {
                 val backup = repository.getActiveWorkoutBackup()
                 if (backup != null) {
@@ -201,7 +202,7 @@ class ActiveWorkoutViewModel(
     }
 
     fun resumeWorkout() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        viewModelScope.launch(ioDispatcher) {
             try {
                 val backup = repository.getActiveWorkoutBackup()
                 if (backup != null) {
@@ -227,6 +228,13 @@ class ActiveWorkoutViewModel(
                         ?: com.example.core.identity.HumanUserIdGenerator.getOrGenerateOfflineHumanId(context)
                     val plannedOccurrenceId = recoveryObj?.optString("plannedOccurrenceId")?.takeIf { it.isNotBlank() }
 
+                    val recoveredRest = recoverRestTimer(
+                        durationSeconds = restTimerDuration,
+                        remainingAtSaveSeconds = recoveryObj?.optInt("restTimerRemainingAtSave", -1)?.takeIf { it >= 0 },
+                        endTimestamp = restTimerEndTimestamp,
+                        paused = isRestTimerPaused,
+                        nowMillis = System.currentTimeMillis()
+                    )
                     val state = ActiveWorkoutState(
                         templateId = backup.templateId,
                         templateName = backup.templateName,
@@ -237,9 +245,9 @@ class ActiveWorkoutViewModel(
                         activeSessionId = activeSessionId,
                         currentExerciseId = currentExerciseId,
                         workoutNotes = workoutNotes,
-                        restTimerEndTimestamp = restTimerEndTimestamp,
-                        restTimerDuration = restTimerDuration,
-                        isRestTimerPaused = isRestTimerPaused,
+                        restTimerEndTimestamp = recoveredRest?.endTimestamp,
+                        restTimerDuration = recoveredRest?.durationSeconds,
+                        isRestTimerPaused = recoveredRest?.paused ?: false,
                         isMetric = isMetric,
                         stateVersion = stateVersion,
                         workoutOwnerUserId = ownerUserId,
@@ -247,29 +255,16 @@ class ActiveWorkoutViewModel(
                         plannedOccurrenceId = plannedOccurrenceId
                     )
                     
+                    // Publish timer flows before the active state. UI and tests must never
+                    // observe a restored workout paired with the default timer values.
+                    _restTimerDuration.value = recoveredRest?.durationSeconds ?: 90
+                    _restTimeRemaining.value = recoveredRest?.remainingSeconds
+                    _isRestTimerPaused.value = recoveredRest?.paused ?: false
                     _activeWorkoutState.value = state
                     lastSavedState = state
                     _workoutRecoveryState.value = WorkoutRecoveryState.None
 
-                    if (restTimerEndTimestamp != null && !isRestTimerPaused) {
-                        val remainingMs = restTimerEndTimestamp - System.currentTimeMillis()
-                        if (remainingMs > 0) {
-                            val remainingSecs = (remainingMs / 1000).toInt()
-                            _restTimerDuration.value = restTimerDuration ?: remainingSecs
-                            _restTimeRemaining.value = remainingSecs
-                            _isRestTimerPaused.value = false
-                            runRestTimer(restTimerEndTimestamp)
-                        } else {
-                            _restTimeRemaining.value = null
-                        }
-                    } else if (restTimerEndTimestamp != null && isRestTimerPaused) {
-                        val remainingSecs = recoveryObj.optInt("restTimerRemainingAtSave", 0)
-                        if (remainingSecs > 0) {
-                            _restTimerDuration.value = restTimerDuration ?: remainingSecs
-                            _restTimeRemaining.value = remainingSecs
-                            _isRestTimerPaused.value = true
-                        }
-                    }
+                    if (recoveredRest != null && !recoveredRest.paused) runRestTimer(recoveredRest.endTimestamp)
 
                     _navigateToActiveWorkoutEvent.emit(Unit)
                 } else {
@@ -283,7 +278,7 @@ class ActiveWorkoutViewModel(
     }
 
     fun discardWorkoutBackup() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        viewModelScope.launch(ioDispatcher) {
             try {
                 repository.clearActiveWorkoutBackup()
             } catch (e: Exception) {

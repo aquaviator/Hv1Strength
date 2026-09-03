@@ -55,7 +55,7 @@ class Sprint4ActiveWorkoutRecoveryTest {
         repository = StrengthRepository(database.strengthDao(), context)
         
         authViewModel = AuthViewModel(repository, context)
-        activeWorkoutViewModel = ActiveWorkoutViewModel(repository, context, authViewModel)
+        activeWorkoutViewModel = ActiveWorkoutViewModel(repository, context, authViewModel, kotlinx.coroutines.Dispatchers.Unconfined)
     }
 
     @After
