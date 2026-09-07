@@ -755,11 +755,19 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
     // Bulk linking
     suspend fun linkExistingDataToUser(userId: String, authoritativeHumanUserId: String) {
         require(com.example.data.isValidAuthoritativeHumanId(authoritativeHumanUserId))
+        val profile = dao.getUserProfile(userId)
+        require(profile?.firebaseUid == userId && profile.humanUserId == authoritativeHumanUserId) {
+            "Attachment requires the matching trusted account profile"
+        }
         val hUserId = authoritativeHumanUserId
-        dao.linkBodyWeightToUser(userId, hUserId)
-        dao.linkTapeMeasurementToUser(userId, hUserId)
-        dao.linkWorkoutTemplatesToUser(userId, hUserId)
-        dao.linkWorkoutSessionsToUser(userId, hUserId)
+        val offlineId = HumanUserIdGenerator.existingOfflineHumanId(context) ?: return
+        // The fallback used by old migrations is not installation-specific provenance.
+        if (offlineId == "human_offlineusr" || offlineId == hUserId) return
+        val localDeviceId = deviceId()
+        dao.linkBodyWeightToUser(userId, hUserId, offlineId, localDeviceId)
+        dao.linkTapeMeasurementToUser(userId, hUserId, offlineId, localDeviceId)
+        dao.linkWorkoutTemplatesToUser(userId, hUserId, offlineId, localDeviceId)
+        dao.linkWorkoutSessionsToUser(userId, hUserId, offlineId, localDeviceId)
     }
 
 

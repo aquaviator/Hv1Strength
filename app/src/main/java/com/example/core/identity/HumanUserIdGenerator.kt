@@ -10,6 +10,12 @@ object HumanUserIdGenerator {
     @Volatile
     var appContext: Context? = null
 
+    /** Read provenance only; hydration must not invent an anonymous owner. */
+    fun existingOfflineHumanId(context: Context? = null): String? =
+        (context?.applicationContext ?: appContext)
+            ?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            ?.getString(KEY_OFFLINE_HUMAN_ID, null)
+
     fun getOrGenerateOfflineHumanId(context: Context? = null): String {
         val targetContext = context?.applicationContext ?: appContext
         if (targetContext == null) {

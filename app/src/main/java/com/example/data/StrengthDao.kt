@@ -233,8 +233,8 @@ interface StrengthDao {
     @Query("DELETE FROM body_weight WHERE id = :id")
     suspend fun deleteBodyWeight(id: Int)
 
-    @Query("UPDATE body_weight SET userId = :newUserId, humanUserId = :newHumanUserId, revision = revision + 1, syncStatus = 'PENDING_UPLOAD' WHERE userId IS NULL OR userId = 'offline'")
-    suspend fun linkBodyWeightToUser(newUserId: String, newHumanUserId: String)
+    @Query("UPDATE body_weight SET userId = :newUserId, humanUserId = :newHumanUserId, revision = revision + 1, syncStatus = 'PENDING_UPLOAD' WHERE " + ANONYMOUS_ATTACHMENT_PREDICATE)
+    suspend fun linkBodyWeightToUser(newUserId: String, newHumanUserId: String, offlineHumanId: String, localDeviceId: String)
 
 
     // Tape Measurements
@@ -256,8 +256,8 @@ interface StrengthDao {
     @Query("DELETE FROM tape_measurement WHERE id = :id")
     suspend fun deleteTapeMeasurement(id: Int)
 
-    @Query("UPDATE tape_measurement SET userId = :newUserId, humanUserId = :newHumanUserId, revision = revision + 1, syncStatus = 'PENDING_UPLOAD' WHERE userId IS NULL OR userId = 'offline'")
-    suspend fun linkTapeMeasurementToUser(newUserId: String, newHumanUserId: String)
+    @Query("UPDATE tape_measurement SET userId = :newUserId, humanUserId = :newHumanUserId, revision = revision + 1, syncStatus = 'PENDING_UPLOAD' WHERE " + ANONYMOUS_ATTACHMENT_PREDICATE)
+    suspend fun linkTapeMeasurementToUser(newUserId: String, newHumanUserId: String, offlineHumanId: String, localDeviceId: String)
 
 
     // Exercises
@@ -302,8 +302,8 @@ interface StrengthDao {
     @Query("DELETE FROM workout_template WHERE id = :id")
     suspend fun deleteTemplate(id: Int)
 
-    @Query("UPDATE workout_template SET userId = :newUserId, humanUserId = :newHumanUserId, revision = revision + 1, syncStatus = 'PENDING_UPLOAD' WHERE userId IS NULL OR userId = 'offline'")
-    suspend fun linkWorkoutTemplatesToUser(newUserId: String, newHumanUserId: String)
+    @Query("UPDATE workout_template SET userId = :newUserId, humanUserId = :newHumanUserId, revision = revision + 1, syncStatus = 'PENDING_UPLOAD' WHERE " + ANONYMOUS_ATTACHMENT_PREDICATE)
+    suspend fun linkWorkoutTemplatesToUser(newUserId: String, newHumanUserId: String, offlineHumanId: String, localDeviceId: String)
 
 
     // Workout Sessions
@@ -328,8 +328,8 @@ interface StrengthDao {
     @Query("DELETE FROM workout_session WHERE id = :id")
     suspend fun deleteSession(id: Int)
 
-    @Query("UPDATE workout_session SET userId = :newUserId, humanUserId = :newHumanUserId, revision = revision + 1, syncStatus = 'PENDING_UPLOAD' WHERE userId IS NULL OR userId = 'offline'")
-    suspend fun linkWorkoutSessionsToUser(newUserId: String, newHumanUserId: String)
+    @Query("UPDATE workout_session SET userId = :newUserId, humanUserId = :newHumanUserId, revision = revision + 1, syncStatus = 'PENDING_UPLOAD' WHERE " + ANONYMOUS_ATTACHMENT_PREDICATE)
+    suspend fun linkWorkoutSessionsToUser(newUserId: String, newHumanUserId: String, offlineHumanId: String, localDeviceId: String)
 
 
     // Logged Sets
