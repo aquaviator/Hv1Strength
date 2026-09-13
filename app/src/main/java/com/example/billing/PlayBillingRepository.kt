@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.ConcurrentHashMap
 
 interface BillingRepository {
     val subscriptionState: StateFlow<SubscriptionState>
@@ -34,6 +35,7 @@ class PlayBillingRepository(
 
     private var billingClient: BillingClient? = null
     private var cachedProductDetails: ProductDetails? = null
+    private val acknowledgementsInFlight = ConcurrentHashMap.newKeySet<String>()
 
     init {
         initializeConnection()
@@ -43,7 +45,13 @@ class PlayBillingRepository(
         try {
             billingClient = BillingClient.newBuilder(context)
                 .setListener(this)
-                .enablePendingPurchases()
+                .enablePendingPurchases(
+                    PendingPurchasesParams.newBuilder()
+                        .enableOneTimeProducts()
+                        .enablePrepaidPlans()
+                        .build()
+                )
+                .enableAutoServiceReconnection()
                 .build()
 
             startConnection()
@@ -85,13 +93,19 @@ class PlayBillingRepository(
             .setProductList(productList)
             .build()
 
-        billingClient?.queryProductDetailsAsync(params) { billingResult, productDetailsList ->
+        billingClient?.queryProductDetailsAsync(params) { billingResult, queryResult ->
+            val productDetailsList = queryResult.productDetailsList
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && productDetailsList.isNotEmpty()) {
-                val details = productDetailsList.first()
+                val details = productDetailsList.firstOrNull {
+                    it.productId == CommercialConfig.PRODUCT_ID_ANNUAL
+                } ?: return@queryProductDetailsAsync
                 cachedProductDetails = details
                 parseAndPublishProductDetails(details)
             } else {
-                Log.w(TAG, "queryProductDetailsAsync failed or returned empty: ${billingResult.responseCode}")
+                cachedProductDetails = null
+                _productInfo.value = null
+                val unfetched = queryResult.unfetchedProductList.joinToString { it.productId }
+                Log.w(TAG, "queryProductDetailsAsync failed or returned empty: ${billingResult.responseCode}; unfetched=$unfetched")
             }
         }
     }
@@ -103,11 +117,21 @@ class PlayBillingRepository(
             return
         }
 
-        val bestOffer = offers.firstOrNull { offer ->
-            offer.pricingPhases.pricingPhaseList.any { phase ->
-                phase.priceAmountMicros == 0L
-            }
-        } ?: offers.first()
+        val selected = BillingPolicy.selectOffer(offers.map { offer ->
+            BillingOfferCandidate(
+                basePlanId = offer.basePlanId,
+                offerId = offer.offerId,
+                offerToken = offer.offerToken,
+                hasFreePhase = offer.pricingPhases.pricingPhaseList.any { it.priceAmountMicros == 0L }
+            )
+        })
+        val bestOffer = selected?.let { choice -> offers.first { it.offerToken == choice.offerToken } }
+
+        if (bestOffer == null) {
+            cachedProductDetails = null
+            _productInfo.value = null
+            return
+        }
 
         val basePhase = bestOffer.pricingPhases.pricingPhaseList.lastOrNull()
         val trialPhase = bestOffer.pricingPhases.pricingPhaseList.firstOrNull { it.priceAmountMicros == 0L }
@@ -132,6 +156,7 @@ class PlayBillingRepository(
     private fun queryActivePurchases() {
         val params = QueryPurchasesParams.newBuilder()
             .setProductType(BillingClient.ProductType.SUBS)
+            .includeSuspendedSubscriptions(true)
             .build()
 
         billingClient?.queryPurchasesAsync(params) { billingResult, purchases ->
@@ -146,8 +171,8 @@ class PlayBillingRepository(
 
     private fun processPurchases(purchases: List<Purchase>) {
         val activePurchase = purchases.firstOrNull { purchase ->
-            purchase.products.contains(CommercialConfig.PRODUCT_ID_ANNUAL) &&
-                    (purchase.purchaseState == Purchase.PurchaseState.PURCHASED || purchase.purchaseState == Purchase.PurchaseState.PENDING)
+            BillingPolicy.classifyPurchase(purchase.products, purchase.purchaseState, purchase.isSuspended) in
+                setOf(LocalPurchaseDisposition.PURCHASED_UNVERIFIED, LocalPurchaseDisposition.PENDING)
         }
 
         if (activePurchase == null) {
@@ -212,13 +237,14 @@ class PlayBillingRepository(
     }
 
     override fun acknowledgePurchaseIfNeeded(purchase: Purchase) {
-        if (purchase.isAcknowledged) return
+        if (purchase.isAcknowledged || !acknowledgementsInFlight.add(purchase.purchaseToken)) return
 
         val params = AcknowledgePurchaseParams.newBuilder()
             .setPurchaseToken(purchase.purchaseToken)
             .build()
 
         billingClient?.acknowledgePurchase(params) { billingResult ->
+            acknowledgementsInFlight.remove(purchase.purchaseToken)
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
                 Log.i(TAG, "Purchase acknowledged successfully")
             } else {

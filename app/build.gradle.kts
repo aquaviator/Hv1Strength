@@ -122,7 +122,7 @@ dependencies {
   debugImplementation(libs.firebase.appcheck.debug)
   releaseImplementation(libs.firebase.appcheck.playintegrity)
   implementation(libs.play.services.auth)
-  implementation("com.android.billingclient:billing-ktx:7.0.0")
+  implementation("com.android.billingclient:billing:9.1.0")
   implementation(libs.google.id)
   implementation(libs.androidx.credentials)
   implementation(libs.androidx.credentials.play.services.auth)
