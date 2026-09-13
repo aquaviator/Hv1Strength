@@ -6,6 +6,24 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface StrengthDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertStudioPlanLink(link: StudioPlanLink)
+
+    @Query("SELECT * FROM studio_plan_link WHERE planVersionId = :versionId LIMIT 1")
+    suspend fun getStudioPlanLink(versionId: String): StudioPlanLink?
+
+    @Query("SELECT * FROM studio_plan_link WHERE humanUserId = :owner AND planGlobalId = :planGlobalId AND isLatest = 1 ORDER BY sourceRevision DESC LIMIT 1")
+    suspend fun getLatestStudioPlanLink(owner: String, planGlobalId: String): StudioPlanLink?
+
+    @Query("UPDATE studio_plan_link SET isLatest = 0 WHERE humanUserId = :owner AND planGlobalId = :planGlobalId AND isLatest = 1")
+    suspend fun clearLatestStudioPlanLink(owner: String, planGlobalId: String)
+
+    @Query("UPDATE studio_plan_link SET acknowledgementState = :state WHERE planVersionId = :versionId")
+    suspend fun markStudioPlanAcknowledgement(versionId: String, state: String)
+
+    @Transaction
+    suspend fun applyStudioPlanTransaction(value: StudioPlanImport): StudioPlanApplyResult = applyStudioPlanGraph(value)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertStudioWorkoutLink(link: StudioWorkoutLink)
 
     @Update
@@ -680,6 +698,12 @@ interface StrengthDao {
 
     @Query("SELECT * FROM planned_workout WHERE id = :id LIMIT 1")
     suspend fun getPlannedWorkout(id: String): PlannedWorkout?
+
+    @Query("SELECT * FROM planned_workout WHERE seriesId = :seriesId AND userId = :userId")
+    suspend fun getPlannedWorkoutsForSeries(seriesId: String, userId: String): List<PlannedWorkout>
+
+    @Query("UPDATE planned_workout SET deletedAt = :at, updatedAt = :at, revision = :revision, syncStatus = 'SYNCED', lastSyncedAt = :at WHERE id = :id AND status = 'PLANNED' AND detachedFromSeries = 0")
+    suspend fun markStudioOccurrenceSuperseded(id: String, at: Long, revision: Long)
 
     @Query("SELECT * FROM training_plan WHERE id = :id LIMIT 1")
     suspend fun getTrainingPlan(id: String): TrainingPlan?

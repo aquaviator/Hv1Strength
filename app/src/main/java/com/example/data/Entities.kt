@@ -49,6 +49,22 @@ data class StudioWorkoutLink(
     val isLatest: Boolean = true
 )
 
+@Entity(tableName = "studio_plan_link", indices = [Index("humanUserId"), Index("planGlobalId")])
+data class StudioPlanLink(
+    @PrimaryKey val planVersionId: String,
+    val humanUserId: String,
+    val planGlobalId: String,
+    val sourceRevision: Long,
+    val planChecksum: String,
+    val workoutVersionIdsJson: String,
+    val sourcePayloadJson: String,
+    val appliedAt: Long,
+    val acknowledgementId: String,
+    val acknowledgementState: String = "PENDING",
+    val conflictState: String? = null,
+    val isLatest: Boolean = true
+)
+
 @Entity(tableName = "user_profile")
 data class UserProfile(
     @PrimaryKey val id: String, // "offline" or Google User ID
