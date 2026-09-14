@@ -5,6 +5,7 @@ import java.security.MessageDigest
 object CanonicalContract {
     const val WORKOUT_SCHEMA = "humanv1.canonical-workout/1"
     const val PLAN_SCHEMA = "humanv1.canonical-plan/1"
+    const val PLAN_SCHEDULE_SCHEMA = "1.2"
     val executionStructures = setOf("STRAIGHT_SETS", "SUPERSET", "CIRCUIT", "INTERVAL", "AMRAP", "EMOM", "TIME_CAP", "DISTANCE", "RUN_WALK", "CYCLING_INTERVAL", "SWIM_INTERVAL", "BRICK", "TRANSITION", "RECOVERY", "WARM_UP", "COOL_DOWN")
     fun sha256(value: String): String = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
     fun occurrenceId(planVersionId: String, placementId: String, epochDay: Long) = "occ_${sha256("$planVersionId|$placementId|$epochDay").take(24)}"
@@ -23,8 +24,10 @@ data class ExercisePlacement(val placementId: String, val order: Int, val exerci
 data class WorkoutBlock(val blockId: String, val order: Int, val structure: String, val placements: List<ExercisePlacement>)
 data class CanonicalWorkout(val schemaVersion: String, val workoutGlobalId: String, val publicationVersionId: String?, val revision: Int, val checksum: String, val owner: CanonicalOwner?, val contentClass: ContentClass, val discipline: String, val title: String, val blocks: List<WorkoutBlock>, val tombstoned: Boolean = false)
 data class PlanPlacement(val placementId: String, val order: Int, val daySlot: Int, val workoutVersionId: String, val required: Boolean, val priority: Boolean)
-data class PlanWeek(val weekId: String, val order: Int, val recoveryWeek: Boolean, val placements: List<PlanPlacement>)
-data class CanonicalPlan(val schemaVersion: String, val planGlobalId: String, val publicationVersionId: String?, val revision: Int, val checksum: String, val owner: CanonicalOwner?, val contentClass: ContentClass, val title: String, val timezone: String, val startDate: String, val weeks: List<PlanWeek>, val acknowledgement: String?)
+data class DayAssignment(val assignmentId: String, val orderWithinDay: Int, val assignmentType: String, val workoutVersionId: String, val required: Boolean, val priority: String, val variableDuration: Boolean = false)
+data class PlanDay(val dayOfWeek: String, val order: Int, val dayType: String, val assignments: List<DayAssignment>)
+data class PlanWeek(val weekId: String, val order: Int, val recoveryWeek: Boolean, val placements: List<PlanPlacement>, val days: List<PlanDay> = emptyList())
+data class CanonicalPlan(val schemaVersion: String, val planGlobalId: String, val publicationVersionId: String?, val revision: Int, val checksum: String, val owner: CanonicalOwner?, val contentClass: ContentClass, val title: String, val timezone: String, val startDate: String, val weeks: List<PlanWeek>, val acknowledgement: String?, val scheduleSchemaVersion: String? = null)
 
 object CanonicalValidator {
     fun workout(value: CanonicalWorkout): List<String> = buildList {
@@ -46,6 +49,12 @@ object CanonicalValidator {
         if (value.timezone.isBlank()) add("TIMEZONE_REQUIRED")
         if (!Regex("\\d{4}-\\d{2}-\\d{2}").matches(value.startDate)) add("EXPLICIT_DATE_REQUIRED")
         if (value.weeks.flatMap { it.placements }.any { it.workoutVersionId.isBlank() }) add("IMMUTABLE_DEPENDENCY_REQUIRED")
+        value.weeks.flatMap { it.days }.forEach { day ->
+            if (day.dayType == "REST" && day.assignments.isNotEmpty()) add("REST_HAS_NO_ASSIGNMENTS")
+            if (day.dayType == "TRAINING" && day.assignments.isEmpty()) add("TRAINING_REQUIRES_ASSIGNMENT")
+            if (day.assignments.any { it.workoutVersionId.isBlank() }) add("IMMUTABLE_DEPENDENCY_REQUIRED")
+            if (day.assignments.map { it.orderWithinDay } != (1..day.assignments.size).toList()) add("ASSIGNMENT_ORDER")
+        }
     }
 }
 

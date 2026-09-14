@@ -10,6 +10,7 @@ class CanonicalFoundationTest {
     @Test fun contractParityAndStructures() {
         assertEquals("humanv1.canonical-workout/1", CanonicalContract.WORKOUT_SCHEMA)
         assertEquals("humanv1.canonical-plan/1", CanonicalContract.PLAN_SCHEMA)
+        assertEquals("1.2", CanonicalContract.PLAN_SCHEDULE_SCHEMA)
         assertTrue(CanonicalContract.executionStructures.containsAll(setOf("STRAIGHT_SETS", "SUPERSET", "CIRCUIT", "INTERVAL", "AMRAP", "EMOM", "TIME_CAP", "DISTANCE", "RUN_WALK", "CYCLING_INTERVAL", "SWIM_INTERVAL", "BRICK", "TRANSITION", "RECOVERY")))
     }
     @Test fun deterministicChecksumAndOccurrenceIdentity() {
@@ -49,4 +50,9 @@ class CanonicalFoundationTest {
         assertEquals(listOf("v1", "v1", "v1", "v2"), replaceFutureOnly(before, "v2").map { it.workoutVersionId }); assertTrue(before.all { it.workoutVersionId == "v1" })
     }
     @Test fun customerLabelsAreExact() { assertEquals(listOf("Up to date", "Safe format upgrade available", "Needs your input", "Conflict needs review", "Historical record preserved"), FormatStatus.entries.map { it.customerLabel }) }
+    @Test fun consumesMultipleAssignmentsAndVariableRacePlaceholder() {
+        val day = PlanDay("SUNDAY", 7, "TRAINING", listOf(DayAssignment("a1", 1, "SESSION", "swim_v1", true, "REQUIRED"), DayAssignment("a2", 2, "RACE", "race_im_v1", true, "PRIORITY", variableDuration = true)))
+        val plan = CanonicalPlan(CanonicalContract.PLAN_SCHEMA, "ironman", "ironman_v1", 1, "hash", null, ContentClass.GOVERNED_LIBRARY, "Ironman", "Europe/London", "2026-09-14", listOf(PlanWeek("w1", 1, false, emptyList(), listOf(day))), "APPLIED:ironman_v1:hash", CanonicalContract.PLAN_SCHEDULE_SCHEMA)
+        assertTrue(CanonicalValidator.plan(plan).isEmpty()); assertEquals(listOf("a1", "a2"), plan.weeks.single().days.single().assignments.map { it.assignmentId }); assertTrue(plan.weeks.single().days.single().assignments.last().variableDuration)
+    }
 }
