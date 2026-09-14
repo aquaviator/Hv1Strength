@@ -251,15 +251,17 @@ class SyncEngineImpl internal constructor(
 
             // 3. Download Remote Changes
             SyncManager.updateStatus("Synchronizing")
-            downloadRemoteChanges(humanUserId, deviceId, dao)
-            StudioWorkoutIngestionRepository(requireNotNull(firestore), dao)
+            val downloaded = downloadRemoteChanges(humanUserId, deviceId, dao)
+            val workoutSummary = StudioWorkoutIngestionRepository(requireNotNull(firestore), dao)
                 .synchronize(humanUserId, trustedIdentity.firebaseUid)
             val planSummary = StudioPlanIngestionRepository(requireNotNull(firestore), dao)
                 .synchronize(humanUserId, trustedIdentity.firebaseUid)
+            SyncManager.updateCurrentRunCounts(downloaded + workoutSummary.applied + planSummary.applied, successfulUploads)
 
             // 4. Mark successful synchronization
             SyncManager.updateLastSync(System.currentTimeMillis())
             SyncManager.updateStatus(when {
+                workoutSummary.requiresAttention > 0 -> "StudioWorkoutNeedsAttention"
                 planSummary.requiresAttention > 0 -> "StudioPlanNeedsAttention"
                 planSummary.waiting > 0 -> "StudioPlanDependencyPending"
                 else -> UnattendedSyncPolicy.completionStatus(SyncManager.conflictCount.value, outstandingCommands)
@@ -752,8 +754,8 @@ class SyncEngineImpl internal constructor(
         humanUserId: String,
         deviceId: String,
         dao: StrengthDao
-    ) {
-        val fs = firestore ?: return
+    ): Int {
+        val fs = firestore ?: return 0
         val now = System.currentTimeMillis()
 
         val subcollections = listOf(
@@ -779,8 +781,6 @@ class SyncEngineImpl internal constructor(
             try {
                 val snapshot = fs.collection("users").document(humanUserId)
                     .collection(subColl).get().await()
-
-                totalDownloaded += snapshot.size()
 
                 for (doc in snapshot.documents) {
                     val remoteGlobalId = doc.getString("globalId") ?: continue
@@ -810,6 +810,7 @@ class SyncEngineImpl internal constructor(
                         // Insert locally if not deleted
                         if (remoteDeletedAt == null) {
                             insertRemoteDocument(entityType, doc, dao)
+                            totalDownloaded++
                         }
                     } else {
                         // Conflict and Newer Evaluation
@@ -830,6 +831,7 @@ class SyncEngineImpl internal constructor(
                                 )
                             } else {
                                 updateLocalDocument(entityType, doc, localEntity, dao)
+                                totalDownloaded++
                             }
                         } else if (remoteRevision < localEntity.revision ||
                                    (remoteRevision == localEntity.revision && remoteUpdatedAt < localEntity.updatedAt)) {
@@ -866,6 +868,7 @@ class SyncEngineImpl internal constructor(
 
         SyncManager.updatePendingDownloads(0)
         SyncManager.updateConflictCount(conflictsDetected)
+        return totalDownloaded
     }
 
     private suspend fun markLocalConflict(

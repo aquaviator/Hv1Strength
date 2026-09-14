@@ -90,6 +90,14 @@ class StudioWorkoutIngestionTest {
         }.reasonCode)
     }
 
+    @Test fun `malformed publication is isolated while independent valid publication continues`() {
+        val (validId, valid) = publication(2)
+        val (invalidId, invalid) = publication(1, checksumOverride = "a".repeat(64))
+        val batch = parseStudioWorkoutBatch(listOf(invalidId to invalid, validId to valid), owner, "uid-a")
+        assertEquals(1, batch.requiresAttention)
+        assertEquals(listOf(validId), batch.imports.map { it.link.versionId })
+    }
+
     @Test fun `same version is idempotent and revision two supersedes without losing revision one provenance`() = runBlocking {
         val dao = db.strengthDao()
         val (id1, envelope1) = publication(1, 10)

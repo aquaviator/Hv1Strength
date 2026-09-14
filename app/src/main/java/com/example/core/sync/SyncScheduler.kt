@@ -14,9 +14,9 @@ object SyncScheduler {
         WorkManager.getInstance(context).cancelUniqueWork(PERIODIC_WORK)
     }
 
-    fun scheduleImmediate(context: Context) {
+    fun scheduleImmediate(context: Context, manual: Boolean = false): Boolean {
         if (!com.example.HumanStrengthApplication.isFirebaseConfigured) {
-            return
+            return false
         }
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -27,11 +27,14 @@ object SyncScheduler {
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
             .build()
 
+        if (manual && !SyncManager.beginManualCheck(context, request.id.toString(), System.currentTimeMillis())) return false
+
         WorkManager.getInstance(context).enqueueUniqueWork(
             IMMEDIATE_WORK,
-            ExistingWorkPolicy.KEEP,
+            if (manual) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.KEEP,
             request
         )
+        return true
     }
 
     fun schedulePeriodic(context: Context) {

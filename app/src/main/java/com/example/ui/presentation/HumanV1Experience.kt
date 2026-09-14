@@ -49,6 +49,7 @@ fun syncPresentation(auth: AuthState, status: String, pending: Int, lastError: S
     if (auth is AuthState.Error) return ExperienceStatus("Saved on this phone", "Synchronization is paused until the account is safe.", ExperienceTone.ATTENTION, "Review account")
     if (status == "ItemsNeedReview") return ExperienceStatus("Some items need review", "Conflicting items remain protected; other changes can continue synchronizing.", ExperienceTone.ATTENTION, "Review items")
     if (status == "StudioPlanNeedsAttention") return ExperienceStatus("Studio plan needs attention", "One Studio plan needs attention because a referenced workout is unavailable.", ExperienceTone.ATTENTION, "Review plan")
+    if (status == "StudioWorkoutNeedsAttention") return ExperienceStatus("Studio workout needs attention", "One Studio workout could not be applied safely. Other valid changes continue synchronizing.", ExperienceTone.ATTENTION, "Review workout")
     if (status == "StudioPlanDependencyPending") return ExperienceStatus("Studio plan waiting", "A referenced Studio workout is still arriving. Other changes can continue synchronizing.", ExperienceTone.NEUTRAL)
     if (status == "WaitingForIdentity") return ExperienceStatus("Saved on this phone", "Preparing secure synchronization.", ExperienceTone.NEUTRAL)
     if (status == "WaitingForConnection") return ExperienceStatus("Saved on this phone", "We’ll synchronize automatically when you’re connected.", ExperienceTone.ATTENTION)

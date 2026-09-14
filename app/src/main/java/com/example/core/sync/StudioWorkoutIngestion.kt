@@ -155,17 +155,33 @@ object StudioWorkoutContract {
     }
 }
 
+data class StudioWorkoutSyncSummary(val applied: Int, val requiresAttention: Int)
+internal data class ParsedStudioWorkoutBatch(val imports: List<StudioWorkoutImport>, val requiresAttention: Int)
+
+internal fun parseStudioWorkoutBatch(documents: List<Pair<String, Map<String, Any?>>>, owner: String,
+                                     firebaseUid: String): ParsedStudioWorkoutBatch {
+    val imports = mutableListOf<StudioWorkoutImport>()
+    var requiresAttention = 0
+    documents.sortedBy { (_, data) -> (data["revision"] as? Number)?.toLong() ?: Long.MAX_VALUE }
+        .forEach { (id, data) ->
+            try { imports += StudioWorkoutContract.parse(id, data, owner, firebaseUid) }
+            catch (_: StudioWorkoutContractException) { requiresAttention++ }
+        }
+    return ParsedStudioWorkoutBatch(imports, requiresAttention)
+}
+
 class StudioWorkoutIngestionRepository(private val firestore: FirebaseFirestore, private val dao: StrengthDao) {
-    suspend fun synchronize(owner: String, firebaseUid: String) {
+    suspend fun synchronize(owner: String, firebaseUid: String): StudioWorkoutSyncSummary {
         val snapshots = firestore.collection("users").document(owner).collection("publishedWorkouts").get().await()
-        val imports = snapshots.documents.map { document ->
-            StudioWorkoutContract.parse(document.id, document.data ?: emptyMap(), owner, firebaseUid)
-        }.sortedBy { it.link.sourceRevision }
-        imports.forEach { value ->
+        var applied = 0
+        val batch = parseStudioWorkoutBatch(snapshots.documents.map { it.id to (it.data ?: emptyMap()) }, owner, firebaseUid)
+        batch.imports.forEach { value ->
             val result = dao.applyStudioWorkoutTransaction(value)
+            if (result.applied) applied++
             acknowledge(result.link, if (result.conflict) "CONFLICT" else "APPLIED",
                 if (result.conflict) "LOCAL_EDIT_PRESERVED_NEW_VERSION_CREATED" else null)
         }
+        return StudioWorkoutSyncSummary(applied, batch.requiresAttention)
     }
 
     private suspend fun acknowledge(link: StudioWorkoutLink, state: String, reasonCode: String?) {
