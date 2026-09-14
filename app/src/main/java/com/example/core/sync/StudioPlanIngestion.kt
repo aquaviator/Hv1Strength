@@ -7,7 +7,7 @@ import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import java.time.LocalDate
 
-class StudioPlanContractException(val reasonCode: String) : IllegalArgumentException(reasonCode)
+class StudioPlanContractException(val reasonCode: String, val dependencyVersionId: String? = null) : IllegalArgumentException(reasonCode)
 
 object StudioPlanContract {
     @Suppress("UNCHECKED_CAST")
@@ -51,8 +51,13 @@ object StudioPlanContract {
                 val placementId = requiredString(placement, "placementId")
                 val workoutGlobalId = requiredString(placement, "workoutId")
                 val workoutVersionId = requiredString(placement, "workoutVersionId")
-                val workout = dependency(workoutVersionId) ?: throw StudioPlanContractException("MISSING_WORKOUT_DEPENDENCY")
+                val workout = dependency(workoutVersionId) ?: throw StudioPlanContractException("MISSING_WORKOUT_DEPENDENCY", workoutVersionId)
                 if (workout.humanUserId != owner || workout.workoutGlobalId != workoutGlobalId) throw StudioPlanContractException("WORKOUT_DEPENDENCY_MISMATCH")
+                if (workout.applicationId != "HUMAN_STRENGTH") throw StudioPlanContractException("WORKOUT_DEPENDENCY_WRONG_DESTINATION", workoutVersionId)
+                if (workout.tombstoneState != "ACTIVE") throw StudioPlanContractException("WORKOUT_DEPENDENCY_ARCHIVED", workoutVersionId)
+                if (Regex("_r\\d+_[0-9a-f]{12}$").containsMatchIn(workoutVersionId) &&
+                    !workoutVersionId.endsWith("_${workout.contentChecksum.take(12)}"))
+                    throw StudioPlanContractException("WORKOUT_DEPENDENCY_CHECKSUM_MISMATCH", workoutVersionId)
                 dependencies += workoutVersionId
                 val day = (placement["dayOfWeek"] as? Number)?.toInt()?.takeIf { it in 1..7 }
                     ?: throw StudioPlanContractException("INVALID_SCHEDULE_DAY")
@@ -83,21 +88,60 @@ object StudioPlanContract {
     }
 }
 
-class StudioPlanIngestionRepository(private val firestore: FirebaseFirestore, private val dao: StrengthDao) {
-    suspend fun synchronize(owner: String, firebaseUid: String) {
+data class StudioPlanEnvelope(val id: String, val value: Map<String, Any?>)
+data class StudioPlanSyncSummary(val applied: Int, val waiting: Int, val requiresAttention: Int)
+
+class StudioPlanIngestionRepository(
+    private val firestore: FirebaseFirestore,
+    private val dao: StrengthDao,
+    private val clock: () -> Long = System::currentTimeMillis,
+    private val acknowledgementOverride: (suspend (StudioPlanLink, String, String?) -> Unit)? = null
+) {
+    suspend fun synchronize(owner: String, firebaseUid: String): StudioPlanSyncSummary {
         val snapshots = firestore.collection("users").document(owner).collection("publishedPlans").get().await()
-        val imports = snapshots.documents.map { document ->
-            StudioPlanContract.parse(document.id, document.data ?: emptyMap(), owner, firebaseUid,
-                dependency = { version -> dao.getStudioWorkoutLink(version) })
-        }.sortedBy { it.link.sourceRevision }
-        imports.forEach { value ->
-            val result = dao.applyStudioPlanTransaction(value)
-            acknowledge(result.link, if (result.conflict) "CONFLICT" else "APPLIED",
-                if (result.conflict) "LOCAL_PLAN_EDIT_PRESERVED" else null)
+        return synchronizeEnvelopes(owner, firebaseUid, snapshots.documents.map { StudioPlanEnvelope(it.id, it.data ?: emptyMap()) })
+    }
+
+    internal suspend fun synchronizeEnvelopes(owner: String, firebaseUid: String, envelopes: List<StudioPlanEnvelope>): StudioPlanSyncSummary {
+        var applied = 0
+        envelopes.sortedWith(compareBy({ (it.value["revision"] as? Number)?.toLong() ?: Long.MAX_VALUE }, { it.id })).forEach { envelope ->
+            val now = clock()
+            val existing = dao.getStudioPlanQuarantine(envelope.id)
+            if (existing?.status == "WAITING_DEPENDENCY" && existing.nextRetryAt != null && now < existing.nextRetryAt) return@forEach
+            try {
+                val value = StudioPlanContract.parse(envelope.id, envelope.value, owner, firebaseUid,
+                    dependency = { version -> dao.getStudioWorkoutLink(version) }, appliedAt = now)
+                val result = dao.applyStudioPlanTransaction(value)
+                acknowledge(result.link, if (result.conflict) "CONFLICT" else "APPLIED",
+                    if (result.conflict) "LOCAL_PLAN_EDIT_PRESERVED" else null)
+                dao.deleteStudioPlanQuarantine(envelope.id)
+                dao.supersedeStudioPlanQuarantines(owner, value.link.planGlobalId, envelope.id)
+                if (result.applied) applied++
+            } catch (failure: StudioPlanContractException) {
+                quarantine(owner, envelope, failure, existing, now)
+            }
         }
+        val active = dao.getActiveStudioPlanQuarantines(owner)
+        return StudioPlanSyncSummary(applied, active.count { it.status == "WAITING_DEPENDENCY" }, active.count { it.status == "REQUIRES_ATTENTION" })
+    }
+
+    private suspend fun quarantine(owner: String, envelope: StudioPlanEnvelope, failure: StudioPlanContractException,
+                                   existing: StudioPlanQuarantine?, now: Long) {
+        val transient = failure.reasonCode == "MISSING_WORKOUT_DEPENDENCY"
+        val attempts = (existing?.attempts ?: 0) + 1
+        val waiting = transient && attempts < 3
+        val globalId = (envelope.value["globalId"] as? String)?.takeIf { it.isNotBlank() } ?: "unknown:${envelope.id}"
+        dao.upsertStudioPlanQuarantine(StudioPlanQuarantine(
+            envelope.id, owner, globalId, (envelope.value["revision"] as? Number)?.toLong() ?: 0,
+            (envelope.value["contentChecksum"] as? String).orEmpty(), failure.reasonCode, failure.dependencyVersionId,
+            StudioWorkoutContract.canonicalJson(envelope.value), existing?.firstSeenAt ?: now, now, attempts,
+            if (waiting) now + listOf(30_000L, 120_000L)[attempts - 1] else null,
+            if (waiting) "WAITING_DEPENDENCY" else "REQUIRES_ATTENTION"
+        ))
     }
 
     private suspend fun acknowledge(link: StudioPlanLink, state: String, reasonCode: String?) {
+        acknowledgementOverride?.let { it(link, state, reasonCode); dao.markStudioPlanAcknowledgement(link.planVersionId, state); return }
         val ref = firestore.collection("users").document(link.humanUserId)
             .collection("planDeliveryAcks").document(link.acknowledgementId)
         val dependencies = JSONArray(link.workoutVersionIdsJson).let { array -> (0 until array.length()).map { array.getString(it) } }

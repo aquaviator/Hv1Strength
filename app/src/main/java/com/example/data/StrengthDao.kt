@@ -5,6 +5,21 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface StrengthDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertStudioPlanQuarantine(value: StudioPlanQuarantine)
+
+    @Query("SELECT * FROM studio_plan_quarantine WHERE planVersionId = :versionId LIMIT 1")
+    suspend fun getStudioPlanQuarantine(versionId: String): StudioPlanQuarantine?
+
+    @Query("SELECT * FROM studio_plan_quarantine WHERE humanUserId = :owner AND status != 'SUPERSEDED' ORDER BY firstSeenAt")
+    suspend fun getActiveStudioPlanQuarantines(owner: String): List<StudioPlanQuarantine>
+
+    @Query("UPDATE studio_plan_quarantine SET status = 'SUPERSEDED', nextRetryAt = NULL WHERE humanUserId = :owner AND planGlobalId = :planGlobalId AND planVersionId != :exceptVersionId AND status != 'SUPERSEDED'")
+    suspend fun supersedeStudioPlanQuarantines(owner: String, planGlobalId: String, exceptVersionId: String)
+
+    @Query("DELETE FROM studio_plan_quarantine WHERE planVersionId = :versionId")
+    suspend fun deleteStudioPlanQuarantine(versionId: String)
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertStudioPlanLink(link: StudioPlanLink)
 

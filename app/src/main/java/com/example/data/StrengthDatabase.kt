@@ -34,9 +34,10 @@ import kotlinx.coroutines.launch
         MetricSegmentEntity::class,
         MetricSampleEntity::class,
         StudioWorkoutLink::class,
-        StudioPlanLink::class
+        StudioPlanLink::class,
+        StudioPlanQuarantine::class
     ],
-    version = 18,
+    version = 19,
     exportSchema = false
 )
 abstract class StrengthDatabase : RoomDatabase() {
@@ -44,6 +45,14 @@ abstract class StrengthDatabase : RoomDatabase() {
     abstract fun strengthDao(): StrengthDao
 
     companion object {
+        val MIGRATION_18_19 = object : androidx.room.migration.Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `studio_plan_quarantine` (`planVersionId` TEXT NOT NULL, `humanUserId` TEXT NOT NULL, `planGlobalId` TEXT NOT NULL, `sourceRevision` INTEGER NOT NULL, `planChecksum` TEXT NOT NULL, `reasonCode` TEXT NOT NULL, `dependencyVersionId` TEXT, `sourceEnvelopeJson` TEXT NOT NULL, `firstSeenAt` INTEGER NOT NULL, `lastSeenAt` INTEGER NOT NULL, `attempts` INTEGER NOT NULL, `nextRetryAt` INTEGER, `status` TEXT NOT NULL, PRIMARY KEY(`planVersionId`))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_studio_plan_quarantine_humanUserId` ON `studio_plan_quarantine` (`humanUserId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_studio_plan_quarantine_planGlobalId` ON `studio_plan_quarantine` (`planGlobalId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_studio_plan_quarantine_status` ON `studio_plan_quarantine` (`status`)")
+            }
+        }
         val MIGRATION_17_18 = object : androidx.room.migration.Migration(17, 18) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `studio_plan_link` (`planVersionId` TEXT NOT NULL, `humanUserId` TEXT NOT NULL, `planGlobalId` TEXT NOT NULL, `sourceRevision` INTEGER NOT NULL, `planChecksum` TEXT NOT NULL, `workoutVersionIdsJson` TEXT NOT NULL, `sourcePayloadJson` TEXT NOT NULL, `appliedAt` INTEGER NOT NULL, `acknowledgementId` TEXT NOT NULL, `acknowledgementState` TEXT NOT NULL, `conflictState` TEXT, `isLatest` INTEGER NOT NULL, PRIMARY KEY(`planVersionId`))")
@@ -813,7 +822,7 @@ abstract class StrengthDatabase : RoomDatabase() {
                         StrengthDatabase::class.java,
                         "strength_database"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19)
                         .addCallback(StrengthDatabaseCallback(appCtx))
                         .build()
                     INSTANCE = instance

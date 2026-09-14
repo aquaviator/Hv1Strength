@@ -65,6 +65,23 @@ data class StudioPlanLink(
     val isLatest: Boolean = true
 )
 
+@Entity(tableName = "studio_plan_quarantine", indices = [Index("humanUserId"), Index("planGlobalId"), Index("status")])
+data class StudioPlanQuarantine(
+    @PrimaryKey val planVersionId: String,
+    val humanUserId: String,
+    val planGlobalId: String,
+    val sourceRevision: Long,
+    val planChecksum: String,
+    val reasonCode: String,
+    val dependencyVersionId: String?,
+    val sourceEnvelopeJson: String,
+    val firstSeenAt: Long,
+    val lastSeenAt: Long,
+    val attempts: Int,
+    val nextRetryAt: Long?,
+    val status: String
+)
+
 @Entity(tableName = "user_profile")
 data class UserProfile(
     @PrimaryKey val id: String, // "offline" or Google User ID

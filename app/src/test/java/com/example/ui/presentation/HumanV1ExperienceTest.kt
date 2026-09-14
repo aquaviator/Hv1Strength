@@ -27,6 +27,11 @@ class HumanV1ExperienceTest {
     @Test fun syncingStateIsNotSynced() = assertEquals("Synchronizing", syncPresentation(AuthState.Authenticated(profile), "Syncing", 0, null).title)
     @Test fun syncedRequiresNoErrorOrPendingWork() = assertEquals("Synced", syncPresentation(AuthState.Authenticated(profile), "Idle", 0, null).title)
     @Test fun syncErrorKeepsLocalTruth() = assertTrue(syncPresentation(AuthState.Authenticated(profile), "Failed", 0, "network").detail.contains("temporarily unavailable"))
+    @Test fun studioPlanContractFailureIsNotPresentedAsNetworkOutage() {
+        val result = syncPresentation(AuthState.Authenticated(profile), "StudioPlanNeedsAttention", 0, null)
+        assertTrue(result.detail.contains("referenced workout is unavailable"))
+        assertFalse(result.detail.contains("synchronization is temporarily unavailable"))
+    }
     @Test fun notificationDeniedExplainsRecovery() = assertTrue(backgroundPresentation(false, true).detail.contains("Recovery"))
     @Test fun catalogueFallbackRemainsAvailable() = assertTrue(cataloguePresentation("fallback", 3, 2, false, true).detail.contains("3 core"))
     @Test fun differentOwnerCannotClaimRecovery() = assertFalse(recoveryOwnershipAllowed("account-a", "account-b"))

@@ -254,14 +254,16 @@ class SyncEngineImpl internal constructor(
             downloadRemoteChanges(humanUserId, deviceId, dao)
             StudioWorkoutIngestionRepository(requireNotNull(firestore), dao)
                 .synchronize(humanUserId, trustedIdentity.firebaseUid)
-            StudioPlanIngestionRepository(requireNotNull(firestore), dao)
+            val planSummary = StudioPlanIngestionRepository(requireNotNull(firestore), dao)
                 .synchronize(humanUserId, trustedIdentity.firebaseUid)
 
             // 4. Mark successful synchronization
             SyncManager.updateLastSync(System.currentTimeMillis())
-            SyncManager.updateStatus(UnattendedSyncPolicy.completionStatus(
-                SyncManager.conflictCount.value, outstandingCommands
-            ))
+            SyncManager.updateStatus(when {
+                planSummary.requiresAttention > 0 -> "StudioPlanNeedsAttention"
+                planSummary.waiting > 0 -> "StudioPlanDependencyPending"
+                else -> UnattendedSyncPolicy.completionStatus(SyncManager.conflictCount.value, outstandingCommands)
+            })
             _activeSyncing.value = false
             Result.success(Unit)
 

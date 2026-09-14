@@ -82,4 +82,64 @@ class StudioPlanIngestionTest {
         val badChecksum = runCatching { StudioPlanContract.parse(id, envelope + ("contentChecksum" to "f".repeat(64)), owner, "uid", { null }) }.exceptionOrNull()
         assertEquals("CHECKSUM_MISMATCH", (badChecksum as StudioPlanContractException).reasonCode)
     }
+
+    @Test fun `missing dependency is bounded then quarantined without acknowledgement`() = runBlocking {
+        val dao = db.strengthDao()
+        val (id, envelope) = publication(1)
+        var now = 1_000L
+        var acknowledgements = 0
+        val repository = StudioPlanIngestionRepository(com.google.firebase.firestore.FirebaseFirestore.getInstance(), dao,
+            { now }, { _, _, _ -> acknowledgements++ })
+        assertEquals(1, repository.synchronizeEnvelopes(owner, "uid-a", listOf(StudioPlanEnvelope(id, envelope))).waiting)
+        now = 31_001
+        assertEquals(1, repository.synchronizeEnvelopes(owner, "uid-a", listOf(StudioPlanEnvelope(id, envelope))).waiting)
+        now = 151_002
+        val third = repository.synchronizeEnvelopes(owner, "uid-a", listOf(StudioPlanEnvelope(id, envelope)))
+        assertEquals(1, third.requiresAttention)
+        assertEquals(0, acknowledgements)
+        assertTrue(dao.getAllPlannedWorkoutsForBackup("uid-a").isEmpty())
+        assertEquals("MISSING_WORKOUT_DEPENDENCY", dao.getStudioPlanQuarantine(id)?.reasonCode)
+    }
+
+    @Test fun `poisoned plan does not block valid plan and corrected dependency clears quarantine idempotently`() = runBlocking {
+        val dao = db.strengthDao()
+        val missing = publication(2)
+        val valid = publication(1, removed = true)
+        dao.insertStudioWorkoutLink(workout("workout-a-r1", "workout-a", 11))
+        var acknowledgements = 0
+        val repository = StudioPlanIngestionRepository(com.google.firebase.firestore.FirebaseFirestore.getInstance(), dao,
+            { 1_000L }, { _, _, _ -> acknowledgements++ })
+        val first = repository.synchronizeEnvelopes(owner, "uid-a", listOf(StudioPlanEnvelope(missing.first, missing.second), StudioPlanEnvelope(valid.first, valid.second)))
+        assertEquals(1, first.applied)
+        assertEquals(1, acknowledgements)
+        assertNotNull(dao.getTrainingPlan("plan-1"))
+        dao.insertStudioWorkoutLink(workout("workout-b-r1", "workout-b", 12))
+        val recovered = StudioPlanIngestionRepository(com.google.firebase.firestore.FirebaseFirestore.getInstance(), dao,
+            { 31_001L }, { _, _, _ -> acknowledgements++ })
+        assertEquals(1, recovered.synchronizeEnvelopes(owner, "uid-a", listOf(StudioPlanEnvelope(missing.first, missing.second))).applied)
+        assertEquals(0, recovered.synchronizeEnvelopes(owner, "uid-a", listOf(StudioPlanEnvelope(missing.first, missing.second))).applied)
+        assertNull(dao.getStudioPlanQuarantine(missing.first))
+    }
+
+    @Test fun `dependency owner destination archive and immutable checksum fail closed`() = runBlocking {
+        val (_, envelope) = publication(1, removed = true)
+        val id = envelope["versionId"] as String
+        suspend fun reason(link: StudioWorkoutLink) = (runCatching {
+            StudioPlanContract.parse(id, envelope, owner, "uid", { link })
+        }.exceptionOrNull() as StudioPlanContractException).reasonCode
+        assertEquals("WORKOUT_DEPENDENCY_MISMATCH", reason(workout("workout-a-r1", "other", 1)))
+        assertEquals("WORKOUT_DEPENDENCY_WRONG_DESTINATION", reason(workout("workout-a-r1", "workout-a", 1).copy(applicationId = "OTHER")))
+        assertEquals("WORKOUT_DEPENDENCY_ARCHIVED", reason(workout("workout-a-r1", "workout-a", 1).copy(tombstoneState = "ARCHIVED")))
+        val canonicalId = "workout-a_r1_${"2".repeat(12)}"
+        val changedPayload = (envelope["payload"] as Map<String, Any?>).toMutableMap().apply {
+            this["workoutVersionIds"] = listOf(canonicalId)
+            this["weeks"] = listOf(mapOf("weekNumber" to 1L, "placements" to listOf(mapOf(
+                "placementId" to "p1", "dayOfWeek" to 1L, "workoutId" to "workout-a", "workoutVersionId" to canonicalId))))
+        }
+        val checksum = StudioWorkoutContract.sha256(StudioWorkoutContract.canonicalJson(changedPayload))
+        val changedId = "plan-1_r1_${checksum.take(12)}"
+        val changedEnvelope = envelope + mapOf("versionId" to changedId, "contentChecksum" to checksum, "payload" to changedPayload)
+        val failure = runCatching { StudioPlanContract.parse(changedId, changedEnvelope, owner, "uid", { workout(canonicalId, "workout-a", 1) }) }.exceptionOrNull()
+        assertEquals("WORKOUT_DEPENDENCY_CHECKSUM_MISMATCH", (failure as StudioPlanContractException).reasonCode)
+    }
 }
