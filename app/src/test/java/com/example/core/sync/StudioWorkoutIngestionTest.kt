@@ -80,6 +80,29 @@ class StudioWorkoutIngestionTest {
         assertEquals(0.1f, parsed.exercises[1].efforts[0].set.targetDistance)
     }
 
+    @Test fun `parser accepts the governed canonical immutable workout contract`() {
+        val globalId = "canonical-workout"
+        val payload = mapOf<String, Any?>("schemaVersion" to "humanv1.canonical-workout/1", "workoutGlobalId" to globalId,
+            "revision" to 1L, "checksum" to "", "owner" to mapOf("humanUserId" to owner),
+            "provenance" to mapOf("contentClass" to "USER_AUTHORED", "originApplication" to "WORKOUT_STUDIO"),
+            "discipline" to "STRENGTH", "workoutType" to "STRENGTH", "title" to "Canonical workout", "description" to "",
+            "blocks" to listOf(mapOf("blockId" to "block-1", "order" to 0L, "structure" to "STRAIGHT_SETS",
+                "placements" to listOf(mapOf("placementId" to "placement-1", "order" to 0L,
+                    "exerciseReference" to mapOf("kind" to "GOVERNED", "exerciseId" to "squat"), "equipment" to emptyList<String>(),
+                    "sets" to listOf(mapOf("setId" to "set-1", "order" to 0L, "repetitions" to mapOf("target" to 8L))))))),
+            "validationStatus" to "VALID", "createdAt" to "2026-01-01T00:00:00.000Z", "updatedAt" to "2026-01-01T00:00:00.000Z",
+            "tombstoneState" to "ACTIVE", "publicationEligibility" to "ELIGIBLE")
+        val checksum = StudioWorkoutContract.sha256(StudioWorkoutContract.canonicalJson(payload))
+        val versionId = "${globalId}_r1_${checksum.take(12)}"
+        val envelope = mapOf<String, Any?>("schemaVersion" to "humanv1.canonical-workout/1", "globalId" to globalId,
+            "versionId" to versionId, "humanUserId" to owner, "revision" to 1L, "publicationState" to "PUBLISHED",
+            "tombstoneState" to "ACTIVE", "sourceDraftId" to globalId, "contentType" to "workout", "contentChecksum" to checksum,
+            "payload" to payload)
+        val parsed = StudioWorkoutContract.parse(versionId, envelope, owner, "uid-a", 1000)
+        assertEquals("squat", parsed.exercises.single().exercise.exerciseId)
+        assertEquals(8, parsed.exercises.single().efforts.single().set.targetRepsMin)
+    }
+
     @Test fun `wrong owner checksum and unsupported metric fail closed`() {
         val (id, envelope) = publication(1)
         assertEquals("WRONG_OWNER", assertThrows(StudioWorkoutContractException::class.java) {

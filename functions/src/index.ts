@@ -7,12 +7,18 @@ import * as crypto from "crypto";
 import { assertNoClientDeletionTarget, ensureHumanIdentityForUid, IdentityError,
   resolveVerifiedLegacyHumanId, trustedHumanIdForUid } from "./identity";
 export * from "./identity";
+export * from "./studioPublication";
+import { acknowledgeStudioDeliveryCallable, publishStudioPlanCallable, publishStudioWorkoutCallable } from "./studioPublication";
 
 if (!admin.apps.length) {
   admin.initializeApp();
 }
 
 const db = admin.firestore();
+
+export const publishStudioPlan = onCall({ region: "europe-west1" }, request => publishStudioPlanCallable(db, request));
+export const publishStudioWorkout = onCall({ region: "europe-west1" }, request => publishStudioWorkoutCallable(db, request));
+export const acknowledgeStudioDelivery = onCall({ region: "europe-west1" }, request => acknowledgeStudioDeliveryCallable(db, request));
 
 export const ensureHumanIdentity = onCall({ region: "europe-west1" }, async request => {
   const uid = request.auth?.uid;

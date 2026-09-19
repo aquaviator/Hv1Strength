@@ -165,14 +165,15 @@ describe("Strength Firestore trusted identity rules", function() {
     await assertFails(setDoc(doc(foreignDb, path), { schemaVersion: 14, globalId: "measurement-1", humanUserId: H1,
       loggedSetGlobalId: "set-1", metricKey: "power", revision: 1 }));
   });
-  it("allows owner publication creates and reads while keeping versions immutable", async () => {
+  it("denies direct publication creates and reads only governed immutable versions", async () => {
     const db = env.authenticatedContext("uid-a").firestore();
     for (const [collectionName, contentType] of [
-      ["publishedWorkouts", "workout"], ["publishedPlans", "plan"], ["publishedProtocols", "protocol"]
+      ["publishedWorkouts", "workout"], ["publishedPlans", "plan"]
     ] as const) {
       const value = publishedVersion(H1, `${contentType}-1`, contentType);
       const ref = doc(db, `users/${H1}/${collectionName}/${value.versionId}`);
-      await assertSucceeds(setDoc(ref, value));
+      await assertFails(setDoc(ref, value));
+      await env.withSecurityRulesDisabled(async context => setDoc(doc(context.firestore(), `users/${H1}/${collectionName}/${value.versionId}`), value));
       await assertSucceeds(getDoc(ref));
       await assertFails(setDoc(ref, { ...value, revision: 2 }));
       await assertFails(deleteDoc(ref));
@@ -183,7 +184,7 @@ describe("Strength Firestore trusted identity rules", function() {
     const foreign = env.authenticatedContext("uid-b").firestore();
     const value = publishedVersion(H1, "workout-1", "workout");
     const path = `users/${H1}/publishedWorkouts/${value.versionId}`;
-    await assertSucceeds(setDoc(doc(owner, path), value));
+    await env.withSecurityRulesDisabled(async context => setDoc(doc(context.firestore(), path), value));
     await assertFails(getDoc(doc(foreign, path)));
     await assertFails(setDoc(doc(foreign, `users/${H1}/publishedWorkouts/foreign_r1_aaaaaaaaaaaa`),
       publishedVersion(H1, "foreign", "workout")));
@@ -194,14 +195,15 @@ describe("Strength Firestore trusted identity rules", function() {
     const owner = env.authenticatedContext("uid-a").firestore();
     const foreign = env.authenticatedContext("uid-b").firestore();
     const publication = publishedVersion(H1, "workout-1", "workout");
-    await assertSucceeds(setDoc(doc(owner, `users/${H1}/publishedWorkouts/${publication.versionId}`), publication));
+    await env.withSecurityRulesDisabled(async context => setDoc(doc(context.firestore(), `users/${H1}/publishedWorkouts/${publication.versionId}`), publication));
     const ackId = "strength_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const path = `users/${H1}/workoutDeliveryAcks/${ackId}`;
     const value = { schemaVersion: 1, acknowledgementId: ackId, humanUserId: H1,
       workoutGlobalId: "workout-1", versionId: "workout-1_r1_aaaaaaaaaaaa",
       applicationId: "HUMAN_STRENGTH", appliedChecksum: "a".repeat(64), sourceRevision: 1,
       state: "APPLIED", reasonCode: null, clientAppliedAtMillis: 1, createdAt: serverTimestamp() };
-    await assertSucceeds(setDoc(doc(owner, path), value));
+    await assertFails(setDoc(doc(owner, path), value));
+    await env.withSecurityRulesDisabled(async context => setDoc(doc(context.firestore(), path), { ...value, createdAt: new Date() }));
     await assertSucceeds(getDoc(doc(owner, path)));
     await assertFails(getDoc(doc(foreign, path)));
     await assertFails(setDoc(doc(owner, path), { ...value, state: "CONFLICT" }));

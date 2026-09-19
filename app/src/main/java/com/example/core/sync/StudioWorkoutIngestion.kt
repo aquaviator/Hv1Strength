@@ -1,8 +1,8 @@
 package com.example.core.sync
 
 import com.example.data.*
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import java.security.MessageDigest
@@ -33,7 +33,7 @@ object StudioWorkoutContract {
         is Boolean, is Number -> value.toString()
         is String -> javascriptQuote(value)
         is List<*> -> value.joinToString(prefix = "[", postfix = "]", separator = ",") { canonicalJson(it) }
-        is Map<*, *> -> value.entries.filter { it.key is String }.sortedBy { it.key as String }
+        is Map<*, *> -> value.entries.filter { it.key is String && it.key != "checksum" }.sortedBy { it.key as String }
             .joinToString(prefix = "{", postfix = "}", separator = ",") {
                 "${javascriptQuote(it.key as String)}:${canonicalJson(it.value)}"
             }
@@ -53,17 +53,21 @@ object StudioWorkoutContract {
         if (requiredString(value, "versionId") != versionId) throw StudioWorkoutContractException("VERSION_ID_MISMATCH")
         if (value["contentType"] != "workout" || value["publicationState"] != "PUBLISHED" || value["tombstoneState"] != "ACTIVE")
             throw StudioWorkoutContractException("INVALID_PUBLICATION_STATE")
-        if (value["schemaVersion"] != "humanv1.workout/1") throw StudioWorkoutContractException("UNSUPPORTED_SCHEMA")
+        val canonicalContract = value["schemaVersion"] == "humanv1.canonical-workout/1"
+        if (!canonicalContract && value["schemaVersion"] != "humanv1.workout/1") throw StudioWorkoutContractException("UNSUPPORTED_SCHEMA")
         val globalId = requiredString(value, "globalId")
         if (value["sourceDraftId"] != globalId) throw StudioWorkoutContractException("SOURCE_ID_MISMATCH")
         val revision = (value["revision"] as? Number)?.toLong()?.takeIf { it >= 1 }
             ?: throw StudioWorkoutContractException("INVALID_REVISION")
         val checksum = requiredString(value, "contentChecksum")
         if (!checksum.matches(Regex("^[0-9a-f]{64}$"))) throw StudioWorkoutContractException("INVALID_CHECKSUM")
-        val payload = value["payload"] as? Map<String, Any?>
+        val sourcePayload = value["payload"] as? Map<String, Any?>
             ?: throw StudioWorkoutContractException("MISSING_PAYLOAD")
+        if (canonicalContract && sourcePayload["schemaVersion"] != "humanv1.canonical-workout/1") throw StudioWorkoutContractException("UNSUPPORTED_PAYLOAD_SCHEMA")
+        if (canonicalContract && requiredString(sourcePayload, "workoutGlobalId") != globalId) throw StudioWorkoutContractException("WORKOUT_ID_MISMATCH")
+        if (sha256(canonicalJson(sourcePayload)) != checksum) throw StudioWorkoutContractException("CHECKSUM_MISMATCH")
+        val payload = if (canonicalContract) canonicalToLegacy(sourcePayload) else sourcePayload
         if (requiredString(payload, "workoutId") != globalId) throw StudioWorkoutContractException("WORKOUT_ID_MISMATCH")
-        if (sha256(canonicalJson(payload)) != checksum) throw StudioWorkoutContractException("CHECKSUM_MISMATCH")
         val title = requiredString(payload, "title")
         val discipline = requiredString(payload, "discipline")
         val catalogueReleaseId = requiredString(payload, "catalogueReleaseId")
@@ -153,6 +157,32 @@ object StudioWorkoutContract {
             syncStatus = "SYNCED", lastSyncedAt = appliedAt, originDeviceId = "studio:HUMAN_STRENGTH")
         return StudioWorkoutImport(link, template, imported)
     }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun canonicalToLegacy(payload: Map<String, Any?>): Map<String, Any?> {
+        fun metrics(set: Map<String, Any?>): List<Map<String, Any?>> = buildList {
+            val repetitions = set["repetitions"] as? Map<String, Any?>
+            repetitions?.get("target")?.let { add(mapOf("prescriptionId" to "${set["setId"]}:reps", "metricKey" to "repetitions", "targetValue" to it, "canonicalUnit" to "count")) }
+            set["durationSeconds"]?.let { add(mapOf("prescriptionId" to "${set["setId"]}:duration", "metricKey" to "duration", "targetValue" to it, "canonicalUnit" to "s")) }
+            set["distanceMetres"]?.let { add(mapOf("prescriptionId" to "${set["setId"]}:distance", "metricKey" to "distance", "targetValue" to it, "canonicalUnit" to "m")) }
+            (set["load"] as? Map<String, Any?>)?.let { add(mapOf("prescriptionId" to "${set["setId"]}:load", "metricKey" to "external_load", "targetValue" to it["value"], "canonicalUnit" to it["unit"])) }
+            (set["intensity"] as? Map<String, Any?>)?.let { intensity -> add(mapOf("prescriptionId" to "${set["setId"]}:intensity", "metricKey" to intensity["scale"].toString().lowercase(), "textValue" to intensity["target"])) }
+            set["tempo"]?.let { add(mapOf("prescriptionId" to "${set["setId"]}:tempo", "metricKey" to "tempo", "textValue" to it)) }
+        }
+        val blocks: List<Map<String, Any?>> = (payload["blocks"] as? List<*>)?.flatMap { raw ->
+            val block = raw as Map<String, Any?>
+            if (block["structure"] == "TRANSITION") emptyList<Map<String, Any?>>() else (block["placements"] as? List<*>)?.map { placementRaw ->
+                val placement = placementRaw as Map<String, Any?>
+                val reference = placement["exerciseReference"] as? Map<String, Any?> ?: emptyMap()
+                mapOf("blockId" to placement["placementId"], "type" to "EXERCISE", "exerciseId" to reference["exerciseId"],
+                    "exerciseNameSnapshot" to reference["exerciseId"], "notes" to placement["instructions"],
+                    "efforts" to ((placement["sets"] as? List<*>)?.map { setRaw -> val set = setRaw as Map<String, Any?>
+                        mapOf("effortId" to set["setId"], "effortType" to "WORKING", "restAfterSeconds" to set["restAfterSeconds"], "prescriptions" to metrics(set)) } ?: emptyList()))
+            } ?: emptyList()
+        } ?: emptyList()
+        return mapOf("schemaVersion" to "humanv1.workout/1", "workoutId" to payload["workoutGlobalId"], "title" to payload["title"],
+            "description" to payload["description"], "discipline" to payload["discipline"], "catalogueReleaseId" to "canonical", "blocks" to blocks)
+    }
 }
 
 data class StudioWorkoutSyncSummary(val applied: Int, val requiresAttention: Int)
@@ -170,7 +200,8 @@ internal fun parseStudioWorkoutBatch(documents: List<Pair<String, Map<String, An
     return ParsedStudioWorkoutBatch(imports, requiresAttention)
 }
 
-class StudioWorkoutIngestionRepository(private val firestore: FirebaseFirestore, private val dao: StrengthDao) {
+class StudioWorkoutIngestionRepository(private val firestore: FirebaseFirestore, private val dao: StrengthDao,
+    private val acknowledgementOverride: (suspend (StudioWorkoutLink, String, String?) -> Unit)? = null) {
     suspend fun synchronize(owner: String, firebaseUid: String): StudioWorkoutSyncSummary {
         val snapshots = firestore.collection("users").document(owner).collection("publishedWorkouts").get().await()
         var applied = 0
@@ -185,23 +216,11 @@ class StudioWorkoutIngestionRepository(private val firestore: FirebaseFirestore,
     }
 
     private suspend fun acknowledge(link: StudioWorkoutLink, state: String, reasonCode: String?) {
-        val ref = firestore.collection("users").document(link.humanUserId)
-            .collection("workoutDeliveryAcks").document(link.acknowledgementId)
-        firestore.runTransaction { tx ->
-            val existing = tx.get(ref)
-            if (existing.exists()) {
-                val data = existing.data ?: emptyMap()
-                require(data["humanUserId"] == link.humanUserId && data["versionId"] == link.versionId &&
-                    data["appliedChecksum"] == link.contentChecksum && data["state"] == state) { "ACKNOWLEDGEMENT_CONFLICT" }
-            } else {
-                tx.set(ref, mapOf("schemaVersion" to 1, "acknowledgementId" to link.acknowledgementId,
-                    "humanUserId" to link.humanUserId, "workoutGlobalId" to link.workoutGlobalId,
-                    "versionId" to link.versionId, "applicationId" to "HUMAN_STRENGTH",
-                    "appliedChecksum" to link.contentChecksum, "sourceRevision" to link.sourceRevision,
-                    "state" to state, "reasonCode" to reasonCode, "clientAppliedAtMillis" to link.appliedAt,
-                    "createdAt" to FieldValue.serverTimestamp()))
-            }
-        }.await()
+        acknowledgementOverride?.let { it(link, state, reasonCode); dao.markStudioAcknowledgement(link.versionId, state); return }
+        FirebaseFunctions.getInstance("europe-west1").getHttpsCallable("acknowledgeStudioDelivery").call(mapOf(
+            "entityType" to "workout", "acknowledgementId" to link.acknowledgementId, "globalId" to link.workoutGlobalId,
+            "versionId" to link.versionId, "checksum" to link.contentChecksum, "sourceRevision" to link.sourceRevision,
+            "state" to state, "reasonCode" to reasonCode, "clientAppliedAtMillis" to link.appliedAt)).await()
         dao.markStudioAcknowledgement(link.versionId, state)
     }
 }

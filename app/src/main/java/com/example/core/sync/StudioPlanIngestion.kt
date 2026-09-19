@@ -1,8 +1,8 @@
 package com.example.core.sync
 
 import com.example.data.*
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import java.time.LocalDate
@@ -20,7 +20,8 @@ object StudioPlanContract {
         if (requiredString(value, "versionId") != versionId) throw StudioPlanContractException("VERSION_ID_MISMATCH")
         if (value["contentType"] != "plan" || value["publicationState"] != "PUBLISHED" || value["tombstoneState"] != "ACTIVE")
             throw StudioPlanContractException("INVALID_PUBLICATION_STATE")
-        if (value["schemaVersion"] != "humanv1.plan/1") throw StudioPlanContractException("UNSUPPORTED_SCHEMA")
+        val canonicalContract = value["schemaVersion"] == "humanv1.canonical-plan/1"
+        if (!canonicalContract && value["schemaVersion"] != "humanv1.plan/1") throw StudioPlanContractException("UNSUPPORTED_SCHEMA")
         val globalId = requiredString(value, "globalId")
         if (value["sourceDraftId"] != globalId) throw StudioPlanContractException("SOURCE_ID_MISMATCH")
         val revision = (value["revision"] as? Number)?.toLong()?.takeIf { it >= 1 }
@@ -28,38 +29,49 @@ object StudioPlanContract {
         val checksum = requiredString(value, "contentChecksum")
         if (!checksum.matches(Regex("^[0-9a-f]{64}$"))) throw StudioPlanContractException("INVALID_CHECKSUM")
         val payload = value["payload"] as? Map<String, Any?> ?: throw StudioPlanContractException("MISSING_PAYLOAD")
-        if (requiredString(payload, "planId") != globalId) throw StudioPlanContractException("PLAN_ID_MISMATCH")
+        if (requiredString(payload, if (canonicalContract) "planGlobalId" else "planId") != globalId) throw StudioPlanContractException("PLAN_ID_MISMATCH")
+        if (canonicalContract && payload["schemaVersion"] != "humanv1.canonical-plan/1") throw StudioPlanContractException("UNSUPPORTED_PAYLOAD_SCHEMA")
         if (StudioWorkoutContract.sha256(StudioWorkoutContract.canonicalJson(payload)) != checksum) throw StudioPlanContractException("CHECKSUM_MISMATCH")
         val title = requiredString(payload, "title")
         val startDate = runCatching { LocalDate.parse(requiredString(payload, "startDate")) }
             .getOrElse { throw StudioPlanContractException("INVALID_START_DATE") }
         requiredString(payload, "timezone")
-        if (payload["destinationApplication"] != "HUMAN_STRENGTH") throw StudioPlanContractException("WRONG_DESTINATION")
-        val declaredDependencies = (payload["workoutVersionIds"] as? List<*>)?.map {
+        if (!canonicalContract && payload["destinationApplication"] != "HUMAN_STRENGTH") throw StudioPlanContractException("WRONG_DESTINATION")
+        val weeks = payload["weeks"] as? List<*> ?: throw StudioPlanContractException("MISSING_WEEKS")
+        val declaredDependencies = if (canonicalContract) weeks.flatMap { rawWeek ->
+            val week = rawWeek as? Map<String, Any?> ?: throw StudioPlanContractException("MALFORMED_WEEK")
+            (week["placements"] as? List<*>)?.map { raw -> requiredString(raw as? Map<String, Any?> ?: throw StudioPlanContractException("MALFORMED_PLACEMENT"), "workoutVersionId") }
+                ?: throw StudioPlanContractException("MISSING_PLACEMENTS")
+        }.distinct().sorted() else (payload["workoutVersionIds"] as? List<*>)?.map {
             (it as? String)?.takeIf(String::isNotBlank) ?: throw StudioPlanContractException("MALFORMED_DEPENDENCY")
         }?.sorted() ?: throw StudioPlanContractException("MISSING_DEPENDENCIES")
-        val weeks = payload["weeks"] as? List<*> ?: throw StudioPlanContractException("MISSING_WEEKS")
         val dependencies = linkedSetOf<String>()
         val occurrences = mutableListOf<PlannedWorkout>()
         weeks.forEach { rawWeek ->
             val week = rawWeek as? Map<String, Any?> ?: throw StudioPlanContractException("MALFORMED_WEEK")
-            val weekNumber = (week["weekNumber"] as? Number)?.toInt()?.takeIf { it >= 1 }
+            val weekNumber = ((week[if (canonicalContract) "order" else "weekNumber"] as? Number)?.toInt()?.let { if (canonicalContract) it + 1 else it })?.takeIf { it >= 1 }
                 ?: throw StudioPlanContractException("INVALID_WEEK_NUMBER")
             val placements = week["placements"] as? List<*> ?: throw StudioPlanContractException("MISSING_PLACEMENTS")
             placements.forEach { rawPlacement ->
                 val placement = rawPlacement as? Map<String, Any?> ?: throw StudioPlanContractException("MALFORMED_PLACEMENT")
                 val placementId = requiredString(placement, "placementId")
-                val workoutGlobalId = requiredString(placement, "workoutId")
                 val workoutVersionId = requiredString(placement, "workoutVersionId")
                 val workout = dependency(workoutVersionId) ?: throw StudioPlanContractException("MISSING_WORKOUT_DEPENDENCY", workoutVersionId)
+                val workoutGlobalId = if (canonicalContract) workout.workoutGlobalId else requiredString(placement, "workoutId")
                 if (workout.humanUserId != owner || workout.workoutGlobalId != workoutGlobalId) throw StudioPlanContractException("WORKOUT_DEPENDENCY_MISMATCH")
+                if (canonicalContract && (requiredString(placement, "workoutGlobalId") != workout.workoutGlobalId
+                    || (placement["workoutRevision"] as? Number)?.toLong() != workout.sourceRevision
+                    || requiredString(placement, "workoutChecksum") != workout.contentChecksum
+                    || requiredString(placement, "workoutOwnerHumanUserId") != owner
+                    || placement["destinationApplication"] != "HUMAN_STRENGTH"))
+                    throw StudioPlanContractException("WORKOUT_DEPENDENCY_MISMATCH")
                 if (workout.applicationId != "HUMAN_STRENGTH") throw StudioPlanContractException("WORKOUT_DEPENDENCY_WRONG_DESTINATION", workoutVersionId)
                 if (workout.tombstoneState != "ACTIVE") throw StudioPlanContractException("WORKOUT_DEPENDENCY_ARCHIVED", workoutVersionId)
                 if (Regex("_r\\d+_[0-9a-f]{12}$").containsMatchIn(workoutVersionId) &&
                     !workoutVersionId.endsWith("_${workout.contentChecksum.take(12)}"))
                     throw StudioPlanContractException("WORKOUT_DEPENDENCY_CHECKSUM_MISMATCH", workoutVersionId)
                 dependencies += workoutVersionId
-                val day = (placement["dayOfWeek"] as? Number)?.toInt()?.takeIf { it in 1..7 }
+                val day = (placement[if (canonicalContract) "daySlot" else "dayOfWeek"] as? Number)?.toInt()?.takeIf { it in 1..7 }
                     ?: throw StudioPlanContractException("INVALID_SCHEDULE_DAY")
                 val scheduled = (placement["scheduledEpochDay"] as? Number)?.toLong()
                     ?: startDate.plusWeeks((weekNumber - 1).toLong()).plusDays((day - 1).toLong()).toEpochDay()
@@ -142,22 +154,12 @@ class StudioPlanIngestionRepository(
 
     private suspend fun acknowledge(link: StudioPlanLink, state: String, reasonCode: String?) {
         acknowledgementOverride?.let { it(link, state, reasonCode); dao.markStudioPlanAcknowledgement(link.planVersionId, state); return }
-        val ref = firestore.collection("users").document(link.humanUserId)
-            .collection("planDeliveryAcks").document(link.acknowledgementId)
         val dependencies = JSONArray(link.workoutVersionIdsJson).let { array -> (0 until array.length()).map { array.getString(it) } }
-        firestore.runTransaction { tx ->
-            val existing = tx.get(ref)
-            if (existing.exists()) {
-                val data = existing.data ?: emptyMap()
-                require(data["humanUserId"] == link.humanUserId && data["planVersionId"] == link.planVersionId &&
-                    data["planChecksum"] == link.planChecksum && data["state"] == state) { "PLAN_ACKNOWLEDGEMENT_CONFLICT" }
-            } else tx.set(ref, mapOf("schemaVersion" to 1, "acknowledgementId" to link.acknowledgementId,
-                "humanUserId" to link.humanUserId, "planGlobalId" to link.planGlobalId,
-                "planVersionId" to link.planVersionId, "planChecksum" to link.planChecksum,
-                "applicationId" to "HUMAN_STRENGTH", "sourceRevision" to link.sourceRevision,
-                "workoutVersionIds" to dependencies, "state" to state, "reasonCode" to reasonCode,
-                "clientAppliedAtMillis" to link.appliedAt, "createdAt" to FieldValue.serverTimestamp()))
-        }.await()
+        FirebaseFunctions.getInstance("europe-west1").getHttpsCallable("acknowledgeStudioDelivery").call(mapOf(
+            "entityType" to "plan", "acknowledgementId" to link.acknowledgementId, "globalId" to link.planGlobalId,
+            "versionId" to link.planVersionId, "checksum" to link.planChecksum, "sourceRevision" to link.sourceRevision,
+            "workoutVersionIds" to dependencies, "state" to state, "reasonCode" to reasonCode,
+            "clientAppliedAtMillis" to link.appliedAt)).await()
         dao.markStudioPlanAcknowledgement(link.planVersionId, state)
     }
 }

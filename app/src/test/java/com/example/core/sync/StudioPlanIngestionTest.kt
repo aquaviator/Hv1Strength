@@ -55,6 +55,31 @@ class StudioPlanIngestionTest {
         assertEquals(3, dao.getAllPlannedWorkoutsForBackup("uid-a").size)
     }
 
+    @Test fun `parser accepts the canonical immutable plan and exact workout version`() = runBlocking {
+        val dependency = workout("workout-a-r1", "workout-a", 11)
+        val payload = mapOf<String, Any?>("schemaVersion" to "humanv1.canonical-plan/1", "planGlobalId" to "canonical-plan",
+            "revision" to 1L, "checksum" to "", "owner" to mapOf("humanUserId" to owner),
+            "provenance" to mapOf("contentClass" to "USER_AUTHORED", "originApplication" to "WORKOUT_STUDIO"),
+            "title" to "Canonical plan", "goal" to "", "athleteLevel" to "ALL", "durationWeeks" to 1L,
+            "timezone" to "Europe/London", "startDate" to "2026-09-14", "phases" to emptyList<Any>(), "cycles" to emptyList<Any>(),
+            "scheduleSchemaVersion" to "1.2", "weeks" to listOf(mapOf("weekId" to "week-1", "order" to 0L, "recoveryWeek" to false,
+                "placements" to listOf(mapOf("placementId" to "placement-1", "order" to 0L, "daySlot" to 1L,
+                    "workoutGlobalId" to dependency.workoutGlobalId, "workoutVersionId" to dependency.versionId,
+                    "workoutRevision" to dependency.sourceRevision, "workoutChecksum" to dependency.contentChecksum,
+                    "workoutOwnerHumanUserId" to owner, "destinationApplication" to "HUMAN_STRENGTH",
+                    "required" to true, "priority" to false, "adaptation" to "FIXED")), "days" to emptyList<Any>())),
+            "publicationEligibility" to "ELIGIBLE", "validationStatus" to "VALID", "createdAt" to "2026-01-01T00:00:00.000Z",
+            "updatedAt" to "2026-01-01T00:00:00.000Z", "tombstoneState" to "ACTIVE")
+        val checksum = StudioWorkoutContract.sha256(StudioWorkoutContract.canonicalJson(payload))
+        val versionId = "canonical-plan_r1_${checksum.take(12)}"
+        val envelope = mapOf<String, Any?>("schemaVersion" to "humanv1.canonical-plan/1", "globalId" to "canonical-plan", "versionId" to versionId,
+            "humanUserId" to owner, "revision" to 1L, "publicationState" to "PUBLISHED", "tombstoneState" to "ACTIVE",
+            "sourceDraftId" to "canonical-plan", "contentType" to "plan", "contentChecksum" to checksum, "payload" to payload)
+        val parsed = StudioPlanContract.parse(versionId, envelope, owner, "uid-a", { if (it == dependency.versionId) dependency else null }, 1000)
+        assertEquals(1, parsed.occurrences.size)
+        assertEquals(dependency.localRoutineId, parsed.occurrences.single().templateId)
+    }
+
     @Test fun `new revision preserves completed history and missing dependency fails closed`() = runBlocking {
         val dao = db.strengthDao()
         dao.insertStudioWorkoutLink(workout("workout-a-r1", "workout-a", 11))
