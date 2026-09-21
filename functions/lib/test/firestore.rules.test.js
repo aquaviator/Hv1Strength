@@ -328,5 +328,21 @@ describe("Strength Firestore trusted identity rules", function () {
         }
         await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(db, "exercise_catalogue_releases/new-release"), { status: "published", channel: "production" }));
     });
+    it("allows owner reads but reserves plan drafts, normalized dependencies and save audits for the trusted callable", async () => {
+        await env.withSecurityRulesDisabled(async (context) => {
+            const db = context.firestore();
+            await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, `users/${H1}/planDrafts/plan-1`), { schemaVersion: 1, globalId: "plan-1", humanUserId: H1, revision: 1, status: "DRAFT", payload: {}, createdAt: "now", updatedAt: "now", deletedAt: null, originClientId: "server" });
+            await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, `users/${H1}/planDraftDependencies/plan-1__p-1`), { humanUserId: H1 });
+            await (0, firestore_1.setDoc)((0, firestore_1.doc)(db, `users/${H1}/planDraftSaveAudits/receipt-1`), { humanUserId: H1 });
+        });
+        const ownerDb = env.authenticatedContext("uid-a").firestore();
+        const otherDb = env.authenticatedContext("uid-b").firestore();
+        for (const path of ["planDrafts/plan-1", "planDraftDependencies/plan-1__p-1", "planDraftSaveAudits/receipt-1"]) {
+            await (0, rules_unit_testing_1.assertSucceeds)((0, firestore_1.getDoc)((0, firestore_1.doc)(ownerDb, `users/${H1}/${path}`)));
+            await (0, rules_unit_testing_1.assertFails)((0, firestore_1.getDoc)((0, firestore_1.doc)(otherDb, `users/${H1}/${path}`)));
+            await (0, rules_unit_testing_1.assertFails)((0, firestore_1.setDoc)((0, firestore_1.doc)(ownerDb, `users/${H1}/${path}`), { humanUserId: H1 }));
+            await (0, rules_unit_testing_1.assertFails)((0, firestore_1.deleteDoc)((0, firestore_1.doc)(ownerDb, `users/${H1}/${path}`)));
+        }
+    });
 });
 //# sourceMappingURL=firestore.rules.test.js.map

@@ -36,7 +36,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.rtdnHandler = exports.initializeAccountTrial = exports.verifyPurchase = exports.FIRESTORE_USER_SUBCOLLECTIONS = exports.MILLIS_PER_DAY = exports.ACCOUNT_TRIAL_DOCUMENT_ID = exports.TRIAL_POLICY_PATH = exports.FUNCTION_REGION = exports.EXPECTED_PRODUCT_ID = exports.EXPECTED_PACKAGE_NAME = exports.ensureHumanIdentity = exports.acknowledgeStudioDelivery = exports.publishStudioWorkout = exports.publishStudioPlan = void 0;
+exports.deleteUserAccount = exports.rtdnHandler = exports.initializeAccountTrial = exports.verifyPurchase = exports.FIRESTORE_USER_SUBCOLLECTIONS = exports.MILLIS_PER_DAY = exports.ACCOUNT_TRIAL_DOCUMENT_ID = exports.TRIAL_POLICY_PATH = exports.FUNCTION_REGION = exports.EXPECTED_PRODUCT_ID = exports.EXPECTED_PACKAGE_NAME = exports.ensureHumanIdentity = exports.saveStudioPlanDraft = exports.acknowledgeStudioDelivery = exports.publishStudioWorkout = exports.publishStudioPlan = void 0;
 exports.isAllowedWorkoutStudioOrigin = isAllowedWorkoutStudioOrigin;
 exports.parseTrialPolicy = parseTrialPolicy;
 exports.getPurchaseDocId = getPurchaseDocId;
@@ -54,7 +54,9 @@ const crypto = __importStar(require("crypto"));
 const identity_1 = require("./identity");
 __exportStar(require("./identity"), exports);
 __exportStar(require("./studioPublication"), exports);
+__exportStar(require("./studioPlanDraft"), exports);
 const studioPublication_1 = require("./studioPublication");
+const studioPlanDraft_1 = require("./studioPlanDraft");
 if (!admin.apps.length) {
     admin.initializeApp();
 }
@@ -62,6 +64,7 @@ const db = admin.firestore();
 exports.publishStudioPlan = (0, https_1.onCall)({ region: "europe-west1" }, request => (0, studioPublication_1.publishStudioPlanCallable)(db, request));
 exports.publishStudioWorkout = (0, https_1.onCall)({ region: "europe-west1" }, request => (0, studioPublication_1.publishStudioWorkoutCallable)(db, request));
 exports.acknowledgeStudioDelivery = (0, https_1.onCall)({ region: "europe-west1" }, request => (0, studioPublication_1.acknowledgeStudioDeliveryCallable)(db, request));
+exports.saveStudioPlanDraft = (0, https_1.onCall)({ region: "europe-west1" }, request => (0, studioPlanDraft_1.saveStudioPlanDraftCallable)(db, request));
 exports.ensureHumanIdentity = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
     const uid = request.auth?.uid;
     if (!uid)

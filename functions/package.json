@@ -12,6 +12,7 @@
     "logs": "firebase functions:log",
     "test": "npm run build && mocha --reporter spec lib/test/index.test.js lib/test/identity.test.js lib/test/entitlement.contract.test.js",
     "test:rules": "npm run build && firebase emulators:exec --project demo-hv1-strength-local --only firestore \"mocha --reporter spec lib/test/firestore.rules.test.js\"",
+    "test:plan-draft": "npm run build && firebase emulators:exec --project demo-hv1-strength-local --only firestore \"mocha --reporter spec lib/test/studio-plan-draft.test.js\"",
     "grant:studio-support": "node scripts/grant-workout-studio-support.mjs",
     "grant:strength-support": "node scripts/grant-human-strength-support.mjs",
     "preflight:studio-delivery": "node scripts/preflight-studio-workout-delivery.mjs"
