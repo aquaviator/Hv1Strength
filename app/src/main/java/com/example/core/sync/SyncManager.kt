@@ -7,13 +7,20 @@ import kotlinx.coroutines.flow.StateFlow
 data class ManualSyncResult(
     val phase: String = "NEVER_CHECKED",
     val requestId: String? = null,
+    val requestedAt: Long? = null,
     val startedAt: Long? = null,
     val completedAt: Long? = null,
+    val lastSuccessfulCompletedAt: Long? = null,
     val downloaded: Int = 0,
     val uploaded: Int = 0,
+    val attentionCount: Int = 0,
+    val offline: Boolean = false,
+    val deterministicAttention: Boolean = false,
     val reason: String? = null,
-    val lastSuccessfulAt: Long? = null
+    val errorClassification: String? = null
 )
+
+data class SyncRunCounts(val downloaded: Int = 0, val uploaded: Int = 0, val attentionCount: Int = 0)
 
 object SyncManager {
     private const val RESULT_PREFS = "sync_check_result"
@@ -24,6 +31,7 @@ object SyncManager {
     val manualResult: StateFlow<ManualSyncResult> = _manualResult
     private var currentRunDownloaded = 0
     private var currentRunUploaded = 0
+    private var currentRunAttentionCount = 0
 
     private val _currentStatus = MutableStateFlow("Idle")
     val currentStatus: StateFlow<String> = _currentStatus
@@ -62,56 +70,82 @@ object SyncManager {
         _manualResult.value = ManualSyncResult(
             phase = prefs.getString("phase", "NEVER_CHECKED") ?: "NEVER_CHECKED",
             requestId = prefs.getString("request_id", null),
+            requestedAt = prefs.getLong("requested_at", 0L).takeIf { it > 0 },
             startedAt = prefs.getLong("started_at", 0L).takeIf { it > 0 },
             completedAt = prefs.getLong("completed_at", 0L).takeIf { it > 0 },
+            lastSuccessfulCompletedAt = prefs.getLong("last_successful_completed_at",
+                prefs.getLong("last_successful_at", 0L)).takeIf { it > 0 },
             downloaded = prefs.getInt("downloaded", 0),
             uploaded = prefs.getInt("uploaded", 0),
+            attentionCount = prefs.getInt("attention_count", 0),
+            offline = prefs.getBoolean("offline", false),
+            deterministicAttention = prefs.getBoolean("deterministic_attention", false),
             reason = prefs.getString("reason", null),
-            lastSuccessfulAt = prefs.getLong("last_successful_at", 0L).takeIf { it > 0 }
+            errorClassification = prefs.getString("error_classification", null)
         )
     }
 
-    fun beginManualCheck(context: Context, requestId: String, startedAt: Long): Boolean = synchronized(resultLock) {
+    fun beginManualCheck(context: Context, requestId: String, requestedAt: Long): Boolean = synchronized(resultLock) {
         initialize(context)
-        if (_manualResult.value.phase == "CHECKING") return@synchronized false
-        persist(ManualSyncResult(phase = "CHECKING", requestId = requestId, startedAt = startedAt,
-            lastSuccessfulAt = _manualResult.value.lastSuccessfulAt))
+        if (_manualResult.value.phase == "QUEUED" || _manualResult.value.phase == "CHECKING") return@synchronized false
+        persist(ManualSyncResult(phase = "QUEUED", requestId = requestId, requestedAt = requestedAt,
+            lastSuccessfulCompletedAt = _manualResult.value.lastSuccessfulCompletedAt))
         currentRunDownloaded = 0
         currentRunUploaded = 0
+        currentRunAttentionCount = 0
         true
     }
 
-    fun updateCurrentRunCounts(downloaded: Int, uploaded: Int) = synchronized(resultLock) {
-        currentRunDownloaded = downloaded
-        currentRunUploaded = uploaded
-    }
-
-    fun currentRunCounts(): Pair<Int, Int> = synchronized(resultLock) { currentRunDownloaded to currentRunUploaded }
-
-    fun completeManualCheck(context: Context, requestId: String, downloaded: Int, uploaded: Int,
-                            attention: Boolean, offline: Boolean, reason: String?, completedAt: Long) = synchronized(resultLock) {
+    fun startManualCheck(context: Context, requestId: String, startedAt: Long): Boolean = synchronized(resultLock) {
         initialize(context)
         val current = _manualResult.value
-        if (current.phase != "CHECKING" || current.requestId != requestId) return@synchronized
+        if (current.requestId != requestId || current.phase !in setOf("QUEUED", "CHECKING")) return@synchronized false
+        if (current.phase != "CHECKING" || current.startedAt == null) persist(current.copy(phase = "CHECKING", startedAt = startedAt))
+        true
+    }
+
+    fun updateCurrentRunCounts(downloaded: Int, uploaded: Int, attentionCount: Int = 0) = synchronized(resultLock) {
+        currentRunDownloaded = downloaded
+        currentRunUploaded = uploaded
+        currentRunAttentionCount = attentionCount
+    }
+
+    fun currentRunCounts(): SyncRunCounts = synchronized(resultLock) {
+        SyncRunCounts(currentRunDownloaded, currentRunUploaded, currentRunAttentionCount)
+    }
+
+    fun completeManualCheck(context: Context, requestId: String, downloaded: Int, uploaded: Int,
+                            attentionCount: Int, offline: Boolean, reason: String?, errorClassification: String?,
+                            completedAt: Long) = synchronized(resultLock) {
+        initialize(context)
+        val current = _manualResult.value
+        if (current.phase !in setOf("QUEUED", "CHECKING") || current.requestId != requestId) return@synchronized
         val phase = when {
             offline -> "OFFLINE"
             reason != null -> "FAILED"
-            attention -> "ATTENTION"
+            attentionCount > 0 -> "ATTENTION"
             downloaded > 0 || uploaded > 0 -> "UPDATED"
             else -> "UP_TO_DATE"
         }
         persist(current.copy(phase = phase, completedAt = completedAt, downloaded = downloaded,
-            uploaded = uploaded, reason = reason, lastSuccessfulAt = if (reason == null && !offline) completedAt else current.lastSuccessfulAt))
+            uploaded = uploaded, attentionCount = attentionCount, offline = offline,
+            deterministicAttention = attentionCount > 0 && reason == null && !offline,
+            reason = reason, errorClassification = errorClassification,
+            lastSuccessfulCompletedAt = if (reason == null && !offline) completedAt else current.lastSuccessfulCompletedAt))
     }
 
     private fun persist(value: ManualSyncResult) {
         _manualResult.value = value
         resultContext?.getSharedPreferences(RESULT_PREFS, Context.MODE_PRIVATE)?.edit()?.apply {
             putString("phase", value.phase); putString("request_id", value.requestId)
+            putLong("requested_at", value.requestedAt ?: 0L)
             putLong("started_at", value.startedAt ?: 0L); putLong("completed_at", value.completedAt ?: 0L)
+            putLong("last_successful_completed_at", value.lastSuccessfulCompletedAt ?: 0L)
             putInt("downloaded", value.downloaded); putInt("uploaded", value.uploaded)
-            putString("reason", value.reason); putLong("last_successful_at", value.lastSuccessfulAt ?: 0L)
-        }?.apply()
+            putInt("attention_count", value.attentionCount); putBoolean("offline", value.offline)
+            putBoolean("deterministic_attention", value.deterministicAttention)
+            putString("reason", value.reason); putString("error_classification", value.errorClassification)
+        }?.commit()
     }
 
     fun updateStatus(status: String) {

@@ -256,7 +256,11 @@ class SyncEngineImpl internal constructor(
                 .synchronize(humanUserId, trustedIdentity.firebaseUid)
             val planSummary = StudioPlanIngestionRepository(requireNotNull(firestore), dao)
                 .synchronize(humanUserId, trustedIdentity.firebaseUid)
-            SyncManager.updateCurrentRunCounts(downloaded + workoutSummary.applied + planSummary.applied, successfulUploads)
+            SyncManager.updateCurrentRunCounts(
+                downloaded + workoutSummary.applied + planSummary.applied,
+                successfulUploads,
+                workoutSummary.requiresAttention + planSummary.requiresAttention
+            )
 
             // 4. Mark successful synchronization
             SyncManager.updateLastSync(System.currentTimeMillis())

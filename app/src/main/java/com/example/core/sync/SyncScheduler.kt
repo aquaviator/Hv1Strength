@@ -8,6 +8,8 @@ object SyncScheduler {
 
     private const val IMMEDIATE_WORK = "ImmediateSyncWork"
     private const val PERIODIC_WORK = "PeriodicSyncWork"
+    const val INPUT_MANUAL = "manual_check"
+    const val INPUT_REQUEST_ID = "manual_request_id"
 
     fun cancelCloudSync(context: Context) {
         WorkManager.getInstance(context).cancelUniqueWork(IMMEDIATE_WORK)
@@ -22,12 +24,15 @@ object SyncScheduler {
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
+        val requestId = java.util.UUID.randomUUID()
         val request = OneTimeWorkRequestBuilder<ImmediateSyncWorker>()
+            .setId(requestId)
+            .setInputData(workDataOf(INPUT_MANUAL to manual, INPUT_REQUEST_ID to requestId.toString()))
             .setConstraints(constraints)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
             .build()
 
-        if (manual && !SyncManager.beginManualCheck(context, request.id.toString(), System.currentTimeMillis())) return false
+        if (manual && !SyncManager.beginManualCheck(context, requestId.toString(), System.currentTimeMillis())) return false
 
         WorkManager.getInstance(context).enqueueUniqueWork(
             IMMEDIATE_WORK,

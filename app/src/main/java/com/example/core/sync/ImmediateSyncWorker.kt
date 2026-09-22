@@ -22,17 +22,22 @@ class ImmediateSyncWorker(
         val repository = StrengthRepository(db.strengthDao(), applicationContext)
         val syncEngine = SyncEngineImpl(applicationContext, repository)
         
-        val requestId = id.toString()
+        val manual = inputData.getBoolean(SyncScheduler.INPUT_MANUAL, false)
+        val requestId = inputData.getString(SyncScheduler.INPUT_REQUEST_ID) ?: id.toString()
+        if (manual && !SyncManager.startManualCheck(applicationContext, requestId, System.currentTimeMillis())) {
+            return Result.failure()
+        }
         return try {
             val result = syncEngine.synchronizeAll()
             val status = SyncManager.currentStatus.value
-            val (downloaded, uploaded) = SyncManager.currentRunCounts()
-            SyncManager.completeManualCheck(applicationContext, requestId,
-                downloaded, uploaded,
-                attention = status == "ItemsNeedReview" || status.contains("NeedsAttention"),
-                offline = status == "WaitingForConnection",
-                reason = result.exceptionOrNull()?.localizedMessage ?: SyncManager.lastError.value,
-                completedAt = System.currentTimeMillis())
+            val counts = SyncManager.currentRunCounts()
+            val attentionCount = maxOf(counts.attentionCount,
+                if (status == "ItemsNeedReview" || status.contains("NeedsAttention")) 1 else 0)
+            val reason = result.exceptionOrNull()?.localizedMessage ?: SyncManager.lastError.value
+            if (manual) SyncManager.completeManualCheck(applicationContext, requestId,
+                counts.downloaded, counts.uploaded, attentionCount,
+                offline = status == "WaitingForConnection", reason = reason,
+                errorClassification = classify(reason, status), completedAt = System.currentTimeMillis())
             if (result.isSuccess) {
                 if (UnattendedSyncPolicy.workerShouldRetry(true, repository.getAllCommands())) Result.retry()
                 else Result.success()
@@ -40,9 +45,16 @@ class ImmediateSyncWorker(
                 Result.retry()
             }
         } catch (e: Exception) {
-            SyncManager.completeManualCheck(applicationContext, requestId, 0, 0, false, false,
-                e.localizedMessage ?: "Synchronization failed", System.currentTimeMillis())
+            if (manual) SyncManager.completeManualCheck(applicationContext, requestId, 0, 0, 0, false,
+                e.localizedMessage ?: "Synchronization failed", "TRANSIENT_FAILURE", System.currentTimeMillis())
             Result.retry()
         }
+    }
+
+    private fun classify(reason: String?, status: String): String? = when {
+        reason == null -> null
+        status == "WaitingForConnection" -> "OFFLINE"
+        reason.contains("permission", ignoreCase = true) -> "PERMISSION"
+        else -> "TRANSIENT_FAILURE"
     }
 }

@@ -130,15 +130,7 @@ fun SettingsScreen(
                     onAction = if (BuildConfig.DEBUG) onNavigateToSyncDebug else null
                 )
                 if (authState is AuthState.Authenticated) {
-                    val manualDetail = when (manualSync.phase) {
-                        "CHECKING" -> "Checking…"
-                        "UPDATED" -> "Updated — ${manualSync.downloaded} downloaded, ${manualSync.uploaded} uploaded — checked ${formatRelativeSyncTime(manualSync.completedAt)}"
-                        "UP_TO_DATE" -> "Up to date — checked ${formatRelativeSyncTime(manualSync.completedAt)}"
-                        "ATTENTION" -> "Some items need attention — checked ${formatRelativeSyncTime(manualSync.completedAt)}"
-                        "OFFLINE" -> "Offline — last checked ${formatRelativeSyncTime(manualSync.completedAt)}"
-                        "FAILED" -> "Synchronization failed — ${manualSync.reason ?: "try again"} — last successful check ${formatRelativeSyncTime(manualSync.lastSuccessfulAt)}"
-                        else -> "Never checked"
-                    }
+                    val manualDetail = manualSyncDetail(manualSync)
                     SettingsClickableRow(
                         icon = Icons.Default.Sync,
                         title = "Check now",
@@ -681,17 +673,6 @@ fun SettingsScreen(
                 }
             }
         )
-    }
-}
-
-private fun formatRelativeSyncTime(timestamp: Long?): String {
-    if (timestamp == null) return "never"
-    val seconds = ((System.currentTimeMillis() - timestamp).coerceAtLeast(0L) / 1000L)
-    return when {
-        seconds < 10 -> "just now"
-        seconds < 60 -> "${seconds}s ago"
-        seconds < 3600 -> "${seconds / 60}m ago"
-        else -> java.text.DateFormat.getDateTimeInstance().format(java.util.Date(timestamp))
     }
 }
 
