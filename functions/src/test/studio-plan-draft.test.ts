@@ -38,6 +38,13 @@ describe("atomic Studio plan-draft save", function() {
       normalizedState: "ACTIVE_UNTIL_EXPIRY", expiryAt: admin.firestore.Timestamp.fromDate(new Date("2099-01-01T00:00:00Z")) });
   });
   async function seedWorkouts(count = 8) { const batch = db.batch(); for (let i = 0; i < count; i++) batch.set(db.doc(`users/${owner}/workoutDrafts/workout-${i}`), workout(`workout-${i}`)); await batch.commit(); }
+  async function savedState() {
+    const plan = await db.doc(`users/${owner}/planDrafts/atomic-plan`).get();
+    const dependencies = await db.collection(`users/${owner}/planDraftDependencies`).orderBy("dependencyId").get();
+    const audits = await db.collection(`users/${owner}/planDraftSaveAudits`).get();
+    return { revision: plan.data()?.revision, updatedAt: plan.data()?.updatedAt,
+      dependencies: dependencies.docs.map(item => ({ id: item.id, revision: item.data().revision, updatedAt: item.data().updatedAt })), audits: audits.size };
+  }
 
   it("denies unauthenticated and missing owner bindings", async () => {
     await assert.rejects(saveStudioPlanDraftCallable(db, { auth: undefined, data: request() } as any), (error: HttpsError) => error.code === "unauthenticated");
@@ -83,8 +90,10 @@ describe("atomic Studio plan-draft save", function() {
   });
   it("atomically saves the eight-workout ten-week fixture and identical retry creates no duplicates", async () => {
     await seedWorkouts(); const input = request();
-    const first = await saveStudioPlanDraftForUid(db, uid, input); const second = await saveStudioPlanDraftForUid(db, uid, input);
+    const first = await saveStudioPlanDraftForUid(db, uid, input); const before = await savedState();
+    const second = await saveStudioPlanDraftForUid(db, uid, input); const after = await savedState();
     assert.equal(first.revision, 1); assert.equal(second.idempotent, true);
+    assert.deepEqual(after, before);
     assert.equal((await db.collection(`users/${owner}/planDrafts`).get()).size, 1);
     assert.equal((await db.collection(`users/${owner}/planDraftDependencies`).get()).size, 8);
     assert.equal((await db.collection(`users/${owner}/planDraftSaveAudits`).get()).size, 1);
@@ -92,12 +101,38 @@ describe("atomic Studio plan-draft save", function() {
     for (const name of ["publishedWorkouts", "publishedPlans", "workoutDeliveryAcks", "planDeliveryAcks", "plannedWorkouts", "sessions", "loggedSets"])
       assert.equal((await db.collection(`users/${owner}/${name}`).get()).size, 0);
   });
+  it("returns unchanged for a different key, dependency order and client timestamps", async () => {
+    await seedWorkouts(); await saveStudioPlanDraftForUid(db, uid, request());
+    const legacyPlanRef = db.doc(`users/${owner}/planDrafts/atomic-plan`); const legacyPlan = (await legacyPlanRef.get()).data()!;
+    legacyPlan.payload.weeks[0].placements.forEach((item: any) => item.dependency.expectedUpdatedAt = now);
+    legacyPlan.contentChecksum = "legacy-request-envelope-checksum"; await legacyPlanRef.set(legacyPlan); const before = await savedState();
+    const replay = request(8, 10, "different-key"); replay.create = false; replay.expectedRevision = 1;
+    replay.dependencies.reverse(); replay.dependencies.forEach(item => item.expectedUpdatedAt = "2030-01-01T00:00:00.000Z");
+    for (const week of (replay.plan as any).weeks) for (const placement of week.placements) placement.dependency.expectedUpdatedAt = "2030-01-01T00:00:00.000Z";
+    const result = await saveStudioPlanDraftForUid(db, uid, replay);
+    assert.equal(result.status, "UNCHANGED"); assert.equal(result.revision, 1); assert.deepEqual(await savedState(), before);
+  });
+  it("treats placement order and dependency revision changes as genuine edits", async () => {
+    await seedWorkouts(); await saveStudioPlanDraftForUid(db, uid, request());
+    const reordered = request(8, 10, "placement-order"); reordered.create = false; reordered.expectedRevision = 1;
+    (reordered.plan as any).weeks[0].placements.reverse();
+    const first = await saveStudioPlanDraftForUid(db, uid, reordered); assert.equal(first.revision, 2);
+    await db.doc(`users/${owner}/workoutDrafts/workout-0`).update({ revision: 2 });
+    const revision = request(8, 10, "dependency-revision"); revision.create = false; revision.expectedRevision = 2;
+    (revision.plan as any).weeks[0].placements.reverse();
+    revision.dependencies[0].expectedRevision = 2; (revision.plan as any).weeks[0].placements.find((item: any) => item.workoutId === "workout-0").dependency.expectedRevision = 2;
+    const second = await saveStudioPlanDraftForUid(db, uid, revision); assert.equal(second.revision, 3);
+    assert.equal((await savedState()).audits, 3);
+  });
   it("updates once, removes obsolete dependencies and rejects stale updates", async () => {
     await seedWorkouts(); await saveStudioPlanDraftForUid(db, uid, request());
     const update = request(7, 10, "atomic-update"); update.create = false; update.expectedRevision = 1;
-    const result = await saveStudioPlanDraftForUid(db, uid, update); assert.equal(result.revision, 2);
+    const result = await saveStudioPlanDraftForUid(db, uid, update); const beforeReplay = await savedState();
+    const replay = await saveStudioPlanDraftForUid(db, uid, update); assert.equal(result.revision, 2); assert.equal(replay.idempotent, true);
+    assert.deepEqual(await savedState(), beforeReplay);
     assert.equal((await db.collection(`users/${owner}/planDraftDependencies`).get()).size, 7);
     const stale = request(7, 10, "atomic-stale"); stale.create = false; stale.expectedRevision = 1;
+    (stale.plan as any).title = "Stale conflicting edit";
     await assert.rejects(saveStudioPlanDraftForUid(db, uid, stale), /PLAN_REVISION_STALE/);
   });
   it("fails closed when an idempotency key is reused for changed content", async () => {
@@ -106,9 +141,23 @@ describe("atomic Studio plan-draft save", function() {
     await assert.rejects(saveStudioPlanDraftForUid(db, uid, changed), /IDEMPOTENCY_KEY_REUSED/);
   });
   it("handles concurrent identical creates as one commit", async () => {
-    await seedWorkouts(); const [one, two] = await Promise.all([saveStudioPlanDraftForUid(db, uid, request()), saveStudioPlanDraftForUid(db, uid, request())]);
+    await seedWorkouts(); const first = request(); const secondInput = request(8, 10, "concurrent-create-two");
+    const [one, two] = await Promise.all([saveStudioPlanDraftForUid(db, uid, first), saveStudioPlanDraftForUid(db, uid, secondInput)]);
     assert.equal([one, two].filter(item => !item.idempotent).length, 1);
     assert.equal((await db.collection(`users/${owner}/planDraftSaveAudits`).get()).size, 1);
+  });
+  it("handles concurrent identical updates as one revision and rejects a conflicting loser", async () => {
+    await seedWorkouts(); await saveStudioPlanDraftForUid(db, uid, request());
+    const one = request(7, 10, "concurrent-update-one"); one.create = false; one.expectedRevision = 1;
+    const two = request(7, 10, "concurrent-update-two"); two.create = false; two.expectedRevision = 1;
+    const results = await Promise.all([saveStudioPlanDraftForUid(db, uid, one), saveStudioPlanDraftForUid(db, uid, two)]);
+    assert.deepEqual(results.map(item => item.revision), [2, 2]); assert.equal((await savedState()).audits, 2);
+    const editA = request(6, 10, "conflict-a"); editA.create = false; editA.expectedRevision = 2;
+    const editB = request(7, 10, "conflict-b"); editB.create = false; editB.expectedRevision = 2; (editB.plan as any).title = "Conflicting title";
+    const settled = await Promise.allSettled([saveStudioPlanDraftForUid(db, uid, editA), saveStudioPlanDraftForUid(db, uid, editB)]);
+    assert.equal(settled.filter(item => item.status === "fulfilled").length, 1);
+    assert.equal(settled.filter(item => item.status === "rejected").length, 1);
+    assert.equal((await savedState()).revision, 3); assert.equal((await savedState()).audits, 3);
   });
   it("an injected pre-write failure leaves no partial state and audit stores no payload", async () => {
     await seedWorkouts(); await assert.rejects(saveStudioPlanDraftForUid(db, uid, request(), { beforeWrites: () => { throw new Error("INJECTED"); } }));

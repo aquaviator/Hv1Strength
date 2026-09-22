@@ -18,7 +18,7 @@ export interface SaveStudioPlanDraftRequest {
   expectedContentChecksum?: string;
 }
 export interface SaveStudioPlanDraftResult {
-  planId: string; revision: number; contentChecksum: string; status: "SAVED"; idempotent: boolean;
+  planId: string; revision: number; contentChecksum: string; status: "SAVED" | "UNCHANGED"; idempotent: boolean;
   dependencyCount: number; updatedAt: string;
 }
 export interface SaveStudioPlanDraftHooks { beforeWrites?: () => void }
@@ -43,7 +43,39 @@ const dependencyFail = (code: string, dependency: SaveDependency): never => fail
 const receiptId = (owner: string, planId: string, requestKey: string) =>
   crypto.createHash("sha256").update(`${owner}\n${planId}\n${requestKey}`).digest("hex");
 
-function validateRequest(raw: SaveStudioPlanDraftRequest): { input: SaveStudioPlanDraftRequest; placements: any[]; checksum: string } {
+const semanticDependency = (dependency: SaveDependency) => ({
+  dependencyId: dependency.dependencyId, placementId: dependency.placementId, dependencyKind: dependency.dependencyKind,
+  referencedStableId: dependency.referencedStableId, expectedRevision: dependency.expectedRevision,
+  immutableVersionId: dependency.immutableVersionId, immutableRevision: dependency.immutableRevision,
+  immutableChecksum: dependency.immutableChecksum, immutableSchemaVersion: dependency.immutableSchemaVersion,
+  displayName: dependency.displayName, provenance: dependency.provenance,
+});
+
+function normalizedPlan(plan: Record<string, unknown>, owner: string, dependencies: SaveDependency[]): Record<string, unknown> {
+  const value = JSON.parse(JSON.stringify(plan));
+  value.dependencyOwnerHumanUserId = owner; value.dependencyCount = dependencies.length;
+  value.dependencyStorageVersion = 1; value.dependencyKinds = [...new Set(dependencies.map(item => item.dependencyKind))].sort();
+  const byPlacement = new Map(dependencies.map(item => [item.placementId, item]));
+  for (const week of value.weeks) for (const placement of week.placements) {
+    const dependency = byPlacement.get(placement.placementId)!;
+    placement.dependency = dependency.dependencyKind === "WORKOUT_DRAFT"
+      ? { kind: "WORKOUT_DRAFT", workoutDraftId: dependency.referencedStableId, humanUserId: owner, expectedRevision: dependency.expectedRevision,
+          displayName: dependency.displayName, originApplication: "WORKOUT_STUDIO" }
+      : dependency.dependencyKind === "PUBLISHED_WORKOUT_VERSION"
+        ? { kind: "PUBLISHED_WORKOUT_VERSION", workoutGlobalId: dependency.referencedStableId, versionId: dependency.immutableVersionId,
+            revision: dependency.immutableRevision, checksum: dependency.immutableChecksum, schemaVersion: dependency.immutableSchemaVersion, displayName: dependency.displayName }
+        : { kind: "GOVERNED_TEMPLATE", templateId: dependency.referencedStableId, immutableVersionId: dependency.immutableVersionId,
+            displayName: dependency.displayName, provenance: dependency.provenance };
+  }
+  return value;
+}
+
+const semanticHash = (planId: string, plan: Record<string, unknown>, dependencies: SaveDependency[]) => canonicalHash({
+  schemaVersion: STUDIO_DRAFT_SCHEMA, planId, plan,
+  dependencies: dependencies.map(semanticDependency).sort((a, b) => a.dependencyId.localeCompare(b.dependencyId)),
+});
+
+function validateRequest(raw: SaveStudioPlanDraftRequest): { input: SaveStudioPlanDraftRequest; placements: any[]; requestChecksum: string } {
   if (!raw || typeof raw !== "object") throw new HttpsError("invalid-argument", "PLAN_SAVE_REQUIRED");
   const planId = stringValue(raw.planId, "PLAN_ID_INVALID");
   const requestKey = stringValue(raw.requestKey, "REQUEST_KEY_INVALID", 128);
@@ -84,11 +116,11 @@ function validateRequest(raw: SaveStudioPlanDraftRequest): { input: SaveStudioPl
   if ((raw.create && expectedRevision !== null) || (!raw.create && expectedRevision === null)) fail("SAVE_INTENT_INVALID");
   const canonicalContent = { schemaVersion: raw.schemaVersion, planId, create: raw.create, expectedRevision, plan: raw.plan,
     dependencies: [...raw.dependencies].sort((a, b) => a.dependencyId.localeCompare(b.dependencyId)) };
-  const checksum = canonicalHash(canonicalContent);
-  if (raw.expectedContentChecksum !== undefined && raw.expectedContentChecksum !== checksum) fail("CONTENT_CHECKSUM_MISMATCH");
+  const requestChecksum = canonicalHash(canonicalContent);
+  if (raw.expectedContentChecksum !== undefined && raw.expectedContentChecksum !== requestChecksum) fail("CONTENT_CHECKSUM_MISMATCH");
   const encodedBytes = Buffer.byteLength(JSON.stringify(canonicalContent), "utf8");
   if (encodedBytes > 800_000) throw new HttpsError("invalid-argument", "PLAN_SAVE_TOO_LARGE");
-  return { input: { ...raw, planId, requestKey, clientOperationId, expectedRevision }, placements, checksum };
+  return { input: { ...raw, planId, requestKey, clientOperationId, expectedRevision }, placements, requestChecksum };
 }
 
 function assertExecutableWorkout(envelope: any, owner: string, dependency: SaveDependency): void {
@@ -105,7 +137,7 @@ function assertExecutableWorkout(envelope: any, owner: string, dependency: SaveD
 export async function saveStudioPlanDraftForUid(db: admin.firestore.Firestore, uid: string, raw: SaveStudioPlanDraftRequest,
   hooks: SaveStudioPlanDraftHooks = {}): Promise<SaveStudioPlanDraftResult> {
   if (!uid) throw new HttpsError("unauthenticated", "Firebase authentication is required");
-  const { input, checksum } = validateRequest(raw);
+  const { input, requestChecksum } = validateRequest(raw);
   const owner = await trustedHumanIdForUid(db, uid);
   const root = db.collection("users").doc(owner); const planRef = root.collection("planDrafts").doc(input.planId);
   const auditRef = root.collection("planDraftSaveAudits").doc(receiptId(owner, input.planId, input.requestKey));
@@ -131,9 +163,23 @@ export async function saveStudioPlanDraftForUid(db: admin.firestore.Firestore, u
       !["ACTIVE", "ACTIVE_UNTIL_EXPIRY"].includes(access?.normalizedState) || (access.normalizedState === "ACTIVE_UNTIL_EXPIRY" && (!Number.isFinite(expiryMillis) || expiryMillis <= Date.now()))) fail("STUDIO_ACCESS_REQUIRED");
     if (auditSnapshot.exists) {
       const receipt = auditSnapshot.data()!;
-      if (receipt.contentChecksum !== checksum || receipt.expectedRevision !== input.expectedRevision) fail("IDEMPOTENCY_KEY_REUSED");
-      return { planId: input.planId, revision: receipt.resultRevision, contentChecksum: checksum, status: "SAVED", idempotent: true,
+      if ((receipt.requestChecksum ?? receipt.contentChecksum) !== requestChecksum || receipt.expectedRevision !== input.expectedRevision) fail("IDEMPOTENCY_KEY_REUSED");
+      return { planId: input.planId, revision: receipt.resultRevision, contentChecksum: receipt.semanticChecksum ?? receipt.contentChecksum,
+        status: "SAVED", idempotent: true,
         dependencyCount: receipt.dependencyCount, updatedAt: receipt.updatedAt };
+    }
+    const incomingPlan = normalizedPlan(input.plan, owner, input.dependencies);
+    const incomingSemanticChecksum = semanticHash(input.planId, incomingPlan, input.dependencies);
+    if (planSnapshot.exists && planSnapshot.data()?.humanUserId === owner && planSnapshot.data()?.globalId === input.planId && planSnapshot.data()?.deletedAt == null) {
+      const storedDependencies = oldDependencies.docs.map(item => item.data() as SaveDependency);
+      const storedPlan = normalizedPlan(planSnapshot.data()!.payload, owner, storedDependencies);
+      const storedSemanticChecksum = semanticHash(input.planId, storedPlan, storedDependencies);
+      const incomingIds = new Set(input.dependencies.map(item => item.dependencyId));
+      const completeSet = storedDependencies.length === input.dependencies.length && storedDependencies.every(item => incomingIds.has(item.dependencyId));
+      if (completeSet && storedSemanticChecksum === incomingSemanticChecksum) {
+        return { planId: input.planId, revision: planSnapshot.data()!.revision, contentChecksum: incomingSemanticChecksum,
+          status: "UNCHANGED", idempotent: true, dependencyCount: input.dependencies.length, updatedAt: planSnapshot.data()!.updatedAt };
+      }
     }
     if (input.create) { if (planSnapshot.exists) fail("PLAN_ALREADY_EXISTS"); }
     else if (!planSnapshot.exists || planSnapshot.data()?.humanUserId !== owner || planSnapshot.data()?.globalId !== input.planId || planSnapshot.data()?.deletedAt != null ||
@@ -151,21 +197,7 @@ export async function saveStudioPlanDraftForUid(db: admin.firestore.Firestore, u
     });
     const now = new Date().toISOString(); const nextRevision = input.create ? 1 : Number(input.expectedRevision) + 1;
     const createdAt = input.create ? now : planSnapshot.data()!.createdAt;
-    const normalizedPlan = JSON.parse(JSON.stringify(input.plan));
-    normalizedPlan.dependencyOwnerHumanUserId = owner; normalizedPlan.dependencyCount = input.dependencies.length;
-    normalizedPlan.dependencyStorageVersion = 1; normalizedPlan.dependencyKinds = [...new Set(input.dependencies.map(item => item.dependencyKind))].sort();
-    const byPlacement = new Map(input.dependencies.map(item => [item.placementId, item]));
-    for (const week of normalizedPlan.weeks) for (const placement of week.placements) {
-      const dependency = byPlacement.get(placement.placementId)!;
-      placement.dependency = dependency.dependencyKind === "WORKOUT_DRAFT"
-        ? { kind: "WORKOUT_DRAFT", workoutDraftId: dependency.referencedStableId, humanUserId: owner, expectedRevision: dependency.expectedRevision,
-            expectedUpdatedAt: dependency.expectedUpdatedAt, displayName: dependency.displayName, originApplication: "WORKOUT_STUDIO" }
-        : dependency.dependencyKind === "PUBLISHED_WORKOUT_VERSION"
-          ? { kind: "PUBLISHED_WORKOUT_VERSION", workoutGlobalId: dependency.referencedStableId, versionId: dependency.immutableVersionId,
-              revision: dependency.immutableRevision, checksum: dependency.immutableChecksum, schemaVersion: dependency.immutableSchemaVersion, displayName: dependency.displayName }
-          : { kind: "GOVERNED_TEMPLATE", templateId: dependency.referencedStableId, immutableVersionId: dependency.immutableVersionId,
-              displayName: dependency.displayName, provenance: dependency.provenance };
-    }
+    const planForWrite = incomingPlan;
     const newIds = new Set(input.dependencies.map(item => item.dependencyId));
     hooks.beforeWrites?.();
     oldDependencies.docs.filter(item => !newIds.has(item.id)).forEach(item => transaction.delete(item.ref));
@@ -173,12 +205,13 @@ export async function saveStudioPlanDraftForUid(db: admin.firestore.Firestore, u
       ...dependency, schemaVersion: STUDIO_DEPENDENCY_SCHEMA, humanUserId: owner, planId: input.planId, revision: nextRevision,
       createdAt: oldDependencies.docs.find(item => item.id === dependency.dependencyId)?.data().createdAt ?? now, updatedAt: now, deletedAt: null
     }));
-    transaction.set(planRef, { schemaVersion: 1, globalId: input.planId, humanUserId: owner, revision: nextRevision, status: "DRAFT", payload: normalizedPlan,
-      contentChecksum: checksum, createdAt, updatedAt: now, deletedAt: null, originClientId: input.clientOperationId });
+    transaction.set(planRef, { schemaVersion: 1, globalId: input.planId, humanUserId: owner, revision: nextRevision, status: "DRAFT", payload: planForWrite,
+      contentChecksum: incomingSemanticChecksum, createdAt, updatedAt: now, deletedAt: null, originClientId: input.clientOperationId });
     transaction.create(auditRef, { schemaVersion: 1, humanUserId: owner, planId: input.planId, requestKey: input.requestKey, expectedRevision: input.expectedRevision,
-      resultRevision: nextRevision, contentChecksum: checksum, dependencyCount: input.dependencies.length, clientOperationId: input.clientOperationId, updatedAt: now,
+      resultRevision: nextRevision, contentChecksum: incomingSemanticChecksum, semanticChecksum: incomingSemanticChecksum, requestChecksum,
+      dependencyCount: input.dependencies.length, clientOperationId: input.clientOperationId, updatedAt: now,
       createdAt: FieldValue.serverTimestamp() });
-    return { planId: input.planId, revision: nextRevision, contentChecksum: checksum, status: "SAVED", idempotent: false,
+    return { planId: input.planId, revision: nextRevision, contentChecksum: incomingSemanticChecksum, status: "SAVED", idempotent: false,
       dependencyCount: input.dependencies.length, updatedAt: now };
   });
 }
