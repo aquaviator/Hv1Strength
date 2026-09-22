@@ -81,7 +81,27 @@ describe("atomic Studio plan-draft save", function () {
         batch.set(db.doc(`users/${owner}/workoutDrafts/workout-${i}`), workout(`workout-${i}`)); await batch.commit(); }
     it("denies unauthenticated and missing owner bindings", async () => {
         await assert_1.strict.rejects((0, studioPlanDraft_1.saveStudioPlanDraftCallable)(db, { auth: undefined, data: request() }), (error) => error.code === "unauthenticated");
-        await assert_1.strict.rejects((0, studioPlanDraft_1.saveStudioPlanDraftForUid)(db, "missing", request()));
+        await assert_1.strict.rejects((0, studioPlanDraft_1.saveStudioPlanDraftForUid)(db, "missing", request()), (error) => error.code === "MISSING_BINDING");
+    });
+    it("does not let another UID, an inactive binding or client owner data cross the trusted boundary", async () => {
+        await db.collection("accounts").doc("other-uid").set({ humanUserId: owner, status: "ACTIVE", schemaVersion: 1 });
+        await assert_1.strict.rejects((0, studioPlanDraft_1.saveStudioPlanDraftForUid)(db, "other-uid", request()), (error) => error.code === "BINDING_CONFLICT");
+        await db.collection("accounts").doc(uid).update({ status: "INACTIVE" });
+        await assert_1.strict.rejects((0, studioPlanDraft_1.saveStudioPlanDraftForUid)(db, uid, request()), (error) => error.code === "MISSING_BINDING");
+        await db.collection("accounts").doc(uid).update({ status: "ACTIVE" });
+        await seedWorkouts(1);
+        const input = request(1, 1, "client-owner-ignored");
+        input.humanUserId = other;
+        await (0, studioPlanDraft_1.saveStudioPlanDraftForUid)(db, uid, input);
+        assert_1.strict.equal((await db.doc(`users/${owner}/planDrafts/atomic-plan`).get()).data()?.humanUserId, owner);
+        assert_1.strict.equal((await db.doc(`users/${other}/planDrafts/atomic-plan`).get()).exists, false);
+    });
+    it("denies missing and expired Studio entitlements", async () => {
+        await db.doc(`accounts/${uid}/entitlements/current`).delete();
+        await assert_1.strict.rejects((0, studioPlanDraft_1.saveStudioPlanDraftForUid)(db, uid, request()), /STUDIO_ACCESS_REQUIRED/);
+        await db.doc(`accounts/${uid}/entitlements/current`).set({ schemaVersion: 1, firebaseUid: uid, humanUserId: owner, productScope: "WORKOUT_STUDIO",
+            normalizedState: "ACTIVE_UNTIL_EXPIRY", expiryAt: admin.firestore.Timestamp.fromDate(new Date("2020-01-01T00:00:00Z")) });
+        await assert_1.strict.rejects((0, studioPlanDraft_1.saveStudioPlanDraftForUid)(db, uid, request()), /STUDIO_ACCESS_REQUIRED/);
     });
     it("rejects malformed, unknown, missing and oversized manifests before any plan write", async () => {
         const malformed = request();
@@ -115,6 +135,7 @@ describe("atomic Studio plan-draft save", function () {
         assert_1.strict.equal((await db.collection(`users/${owner}/planDrafts`).get()).size, 1);
         assert_1.strict.equal((await db.collection(`users/${owner}/planDraftDependencies`).get()).size, 8);
         assert_1.strict.equal((await db.collection(`users/${owner}/planDraftSaveAudits`).get()).size, 1);
+        assert_1.strict.equal((await db.doc(`users/${owner}/planDrafts/atomic-plan`).get()).data()?.humanUserId, owner);
         for (const name of ["publishedWorkouts", "publishedPlans", "workoutDeliveryAcks", "planDeliveryAcks", "plannedWorkouts", "sessions", "loggedSets"])
             assert_1.strict.equal((await db.collection(`users/${owner}/${name}`).get()).size, 0);
     });

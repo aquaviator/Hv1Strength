@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import * as crypto from "crypto";
 import { CallableRequest, HttpsError } from "firebase-functions/v2/https";
 import { ACTIVE, IDENTITY_SCHEMA_VERSION, trustedHumanIdForUid } from "./identity";
@@ -176,7 +177,7 @@ export async function saveStudioPlanDraftForUid(db: admin.firestore.Firestore, u
       contentChecksum: checksum, createdAt, updatedAt: now, deletedAt: null, originClientId: input.clientOperationId });
     transaction.create(auditRef, { schemaVersion: 1, humanUserId: owner, planId: input.planId, requestKey: input.requestKey, expectedRevision: input.expectedRevision,
       resultRevision: nextRevision, contentChecksum: checksum, dependencyCount: input.dependencies.length, clientOperationId: input.clientOperationId, updatedAt: now,
-      createdAt: admin.firestore.FieldValue.serverTimestamp() });
+      createdAt: FieldValue.serverTimestamp() });
     return { planId: input.planId, revision: nextRevision, contentChecksum: checksum, status: "SAVED", idempotent: false,
       dependencyCount: input.dependencies.length, updatedAt: now };
   });

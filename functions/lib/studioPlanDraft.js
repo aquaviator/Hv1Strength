@@ -35,7 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.saveStudioPlanDraftForUid = saveStudioPlanDraftForUid;
 exports.saveStudioPlanDraftCallable = saveStudioPlanDraftCallable;
-const admin = __importStar(require("firebase-admin"));
+const firestore_1 = require("firebase-admin/firestore");
 const crypto = __importStar(require("crypto"));
 const https_1 = require("firebase-functions/v2/https");
 const identity_1 = require("./identity");
@@ -236,7 +236,7 @@ async function saveStudioPlanDraftForUid(db, uid, raw, hooks = {}) {
             contentChecksum: checksum, createdAt, updatedAt: now, deletedAt: null, originClientId: input.clientOperationId });
         transaction.create(auditRef, { schemaVersion: 1, humanUserId: owner, planId: input.planId, requestKey: input.requestKey, expectedRevision: input.expectedRevision,
             resultRevision: nextRevision, contentChecksum: checksum, dependencyCount: input.dependencies.length, clientOperationId: input.clientOperationId, updatedAt: now,
-            createdAt: admin.firestore.FieldValue.serverTimestamp() });
+            createdAt: firestore_1.FieldValue.serverTimestamp() });
         return { planId: input.planId, revision: nextRevision, contentChecksum: checksum, status: "SAVED", idempotent: false,
             dependencyCount: input.dependencies.length, updatedAt: now };
     });
