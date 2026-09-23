@@ -62,7 +62,8 @@ data class StudioPlanLink(
     val acknowledgementId: String,
     val acknowledgementState: String = "PENDING",
     val conflictState: String? = null,
-    val isLatest: Boolean = true
+    val isLatest: Boolean = true,
+    val planReconciliationVersion: Int = 1
 )
 
 @Entity(tableName = "studio_plan_quarantine", indices = [Index("humanUserId"), Index("planGlobalId"), Index("status")])

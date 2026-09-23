@@ -124,7 +124,7 @@ class StudioPlanIngestionRepository(
                 val value = StudioPlanContract.parse(envelope.id, envelope.value, owner, firebaseUid,
                     dependency = { version -> dao.getStudioWorkoutLink(version) }, appliedAt = now)
                 val result = dao.applyStudioPlanTransaction(value)
-                acknowledge(result.link, if (result.conflict) "CONFLICT" else "APPLIED",
+                if (result.acknowledgementRequired) acknowledge(result.link, if (result.conflict) "CONFLICT" else "APPLIED",
                     if (result.conflict) "LOCAL_PLAN_EDIT_PRESERVED" else null)
                 dao.deleteStudioPlanQuarantine(envelope.id)
                 dao.supersedeStudioPlanQuarantines(owner, value.link.planGlobalId, envelope.id)

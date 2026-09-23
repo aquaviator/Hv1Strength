@@ -23,6 +23,9 @@ interface StrengthDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertStudioPlanLink(link: StudioPlanLink)
 
+    @Update
+    suspend fun updateStudioPlanLink(link: StudioPlanLink)
+
     @Query("SELECT * FROM studio_plan_link WHERE planVersionId = :versionId LIMIT 1")
     suspend fun getStudioPlanLink(versionId: String): StudioPlanLink?
 

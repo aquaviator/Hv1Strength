@@ -5,6 +5,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.*
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -72,6 +74,64 @@ class StudioPlanIngestionTest {
         assertEquals(beforeReplay, dao.getAllPlannedWorkoutsForBackup("uid-a"))
         assertFalse(dao.applyStudioPlanTransaction(first).applied)
         assertEquals(beforeReplay, dao.getAllPlannedWorkoutsForBackup("uid-a"))
+    }
+
+    @Test fun `legacy acknowledged exact version heals once without duplicate acknowledgement`() = runBlocking {
+        val dao = db.strengthDao()
+        dao.insertStudioWorkoutLink(workout("workout-a-r1", "workout-a", 11))
+        val (v1, e1) = singlePublication(1, "old-placement")
+        dao.applyStudioPlanTransaction(StudioPlanContract.parse(v1, e1, owner, "uid-a", { dao.getStudioWorkoutLink(it) }, 1000))
+        val (v3, e3) = singlePublication(3, "replacement-placement")
+        val replacement = StudioPlanContract.parse(v3, e3, owner, "uid-a", { dao.getStudioWorkoutLink(it) }, 3000)
+        dao.applyStudioPlanTransaction(replacement)
+        val existing = requireNotNull(dao.getStudioPlanLink(v3))
+        dao.updateStudioPlanLink(existing.copy(acknowledgementState = "APPLIED", planReconciliationVersion = 0))
+        val obsolete = requireNotNull(dao.getPlannedWorkout("plan-reconcile:old-placement"))
+        dao.upsertPlannedWorkout(obsolete.copy(deletedAt = null))
+
+        var acknowledgements = 0
+        val repository = StudioPlanIngestionRepository(com.google.firebase.firestore.FirebaseFirestore.getInstance(), dao,
+            { 4000L }, { _, _, _ -> acknowledgements++ })
+        val first = repository.synchronizeEnvelopes(owner, "uid-a", listOf(StudioPlanEnvelope(v3, e3)))
+        assertEquals(1, first.applied)
+        assertEquals(4000L, dao.getPlannedWorkout("plan-reconcile:old-placement")?.deletedAt)
+        assertNull(dao.getPlannedWorkout("plan-reconcile:replacement-placement")?.deletedAt)
+        assertEquals(CURRENT_PLAN_RECONCILIATION_VERSION, dao.getStudioPlanLink(v3)?.planReconciliationVersion)
+        assertEquals("APPLIED", dao.getStudioPlanLink(v3)?.acknowledgementState)
+        assertEquals(0, acknowledgements)
+
+        val beforeReplay = dao.getAllPlannedWorkoutsForBackup("uid-a")
+        assertEquals(0, repository.synchronizeEnvelopes(owner, "uid-a", listOf(StudioPlanEnvelope(v3, e3))).applied)
+        assertEquals(beforeReplay, dao.getAllPlannedWorkoutsForBackup("uid-a"))
+        assertEquals(0, acknowledgements)
+    }
+
+    @Test fun `future reconciliation version fails closed without occurrence changes`() = runBlocking {
+        val dao = db.strengthDao()
+        dao.insertStudioWorkoutLink(workout("workout-a-r1", "workout-a", 11))
+        val (id, envelope) = singlePublication(3, "replacement-placement")
+        val parsed = StudioPlanContract.parse(id, envelope, owner, "uid-a", { dao.getStudioWorkoutLink(it) }, 1000)
+        dao.applyStudioPlanTransaction(parsed)
+        val link = requireNotNull(dao.getStudioPlanLink(id))
+        dao.updateStudioPlanLink(link.copy(planReconciliationVersion = CURRENT_PLAN_RECONCILIATION_VERSION + 1))
+        val before = dao.getAllPlannedWorkoutsForBackup("uid-a")
+        val failure = runCatching { dao.applyStudioPlanTransaction(parsed) }.exceptionOrNull()
+        assertEquals("UNSUPPORTED_PLAN_RECONCILIATION_VERSION", failure?.message)
+        assertEquals(before, dao.getAllPlannedWorkoutsForBackup("uid-a"))
+    }
+
+    @Test fun `concurrent legacy healing is serialized and advances once`() = runBlocking {
+        val dao = db.strengthDao()
+        dao.insertStudioWorkoutLink(workout("workout-a-r1", "workout-a", 11))
+        val (id, envelope) = singlePublication(3, "replacement-placement")
+        val parsed = StudioPlanContract.parse(id, envelope, owner, "uid-a", { dao.getStudioWorkoutLink(it) }, 1000)
+        dao.applyStudioPlanTransaction(parsed)
+        dao.updateStudioPlanLink(requireNotNull(dao.getStudioPlanLink(id)).copy(planReconciliationVersion = 0))
+        val results = listOf(async { dao.applyStudioPlanTransaction(parsed) }, async { dao.applyStudioPlanTransaction(parsed) }).awaitAll()
+        assertEquals(1, results.count { it.applied })
+        assertEquals(1, results.count { !it.applied })
+        assertEquals(CURRENT_PLAN_RECONCILIATION_VERSION, dao.getStudioPlanLink(id)?.planReconciliationVersion)
+        assertEquals(1, dao.getPlannedWorkoutsForSeries("plan-reconcile", "uid-a").count { it.deletedAt == null })
     }
 
     @Test fun `history is preserved and local future edits block acknowledgement-ready apply`() = runBlocking {

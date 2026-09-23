@@ -6,17 +6,30 @@ data class StudioPlanImport(
     val occurrences: List<PlannedWorkout>
 )
 
-data class StudioPlanApplyResult(val link: StudioPlanLink, val applied: Boolean, val conflict: Boolean)
+const val CURRENT_PLAN_RECONCILIATION_VERSION = 1
+
+data class StudioPlanApplyResult(
+    val link: StudioPlanLink,
+    val applied: Boolean,
+    val conflict: Boolean,
+    val acknowledgementRequired: Boolean = true
+)
 
 internal suspend fun StrengthDao.applyStudioPlanGraph(value: StudioPlanImport): StudioPlanApplyResult {
-    getStudioPlanLink(value.link.planVersionId)?.let { existing ->
+    val exactExisting = getStudioPlanLink(value.link.planVersionId)
+    exactExisting?.let { existing ->
         require(existing.humanUserId == value.link.humanUserId &&
             existing.planGlobalId == value.link.planGlobalId &&
             existing.planChecksum == value.link.planChecksum) { "CONFLICTING_PLAN_VERSION_ID" }
-        return StudioPlanApplyResult(existing, applied = false, conflict = existing.conflictState != null)
+        require(existing.planReconciliationVersion <= CURRENT_PLAN_RECONCILIATION_VERSION) {
+            "UNSUPPORTED_PLAN_RECONCILIATION_VERSION"
+        }
+        if (existing.planReconciliationVersion == CURRENT_PLAN_RECONCILIATION_VERSION)
+            return StudioPlanApplyResult(existing, applied = false, conflict = existing.conflictState != null,
+                acknowledgementRequired = false)
     }
     val latest = getLatestStudioPlanLink(value.link.humanUserId, value.link.planGlobalId)
-    if (latest != null && value.link.sourceRevision <= latest.sourceRevision) {
+    if (exactExisting == null && latest != null && value.link.sourceRevision <= latest.sourceRevision) {
         val historical = value.link.copy(isLatest = false, acknowledgementState = "RECEIVED")
         insertStudioPlanLink(historical)
         return StudioPlanApplyResult(historical, applied = false, conflict = false)
@@ -57,9 +70,21 @@ internal suspend fun StrengthDao.applyStudioPlanGraph(value: StudioPlanImport): 
             }
         }
     }
-    clearLatestStudioPlanLink(value.link.humanUserId, value.link.planGlobalId)
-    val stored = value.link.copy(acknowledgementState = if (conflict) "CONFLICT" else "PENDING",
-        conflictState = if (conflict) "LOCAL_PLAN_EDIT_PRESERVED" else null, isLatest = true)
-    insertStudioPlanLink(stored)
-    return StudioPlanApplyResult(stored, applied = !conflict, conflict = conflict)
+    val stored = if (exactExisting != null) {
+        val healed = exactExisting.copy(
+            conflictState = if (conflict) "LOCAL_PLAN_EDIT_PRESERVED" else null,
+            planReconciliationVersion = if (conflict) exactExisting.planReconciliationVersion else CURRENT_PLAN_RECONCILIATION_VERSION
+        )
+        updateStudioPlanLink(healed)
+        healed
+    } else {
+        clearLatestStudioPlanLink(value.link.humanUserId, value.link.planGlobalId)
+        val inserted = value.link.copy(acknowledgementState = if (conflict) "CONFLICT" else "PENDING",
+            conflictState = if (conflict) "LOCAL_PLAN_EDIT_PRESERVED" else null, isLatest = true,
+            planReconciliationVersion = CURRENT_PLAN_RECONCILIATION_VERSION)
+        insertStudioPlanLink(inserted)
+        inserted
+    }
+    return StudioPlanApplyResult(stored, applied = !conflict, conflict = conflict,
+        acknowledgementRequired = exactExisting == null)
 }
