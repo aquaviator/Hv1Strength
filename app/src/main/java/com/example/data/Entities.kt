@@ -482,7 +482,7 @@ data class TrainingPlan(
     tableName = "planned_workout",
     indices = [
         Index(value = ["userId", "scheduledEpochDay"]),
-        Index(value = ["seriesId", "scheduledEpochDay"], unique = true)
+        Index(value = ["seriesId", "scheduledEpochDay"])
     ]
 )
 data class PlannedWorkout(

@@ -25,6 +25,12 @@ internal suspend fun StrengthDao.applyStudioPlanGraph(value: StudioPlanImport): 
     val existingPlan = getTrainingPlan(value.plan.id)
     val planConflict = existingPlan != null && existingPlan.humanUserId != value.link.humanUserId
     var occurrenceConflict = false
+    val incomingIds = value.occurrences.mapTo(hashSetOf()) { it.id }
+    val existingSeries = getPlannedWorkoutsForSeries(value.plan.id, value.plan.userId)
+    existingSeries.filter { it.id !in incomingIds && it.status == "PLANNED" && !it.detachedFromSeries && it.deletedAt == null }
+        .forEach { obsolete ->
+            if (obsolete.humanUserId != value.link.humanUserId || obsolete.syncStatus != "SYNCED") occurrenceConflict = true
+        }
     value.occurrences.forEach { incoming ->
         val existing = getPlannedWorkout(incoming.id)
         if (existing != null && existing.humanUserId != value.link.humanUserId) occurrenceConflict = true
@@ -40,8 +46,7 @@ internal suspend fun StrengthDao.applyStudioPlanGraph(value: StudioPlanImport): 
     val conflict = planConflict || occurrenceConflict
     if (!conflict) {
         upsertTrainingPlan(value.plan.copy(createdAt = existingPlan?.createdAt ?: value.plan.createdAt))
-        val incomingIds = value.occurrences.mapTo(hashSetOf()) { it.id }
-        getPlannedWorkoutsForSeries(value.plan.id, value.plan.userId)
+        existingSeries
             .filter { it.id !in incomingIds && it.status == "PLANNED" && !it.detachedFromSeries && it.deletedAt == null }
             .forEach { markStudioOccurrenceSuperseded(it.id, value.link.appliedAt, maxOf(it.revision + 1, value.link.sourceRevision)) }
         value.occurrences.forEach { incoming ->

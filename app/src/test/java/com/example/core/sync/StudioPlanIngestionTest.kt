@@ -40,6 +40,78 @@ class StudioPlanIngestionTest {
             "sourceDraftId" to "plan-1", "contentType" to "plan", "contentChecksum" to checksum, "payload" to payload)
     }
 
+    private fun singlePublication(revision: Long, placementId: String, planId: String = "plan-reconcile",
+                                  scheduledEpochDay: Long = 20719L): Pair<String, Map<String, Any?>> {
+        val payload = mapOf<String, Any?>("schemaVersion" to "humanv1.plan/1", "planId" to planId,
+            "title" to "Reconciled plan", "description" to "", "startDate" to "2026-09-23", "timezone" to "Europe/London",
+            "destinationApplication" to "HUMAN_STRENGTH", "workoutVersionIds" to listOf("workout-a-r1"),
+            "weeks" to listOf(mapOf("weekId" to "w1", "weekNumber" to 1L, "label" to "Week 1", "placements" to listOf(
+                mapOf<String, Any?>("placementId" to placementId, "dayOfWeek" to 1L, "scheduledEpochDay" to scheduledEpochDay,
+                    "workoutId" to "workout-a", "workoutVersionId" to "workout-a-r1", "preferredMinuteOfDay" to null,
+                    "reminderEnabled" to false, "notes" to "")))))
+        val checksum = StudioWorkoutContract.sha256(StudioWorkoutContract.canonicalJson(payload))
+        val id = "${planId}_r${revision}_${checksum.take(12)}"
+        return id to mapOf("schemaVersion" to "humanv1.plan/1", "globalId" to planId, "versionId" to id,
+            "humanUserId" to owner, "revision" to revision, "publicationState" to "PUBLISHED", "tombstoneState" to "ACTIVE",
+            "sourceDraftId" to planId, "contentType" to "plan", "contentChecksum" to checksum, "payload" to payload)
+    }
+
+    @Test fun `newer revision with changed placement supersedes only untouched occurrence and replay is inert`() = runBlocking {
+        val dao = db.strengthDao()
+        dao.insertStudioWorkoutLink(workout("workout-a-r1", "workout-a", 11))
+        val (v1, e1) = singlePublication(1, "old-placement")
+        val first = StudioPlanContract.parse(v1, e1, owner, "uid-a", { dao.getStudioWorkoutLink(it) }, 1000)
+        assertTrue(dao.applyStudioPlanTransaction(first).applied)
+        val (v3, e3) = singlePublication(3, "replacement-placement")
+        val replacement = StudioPlanContract.parse(v3, e3, owner, "uid-a", { dao.getStudioWorkoutLink(it) }, 3000)
+        assertTrue(dao.applyStudioPlanTransaction(replacement).applied)
+        assertEquals(3000L, dao.getPlannedWorkout("plan-reconcile:old-placement")?.deletedAt)
+        assertNull(dao.getPlannedWorkout("plan-reconcile:replacement-placement")?.deletedAt)
+        val beforeReplay = dao.getAllPlannedWorkoutsForBackup("uid-a")
+        assertFalse(dao.applyStudioPlanTransaction(replacement).applied)
+        assertEquals(beforeReplay, dao.getAllPlannedWorkoutsForBackup("uid-a"))
+        assertFalse(dao.applyStudioPlanTransaction(first).applied)
+        assertEquals(beforeReplay, dao.getAllPlannedWorkoutsForBackup("uid-a"))
+    }
+
+    @Test fun `history is preserved and local future edits block acknowledgement-ready apply`() = runBlocking {
+        val dao = db.strengthDao()
+        dao.insertStudioWorkoutLink(workout("workout-a-r1", "workout-a", 11))
+        suspend fun scenario(status: String, detached: Boolean, syncStatus: String): StudioPlanApplyResult {
+            db.clearAllTables()
+            dao.insertStudioWorkoutLink(workout("workout-a-r1", "workout-a", 11))
+            val (v1, e1) = singlePublication(1, "old-placement")
+            dao.applyStudioPlanTransaction(StudioPlanContract.parse(v1, e1, owner, "uid-a", { dao.getStudioWorkoutLink(it) }, 1000))
+            val old = requireNotNull(dao.getPlannedWorkout("plan-reconcile:old-placement"))
+            dao.upsertPlannedWorkout(old.copy(status = status, detachedFromSeries = detached, syncStatus = syncStatus,
+                completedAt = if (status == "COMPLETED") 1500 else null, linkedSessionId = if (status == "COMPLETED") 7 else null))
+            val (v3, e3) = singlePublication(3, "replacement-placement")
+            return dao.applyStudioPlanTransaction(StudioPlanContract.parse(v3, e3, owner, "uid-a", { dao.getStudioWorkoutLink(it) }, 3000))
+        }
+        assertTrue(scenario("COMPLETED", false, "SYNCED").applied)
+        assertNull(dao.getPlannedWorkout("plan-reconcile:old-placement")?.deletedAt)
+        assertTrue(scenario("SKIPPED", false, "SYNCED").applied)
+        assertNull(dao.getPlannedWorkout("plan-reconcile:old-placement")?.deletedAt)
+        assertTrue(scenario("PLANNED", true, "SYNCED").applied)
+        assertNull(dao.getPlannedWorkout("plan-reconcile:old-placement")?.deletedAt)
+        assertTrue(scenario("PLANNED", false, "PENDING_UPLOAD").conflict)
+        assertNull(dao.getPlannedWorkout("plan-reconcile:replacement-placement"))
+        assertNull(dao.getPlannedWorkout("plan-reconcile:old-placement")?.deletedAt)
+    }
+
+    @Test fun `same day placements remain distinct and another plan is untouched`() = runBlocking {
+        val dao = db.strengthDao()
+        dao.insertStudioWorkoutLink(workout("workout-a-r1", "workout-a", 11))
+        val (oneId, oneEnvelope) = singlePublication(1, "one", "plan-one")
+        val one = StudioPlanContract.parse(oneId, oneEnvelope, owner, "uid-a", { dao.getStudioWorkoutLink(it) }, 1000)
+        val duplicateSlot = one.occurrences.single().copy(id = "plan-one:two", globalId = "plan-one:two")
+        assertTrue(dao.applyStudioPlanTransaction(one.copy(occurrences = one.occurrences + duplicateSlot)).applied)
+        val (otherId, otherEnvelope) = singlePublication(1, "one", "plan-other")
+        assertTrue(dao.applyStudioPlanTransaction(StudioPlanContract.parse(otherId, otherEnvelope, owner, "uid-a", { dao.getStudioWorkoutLink(it) }, 1000)).applied)
+        assertEquals(2, dao.getPlannedWorkoutsForSeries("plan-one", "uid-a").count { it.deletedAt == null })
+        assertEquals(1, dao.getPlannedWorkoutsForSeries("plan-other", "uid-a").count { it.deletedAt == null })
+    }
+
     @Test fun `two week plan reconstructs exact dependencies and is idempotent`() = runBlocking {
         val dao = db.strengthDao()
         dao.insertStudioWorkoutLink(workout("workout-a-r1", "workout-a", 11))

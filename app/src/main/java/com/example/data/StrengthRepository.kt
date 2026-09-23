@@ -50,9 +50,6 @@ class StrengthRepository(val dao: StrengthDao, private val context: android.cont
     suspend fun updatePlannedWorkout(item: PlannedWorkout, expectedUserId: String) {
         require(item.userId == expectedUserId && dao.ownsPlannedWorkout(item.id, expectedUserId) == 1)
         val existing = dao.getPlannedWorkout(item.id) ?: return
-        require(dao.countSeriesDateCollision(item.seriesId, item.scheduledEpochDay, item.id) == 0) {
-            "A workout in this recurring series is already scheduled for that date"
-        }
         val updated = item.copy(userId = expectedUserId, humanUserId = existing.humanUserId,
             globalId = existing.globalId, revision = existing.revision + 1, syncStatus = "PENDING_UPLOAD",
             originDeviceId = deviceId(), updatedAt = System.currentTimeMillis())

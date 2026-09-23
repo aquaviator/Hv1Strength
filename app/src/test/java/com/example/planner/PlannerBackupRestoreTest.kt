@@ -67,6 +67,20 @@ class PlannerBackupRestoreTest {
         assertEquals(PlannerBackupCodec.Payload(emptyList(), emptyList()), PlannerBackupCodec.parse(root, user, human))
     }
 
+    @Test fun sameDayPlacementsWithStableIdsRoundTripWithoutCollapsing() = runBlocking {
+        val expected = payload()
+        val first = expected.occurrences.first { it.seriesId == "series" && it.deletedAt == null }
+        val second = first.copy(id = "series:second-placement", globalId = "series:second-placement")
+        val expanded = expected.copy(occurrences = expected.occurrences + second)
+        val restored = PlannerBackupCodec.parse(json(expanded), user, human)
+
+        db.strengthDao().restorePlannerBackupAtomically(restored.plans, restored.occurrences)
+
+        val sameDay = db.strengthDao().getAllPlannedWorkoutsForBackup(user)
+            .filter { it.seriesId == "series" && it.scheduledEpochDay == first.scheduledEpochDay && it.deletedAt == null }
+        assertEquals(listOf(first.id, second.id).sorted(), sameDay.map { it.id }.sorted())
+    }
+
     @Test fun malformedOrUntrustedPlannerPayloadsFailBeforePersistence() = runBlocking {
         val mutations = listOf<(JSONObject) -> Unit>(
             { it.getJSONArray("training_plans").put(it.getJSONArray("training_plans").getJSONObject(0)) },

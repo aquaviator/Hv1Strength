@@ -90,10 +90,39 @@ describe("governed Studio publication", function () {
     await root.collection("planDraftDependencies").doc("plan-secure__placement-0").update({ expectedRevision: 2, revision: 2, updatedAt: "2026-01-02T00:00:00.000Z" });
     await root.collection("planDraftDependencies").doc("plan-secure__placement-1").update({ revision: 2, updatedAt: "2026-01-02T00:00:00.000Z" });
     await root.collection("planDrafts").doc("plan-secure").update({ revision: 2, updatedAt: "2026-01-02T00:00:00.000Z" });
+    const obsolete = root.collection("plannedWorkouts").doc("plan-secure:obsolete-placement");
+    await obsolete.set({ humanUserId: owner, seriesId: "plan-secure", status: "PLANNED", detachedFromSeries: false,
+      deletedAt: null, revision: 1, originApplication: "WORKOUT_STUDIO", originDeviceId: "WORKOUT_STUDIO_GOVERNED_PUBLISHER",
+      extensions: { planRevision: 1, placementId: "obsolete-placement" } });
+    const preserved = [
+      ["completed", { status: "COMPLETED" }],
+      ["skipped", { status: "SKIPPED" }],
+      ["detached", { status: "PLANNED", detachedFromSeries: true }],
+      ["local-edit", { status: "PLANNED", originDeviceId: "physical-device" }],
+    ] as const;
+    for (const [id, override] of preserved) await root.collection("plannedWorkouts").doc(`plan-secure:${id}`).set({
+      humanUserId: owner, seriesId: "plan-secure", detachedFromSeries: false, deletedAt: null,
+      revision: 1, originApplication: "WORKOUT_STUDIO", originDeviceId: "WORKOUT_STUDIO_GOVERNED_PUBLISHER",
+      extensions: { planRevision: 1, placementId: id }, ...override,
+    });
+    const unrelated = root.collection("plannedWorkouts").doc("other-plan:same-day");
+    await unrelated.set({ humanUserId: owner, seriesId: "other-plan", status: "PLANNED", detachedFromSeries: false,
+      deletedAt: null, revision: 1, originApplication: "WORKOUT_STUDIO", originDeviceId: "WORKOUT_STUDIO_GOVERNED_PUBLISHER",
+      extensions: { planRevision: 1, placementId: "same-day" } });
     const second = await publishStudioPlanForUid(db, uid, { planId: "plan-secure", expectedRevision: 2, idempotencyKey: "second" });
     assert.notEqual(second.planVersionId, first.planVersionId);
     assert.equal((await root.collection("publishedWorkouts").get()).size, 3);
     assert.equal((await root.collection("publishedPlans").get()).size, 2);
+    assert.ok((await obsolete.get()).data()?.deletedAt != null);
+    assert.equal((await obsolete.get()).data()?.supersededByPlanVersionId, second.planVersionId);
+    for (const [id] of preserved) assert.equal((await root.collection("plannedWorkouts").doc(`plan-secure:${id}`).get()).data()?.deletedAt, null);
+    assert.equal((await unrelated.get()).data()?.deletedAt, null);
+    const countsBeforeReplay = await Promise.all(["publishedWorkouts", "publishedPlans", "plannedWorkouts"].map(name => root.collection(name).get().then(value => value.size)));
+    const obsoleteBeforeReplay = (await obsolete.get()).data();
+    const replay = await publishStudioPlanForUid(db, uid, { planId: "plan-secure", expectedRevision: 2, idempotencyKey: "second" });
+    assert.deepEqual({ ...replay, reusedPlan: second.reusedPlan }, second);
+    assert.deepEqual(await Promise.all(["publishedWorkouts", "publishedPlans", "plannedWorkouts"].map(name => root.collection(name).get().then(value => value.size))), countsBeforeReplay);
+    assert.deepEqual((await obsolete.get()).data(), obsoleteBeforeReplay);
     const ack = await acknowledgeStudioDeliveryForUid(db, uid, { entityType: "plan", acknowledgementId: "ack-plan", globalId: "plan-secure",
       versionId: second.planVersionId, checksum: second.planChecksum, sourceRevision: second.planRevision, workoutVersionIds: second.workoutVersionIds,
       state: "APPLIED", clientAppliedAtMillis: 1 });

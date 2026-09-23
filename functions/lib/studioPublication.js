@@ -243,6 +243,8 @@ async function publishStudioPlanForUid(db, uid, input, hooks = {}) {
     await db.runTransaction(async (transaction) => {
         const trainingPlanRef = root.collection("trainingPlans").doc(planId);
         const occurrenceRefs = placements.map((placement) => root.collection("plannedWorkouts").doc(`${planId}:${placement.placementId}`));
+        const intendedOccurrenceIds = new Set(occurrenceRefs.map(ref => ref.id));
+        const existingSeries = await transaction.get(root.collection("plannedWorkouts").where("seriesId", "==", planId));
         const dependencyRefs = dependencySnapshot.docs.map(item => item.ref);
         const [prior, frozenDraft, trainingPlan, ...rest] = await Promise.all([transaction.get(receiptRef), transaction.get(draftSnapshot.ref), transaction.get(trainingPlanRef),
             ...dependencyRefs.map(ref => transaction.get(ref)), ...frozenSources.map(item => transaction.get(item.ref)), ...occurrenceRefs.map(ref => transaction.get(ref))]);
@@ -257,6 +259,18 @@ async function publishStudioPlanForUid(db, uid, input, hooks = {}) {
             throw new https_1.HttpsError("aborted", "DEPENDENCY_CHANGED_WHILE_PREPARING");
         if (frozenWorkoutDrafts.some((item, index) => !item.exists || (0, exports.canonicalHash)(item.data()) !== (0, exports.canonicalHash)(frozenSources[index].data())))
             throw new https_1.HttpsError("aborted", "WORKOUT_CHANGED_WHILE_PREPARING");
+        const reconciliationMillis = Date.now();
+        existingSeries.docs.forEach(snapshot => {
+            const value = snapshot.data();
+            const publisherOwned = value.originApplication === "WORKOUT_STUDIO" &&
+                ["WORKOUT_STUDIO", "WORKOUT_STUDIO_GOVERNED_PUBLISHER"].includes(value.originDeviceId);
+            const obsoleteUntouched = !intendedOccurrenceIds.has(snapshot.id) && value.humanUserId === owner &&
+                value.status === "PLANNED" && value.detachedFromSeries !== true && value.deletedAt == null && publisherOwned &&
+                Number(value.extensions?.planRevision ?? 0) < planRevision;
+            if (obsoleteUntouched)
+                transaction.set(snapshot.ref, { deletedAt: reconciliationMillis, updatedAt: reconciliationMillis,
+                    revision: Number(value.revision ?? 0) + 1, supersededByPlanVersionId: planVersionId }, { merge: true });
+        });
         for (const [versionId, publication] of pending)
             transaction.create(root.collection("publishedWorkouts").doc(versionId), publication);
         if (!existingPlan)

@@ -87,9 +87,6 @@ object PlannerBackupCodec {
                 o.optString("originDeviceId", "restored-backup"))
         }
         require(occurrences.map { it.id }.distinct().size == occurrences.size) { "Duplicate occurrence identifier" }
-        require(occurrences.groupBy { it.seriesId to it.scheduledEpochDay }.values.none { it.size > 1 }) {
-            "Duplicate occurrence schedule"
-        }
         return Payload(plans, occurrences)
     }
 }
